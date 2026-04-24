@@ -57,7 +57,6 @@ body {
   overflow-x: hidden;
   font-feature-settings: 'ss01', 'cv11';
   -webkit-font-smoothing: antialiased;
-  padding-top: var(--safe-top);
   padding-bottom: var(--safe-bottom);
 }
 
@@ -68,23 +67,30 @@ body {
 }
 .bg-orb {
   position: absolute; border-radius: 50%;
-  filter: blur(100px); opacity: 0.4;
+  filter: blur(120px); opacity: 0.35;
   animation: float 20s ease-in-out infinite;
 }
 .bg-orb.one {
-  width: 600px; height: 600px; top: -200px; left: -100px;
-  background: radial-gradient(circle, rgba(0, 229, 160, 0.5), transparent 70%);
+  width: 500px; height: 500px; top: -150px; left: -100px;
+  background: radial-gradient(circle, rgba(0, 229, 160, 0.4), transparent 70%);
   animation-delay: 0s;
 }
 .bg-orb.two {
-  width: 500px; height: 500px; top: 30%; right: -150px;
-  background: radial-gradient(circle, rgba(0, 196, 255, 0.35), transparent 70%);
+  width: 400px; height: 400px; top: 30%; right: -150px;
+  background: radial-gradient(circle, rgba(0, 196, 255, 0.3), transparent 70%);
   animation-delay: -7s;
 }
 .bg-orb.three {
-  width: 400px; height: 400px; bottom: -100px; left: 30%;
-  background: radial-gradient(circle, rgba(99, 102, 241, 0.3), transparent 70%);
+  width: 350px; height: 350px; bottom: -100px; left: 30%;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.25), transparent 70%);
   animation-delay: -14s;
+}
+
+/* Hide orbs on small screens to prevent bleed-through */
+@media (max-width: 720px) {
+  .bg-orb { opacity: 0.15; }
+  .bg-orb.one { width: 300px; height: 300px; }
+  .bg-orb.two, .bg-orb.three { display: none; }
 }
 
 @keyframes float {
@@ -98,13 +104,14 @@ body {
 /* NAV */
 .nav {
   position: sticky; top: 0; z-index: 100;
-  background: rgba(10, 14, 26, 0.88);
+  background: rgba(10, 14, 26, 0.92);
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
   border-bottom: 1px solid var(--border);
-  padding: 12px 20px;
+  padding: calc(12px + var(--safe-top)) 20px 12px;
   padding-left: max(20px, var(--safe-left));
   padding-right: max(20px, var(--safe-right));
+  margin-top: calc(-1 * var(--safe-top));
 }
 
 .nav-inner {
@@ -920,6 +927,237 @@ h1.hero-h .grad {
 }
 .faq-item.open .faq-a { padding: 0 18px 18px; max-height: 400px; }
 
+/* ════════ COACH ════════ */
+.coach-hero {
+  display: flex; gap: 18px; align-items: center;
+  background: linear-gradient(135deg, rgba(0, 229, 160, 0.08), rgba(0, 196, 255, 0.04));
+  border: 1px solid var(--accent-border);
+  border-radius: 18px; padding: 22px;
+  margin-bottom: 20px;
+}
+
+.coach-avatar {
+  width: 56px; height: 56px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  display: flex; align-items: center; justify-content: center;
+  font-size: 26px; flex-shrink: 0;
+  box-shadow: 0 4px 24px rgba(0, 229, 160, 0.4);
+  animation: logoGlow 3s ease-in-out infinite;
+}
+
+.coach-intro h2 { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 4px; }
+.coach-intro p { color: var(--text-dim); font-size: 14px; line-height: 1.5; }
+
+/* Onboarding flow */
+.intake-progress {
+  display: flex; gap: 6px; margin-bottom: 24px;
+}
+.intake-step {
+  flex: 1; height: 4px; border-radius: 2px;
+  background: var(--bg-3);
+  transition: background 0.3s;
+}
+.intake-step.done { background: var(--accent); }
+.intake-step.current { background: var(--accent-2); }
+
+.intake-card {
+  background: var(--bg-2); border: 1px solid var(--border);
+  border-radius: 18px; padding: 28px;
+  animation: fadeIn 0.3s;
+}
+
+.intake-question {
+  font-size: 20px; font-weight: 700; letter-spacing: -0.4px;
+  margin-bottom: 8px;
+}
+
+.intake-context {
+  color: var(--text-dim); font-size: 14px;
+  line-height: 1.5; margin-bottom: 20px;
+}
+
+.choice-grid {
+  display: grid; gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  margin-bottom: 8px;
+}
+
+.choice-btn {
+  padding: 14px 16px;
+  background: var(--bg-3); border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text); font-family: inherit; font-size: 14px; font-weight: 600;
+  cursor: pointer; text-align: left;
+  transition: all 0.15s;
+  display: flex; align-items: center; gap: 10px;
+}
+
+.choice-btn:hover { border-color: var(--border-light); transform: translateY(-1px); }
+.choice-btn.selected { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+
+.choice-emoji { font-size: 18px; }
+
+.intake-actions {
+  display: flex; justify-content: space-between; gap: 10px; margin-top: 24px;
+}
+
+.intake-actions .btn { width: auto; padding: 11px 22px; }
+
+/* Coach chat */
+.coach-chat {
+  background: var(--bg-2); border: 1px solid var(--border);
+  border-radius: 16px;
+  display: flex; flex-direction: column;
+  height: 65vh; min-height: 400px;
+  overflow: hidden;
+}
+
+.chat-messages {
+  flex: 1; overflow-y: auto; padding: 20px;
+  display: flex; flex-direction: column; gap: 14px;
+}
+
+.chat-msg {
+  display: flex; gap: 10px; max-width: 85%;
+}
+.chat-msg.user { align-self: flex-end; flex-direction: row-reverse; }
+
+.chat-msg .msg-avatar {
+  width: 32px; height: 32px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; flex-shrink: 0;
+}
+.chat-msg.user .msg-avatar {
+  background: var(--bg-4); color: var(--text);
+  font-weight: 700;
+}
+
+.chat-msg .msg-bubble {
+  padding: 10px 14px; border-radius: 14px;
+  background: var(--bg-3); font-size: 14px; line-height: 1.5;
+}
+.chat-msg.user .msg-bubble {
+  background: var(--accent); color: var(--bg);
+}
+
+.chat-input-row {
+  display: flex; gap: 8px; padding: 14px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-2);
+}
+
+.chat-input-row input {
+  flex: 1; padding: 12px 14px;
+  background: var(--bg-3); border: 1px solid var(--border);
+  color: var(--text); border-radius: 10px;
+  font-size: 14px; font-family: inherit; outline: none;
+}
+.chat-input-row input:focus { border-color: var(--accent); }
+.chat-input-row .btn { padding: 12px 18px; flex-shrink: 0; }
+
+/* Coming soon banner inside Coach */
+.coach-stub {
+  background: linear-gradient(135deg, rgba(0, 229, 160, 0.08), rgba(0, 196, 255, 0.04));
+  border: 1px solid var(--accent-border);
+  border-radius: 14px; padding: 18px 20px;
+  margin-bottom: 16px;
+  display: flex; gap: 14px; align-items: flex-start;
+}
+.coach-stub .stub-icon {
+  width: 32px; height: 32px; border-radius: 8px;
+  background: var(--accent); color: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; flex-shrink: 0; font-weight: 800;
+}
+.coach-stub h4 { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+.coach-stub p { font-size: 13px; color: var(--text-dim); line-height: 1.5; }
+
+/* ════════ PLAN / CALENDAR ════════ */
+.plan-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 20px; flex-wrap: wrap; gap: 12px;
+}
+
+.plan-month {
+  display: flex; align-items: center; gap: 12px;
+}
+.month-nav {
+  width: 32px; height: 32px; border-radius: 8px;
+  background: var(--bg-2); border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; color: var(--text); font-size: 16px;
+}
+.month-nav:hover { border-color: var(--border-light); }
+.month-label { font-size: 18px; font-weight: 700; min-width: 140px; text-align: center; }
+
+.calendar {
+  background: var(--bg-2); border: 1px solid var(--border);
+  border-radius: 14px; padding: 16px;
+}
+
+.cal-header-row {
+  display: grid; grid-template-columns: repeat(7, 1fr);
+  gap: 4px; margin-bottom: 8px;
+}
+
+.cal-header-cell {
+  text-align: center; font-size: 11px; font-weight: 700;
+  color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px;
+  padding: 8px 4px;
+}
+
+.cal-grid {
+  display: grid; grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.cal-day {
+  background: var(--bg-3); border: 1px solid var(--border);
+  border-radius: 8px; min-height: 80px; padding: 6px 8px;
+  display: flex; flex-direction: column; gap: 4px;
+  position: relative;
+  cursor: pointer; transition: all 0.15s;
+}
+.cal-day:hover { border-color: var(--border-light); }
+.cal-day.empty { opacity: 0.3; cursor: default; }
+.cal-day.today { border-color: var(--accent); }
+.cal-day.today::after {
+  content: ''; position: absolute; top: 4px; right: 4px;
+  width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+}
+
+.cal-date {
+  font-size: 12px; font-weight: 700; color: var(--text-dim);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.cal-workout {
+  font-size: 10px; padding: 3px 6px; border-radius: 4px;
+  font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.cal-workout.run { background: rgba(59, 130, 246, 0.15); color: #60a5fa; }
+.cal-workout.bike { background: rgba(249, 115, 22, 0.15); color: #fb923c; }
+.cal-workout.swim { background: rgba(34, 197, 94, 0.15); color: #4ade80; }
+.cal-workout.rest { background: rgba(138, 146, 168, 0.15); color: var(--text-dim); }
+.cal-workout.strength { background: rgba(168, 85, 247, 0.15); color: #c084fc; }
+.cal-workout.completed { opacity: 0.5; text-decoration: line-through; }
+
+.plan-empty {
+  text-align: center; padding: 60px 20px;
+  background: var(--bg-2); border: 1px solid var(--border);
+  border-radius: 14px;
+}
+
+@media (max-width: 720px) {
+  .cal-day { min-height: 56px; padding: 4px 6px; }
+  .cal-date { font-size: 11px; }
+  .cal-workout { font-size: 9px; padding: 2px 4px; }
+  .cal-header-cell { font-size: 10px; padding: 6px 2px; }
+  .calendar { padding: 10px; }
+}
+
 /* LOADING */
 .loading {
   display: flex; align-items: center; justify-content: center; gap: 10px;
@@ -1001,6 +1239,8 @@ h1.hero-h .grad {
     </div>
     <div class="nav-tabs">
       <button class="nav-tab" data-page="dashboard">Dashboard</button>
+      <button class="nav-tab" data-page="coach">Coach</button>
+      <button class="nav-tab" data-page="plan">Plan</button>
       <button class="nav-tab" data-page="upload">Analyze</button>
       <button class="nav-tab" data-page="history">History</button>
       <button class="nav-tab" data-page="trends">Trends</button>
@@ -1210,6 +1450,16 @@ h1.hero-h .grad {
     </div>
     <div id="trendChart"></div>
   </div>
+</div>
+
+<!-- COACH -->
+<div class="page" id="page-coach">
+  <div id="coachContent"></div>
+</div>
+
+<!-- PLAN -->
+<div class="page" id="page-plan">
+  <div id="planContent"></div>
 </div>
 
 <!-- UPLOAD -->
@@ -1546,6 +1796,8 @@ function navigate(page) {
   document.querySelectorAll('.nav-tab').forEach(t => t.classList.toggle('active', t.dataset.page === page));
   window.scrollTo({ top: 0, behavior: 'smooth' });
   if (page === 'dashboard') renderDashboard();
+  if (page === 'coach') renderCoach();
+  if (page === 'plan') renderPlan();
   if (page === 'history') renderHistory();
   if (page === 'trends') renderTrends();
   if (page === 'settings') renderSettings();
@@ -2172,11 +2424,22 @@ function renderSwim(a) {
 // ═══════════════════════════════════════════════════════════
 // DASHBOARD
 // ═══════════════════════════════════════════════════════════
-function renderDashboard() {
+async function renderDashboard() {
   const greeting = state.user ? `Welcome back, ${state.user.name.split(' ')[0]}` : 'Welcome';
   document.getElementById('greetingText').textContent = greeting;
   const count = state.workouts.length;
   document.getElementById('greetingSub').textContent = count === 0 ? 'Upload your first workout to get started' : `${count} workout${count>1?'s':''} analyzed`;
+
+  // Check if intake is done — show Meet Coach banner if not
+  if (state.user) {
+    const { data: intake } = await sb.from('athlete_intake').select('completed').eq('user_id', state.user.id).single();
+    const banner = document.getElementById('coachBanner');
+    if (banner && (!intake || !intake.completed)) {
+      banner.style.display = 'block';
+    } else if (banner) {
+      banner.style.display = 'none';
+    }
+  }
 
   const recent = state.workouts.slice(-7);
   const runs = recent.filter(w => w.sport === 'run');
@@ -2381,6 +2644,459 @@ function renderSportDonut(counts, total) {
       <div class="donut-center"><div class="donut-value">${total}</div><div class="donut-label">workouts</div></div>
     </div>
   `;
+}
+
+// ═══════════════════════════════════════════════════════════
+// COACH — Onboarding + Chat
+// ═══════════════════════════════════════════════════════════
+let intakeAnswers = {};
+let intakeStep = 0;
+
+const intakeQuestions = [
+  {
+    id: 'goal_event',
+    question: "What are you training for?",
+    context: "Coach will build your plan around this goal.",
+    type: 'single',
+    options: [
+      { value: 'marathon', emoji: '🏃', label: 'Marathon' },
+      { value: 'half_marathon', emoji: '🏃', label: 'Half Marathon' },
+      { value: '10k', emoji: '🏃', label: '10K' },
+      { value: '5k', emoji: '🏃', label: '5K' },
+      { value: 'olympic_tri', emoji: '🏊', label: 'Olympic Tri' },
+      { value: '70_3', emoji: '🚴', label: '70.3 / Half Ironman' },
+      { value: 'ironman', emoji: '🏁', label: 'Ironman' },
+      { value: 'general', emoji: '💪', label: 'General fitness' },
+    ],
+  },
+  {
+    id: 'race_date',
+    question: "When's your race?",
+    context: "Pick a date or skip if you don't have one yet.",
+    type: 'date',
+  },
+  {
+    id: 'experience_level',
+    question: "What's your experience level?",
+    context: "Be honest — Coach will calibrate your plan accordingly.",
+    type: 'single',
+    options: [
+      { value: 'beginner', emoji: '🌱', label: 'Beginner (under 1 year)' },
+      { value: 'intermediate', emoji: '🌿', label: 'Intermediate (1-3 years)' },
+      { value: 'advanced', emoji: '🌳', label: 'Advanced (3+ years)' },
+    ],
+  },
+  {
+    id: 'current_weekly_hours',
+    question: "How many hours can you train per week?",
+    context: "Be realistic. Consistency matters more than peak volume.",
+    type: 'single',
+    options: [
+      { value: 4, emoji: '⏱', label: '3-5 hours' },
+      { value: 7, emoji: '⏱', label: '6-8 hours' },
+      { value: 10, emoji: '⏱', label: '9-11 hours' },
+      { value: 14, emoji: '⏱', label: '12-15 hours' },
+      { value: 18, emoji: '⏱', label: '15+ hours' },
+    ],
+  },
+  {
+    id: 'available_days',
+    question: "Which days can you train?",
+    context: "Select all that apply. Coach will schedule rest days around your other commitments.",
+    type: 'multi',
+    options: [
+      { value: 'mon', emoji: '', label: 'Monday' },
+      { value: 'tue', emoji: '', label: 'Tuesday' },
+      { value: 'wed', emoji: '', label: 'Wednesday' },
+      { value: 'thu', emoji: '', label: 'Thursday' },
+      { value: 'fri', emoji: '', label: 'Friday' },
+      { value: 'sat', emoji: '', label: 'Saturday' },
+      { value: 'sun', emoji: '', label: 'Sunday' },
+    ],
+  },
+  {
+    id: 'preferred_long_day',
+    question: "Best day for your longest workout?",
+    context: "This is when Coach will schedule your weekly long run / long ride.",
+    type: 'single',
+    options: [
+      { value: 'sat', emoji: '🏞', label: 'Saturday' },
+      { value: 'sun', emoji: '🏞', label: 'Sunday' },
+    ],
+  },
+  {
+    id: 'equipment',
+    question: "What do you have access to?",
+    context: "Select everything that applies.",
+    type: 'multi',
+    options: [
+      { value: 'pool', emoji: '🏊', label: 'Pool' },
+      { value: 'open_water', emoji: '🌊', label: 'Open water' },
+      { value: 'road_bike', emoji: '🚴', label: 'Road bike' },
+      { value: 'trainer', emoji: '🏠', label: 'Indoor trainer' },
+      { value: 'gym', emoji: '🏋️', label: 'Gym / weights' },
+      { value: 'treadmill', emoji: '🏃', label: 'Treadmill' },
+    ],
+  },
+  {
+    id: 'injuries',
+    question: "Any injuries or health issues Coach should know about?",
+    context: "Coach isn't a doctor. If you have an active injury, see a sports physio first. Type 'none' if none.",
+    type: 'text',
+    placeholder: 'e.g. recurring knee pain, recovering from IT band issue, none...',
+  },
+];
+
+async function renderCoach() {
+  const el = document.getElementById('coachContent');
+  if (!state.user) { el.innerHTML = ''; return; }
+
+  // Check if intake is complete
+  const { data: intake } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).single();
+
+  if (!intake || !intake.completed) {
+    renderIntake(el, intake);
+  } else {
+    renderCoachChat(el, intake);
+  }
+}
+
+function renderIntake(el, existingIntake) {
+  if (existingIntake) intakeAnswers = { ...existingIntake };
+
+  el.innerHTML = `
+    <div class="coach-hero">
+      <div class="coach-avatar">🧠</div>
+      <div class="coach-intro">
+        <h2>Meet Coach</h2>
+        <p>I'm your AI endurance coach. Before we build your plan, I need to understand your goals and current situation. Takes about 2 minutes.</p>
+      </div>
+    </div>
+
+    <div class="intake-progress" id="intakeProgress"></div>
+    <div id="intakeBody"></div>
+  `;
+
+  intakeStep = 0;
+  renderIntakeStep();
+}
+
+function renderIntakeStep() {
+  const progress = document.getElementById('intakeProgress');
+  progress.innerHTML = intakeQuestions.map((_, i) => {
+    let cls = '';
+    if (i < intakeStep) cls = 'done';
+    else if (i === intakeStep) cls = 'current';
+    return `<div class="intake-step ${cls}"></div>`;
+  }).join('');
+
+  const q = intakeQuestions[intakeStep];
+  const body = document.getElementById('intakeBody');
+
+  let inputHtml = '';
+  if (q.type === 'single' || q.type === 'multi') {
+    const current = intakeAnswers[q.id] || (q.type === 'multi' ? [] : null);
+    inputHtml = `
+      <div class="choice-grid">
+        ${q.options.map(opt => {
+          const isSelected = q.type === 'multi' ? (current || []).includes(opt.value) : current === opt.value;
+          return `
+            <button class="choice-btn ${isSelected ? 'selected' : ''}" data-value="${opt.value}">
+              ${opt.emoji ? `<span class="choice-emoji">${opt.emoji}</span>` : ''}
+              <span>${opt.label}</span>
+            </button>
+          `;
+        }).join('')}
+      </div>
+    `;
+  } else if (q.type === 'date') {
+    const current = intakeAnswers[q.id] || '';
+    inputHtml = `
+      <input type="date" id="intakeInput" value="${current}" style="width:100%;padding:14px;background:var(--bg-3);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:15px;font-family:inherit;outline:none;color-scheme:dark;" />
+    `;
+  } else if (q.type === 'text') {
+    const current = intakeAnswers[q.id] || '';
+    inputHtml = `
+      <textarea id="intakeInput" placeholder="${q.placeholder || ''}" style="width:100%;padding:14px;background:var(--bg-3);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:15px;font-family:inherit;outline:none;min-height:80px;resize:vertical;">${current}</textarea>
+    `;
+  }
+
+  body.innerHTML = `
+    <div class="intake-card">
+      <div class="intake-question">${q.question}</div>
+      <div class="intake-context">${q.context}</div>
+      ${inputHtml}
+      <div class="intake-actions">
+        <button class="btn ghost" onclick="intakeBack()" ${intakeStep === 0 ? 'style="visibility:hidden;"' : ''}>← Back</button>
+        <button class="btn" onclick="intakeNext()">${intakeStep === intakeQuestions.length - 1 ? 'Build my plan →' : 'Next →'}</button>
+      </div>
+    </div>
+  `;
+
+  // Wire up choice buttons
+  document.querySelectorAll('.choice-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const val = btn.dataset.value;
+      const numVal = isNaN(parseFloat(val)) ? val : parseFloat(val);
+      if (q.type === 'multi') {
+        let arr = intakeAnswers[q.id] || [];
+        if (arr.includes(numVal)) arr = arr.filter(v => v !== numVal);
+        else arr = [...arr, numVal];
+        intakeAnswers[q.id] = arr;
+        btn.classList.toggle('selected');
+      } else {
+        intakeAnswers[q.id] = numVal;
+        document.querySelectorAll('.choice-btn').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+      }
+    });
+  });
+}
+
+function intakeBack() {
+  if (intakeStep > 0) { intakeStep--; renderIntakeStep(); }
+}
+
+async function intakeNext() {
+  const q = intakeQuestions[intakeStep];
+
+  // Capture text/date input values
+  if (q.type === 'date' || q.type === 'text') {
+    const input = document.getElementById('intakeInput');
+    if (input) intakeAnswers[q.id] = input.value;
+  }
+
+  // Validate
+  if (q.type === 'single' && !intakeAnswers[q.id]) {
+    return toast('Please pick an option');
+  }
+  if (q.type === 'multi' && (!intakeAnswers[q.id] || intakeAnswers[q.id].length === 0)) {
+    return toast('Please pick at least one');
+  }
+  if (q.type === 'text' && !intakeAnswers[q.id]) {
+    intakeAnswers[q.id] = 'none';
+  }
+
+  if (intakeStep < intakeQuestions.length - 1) {
+    intakeStep++;
+    renderIntakeStep();
+  } else {
+    await completeIntake();
+  }
+}
+
+async function completeIntake() {
+  const el = document.getElementById('coachContent');
+  el.innerHTML = `
+    <div class="coach-hero">
+      <div class="coach-avatar">🧠</div>
+      <div class="coach-intro">
+        <h2>Saving your profile…</h2>
+        <p>Coach is preparing your space. One moment.</p>
+      </div>
+    </div>
+    <div class="loading"><div class="spinner"></div>Processing</div>
+  `;
+
+  // Save intake to Supabase
+  const payload = {
+    user_id: state.user.id,
+    goal_event: intakeAnswers.goal_event || null,
+    race_date: intakeAnswers.race_date || null,
+    experience_level: intakeAnswers.experience_level || null,
+    current_weekly_hours: intakeAnswers.current_weekly_hours || null,
+    available_days: intakeAnswers.available_days || null,
+    preferred_long_day: intakeAnswers.preferred_long_day || null,
+    has_pool_access: (intakeAnswers.equipment || []).includes('pool'),
+    has_bike_trainer: (intakeAnswers.equipment || []).includes('trainer'),
+    injuries: intakeAnswers.injuries || null,
+    completed: true,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { error } = await sb.from('athlete_intake').upsert(payload, { onConflict: 'user_id' });
+
+  if (error) {
+    toast('Save failed: ' + error.message);
+    console.error(error);
+    return;
+  }
+
+  toast('Profile saved');
+  // Re-render Coach to show chat
+  renderCoach();
+}
+
+function renderCoachChat(el, intake) {
+  el.innerHTML = `
+    <div class="coach-hero">
+      <div class="coach-avatar">🧠</div>
+      <div class="coach-intro">
+        <h2>Coach</h2>
+        <p>Your AI endurance coach. Ready to chat about your training.</p>
+      </div>
+    </div>
+
+    <div class="coach-stub">
+      <div class="stub-icon">i</div>
+      <div>
+        <h4>Coach AI activates next session</h4>
+        <p>Your profile is saved. The conversation engine connects to Claude in the next update — Coach will then build your full periodized plan, comment on every workout, and answer questions here. For now, here's a summary of what you told me.</p>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header"><div><div class="panel-title">Your Athlete Profile</div><div class="panel-sub">Edit anytime by retaking the intake</div></div></div>
+      <div style="display:flex;flex-direction:column;gap:10px;font-size:14px;">
+        ${intake.goal_event ? `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);"><span style="color:var(--text-dim);">Goal</span><strong>${formatGoal(intake.goal_event)}</strong></div>` : ''}
+        ${intake.race_date ? `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);"><span style="color:var(--text-dim);">Race date</span><strong>${new Date(intake.race_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</strong></div>` : ''}
+        ${intake.experience_level ? `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);"><span style="color:var(--text-dim);">Experience</span><strong style="text-transform:capitalize;">${intake.experience_level}</strong></div>` : ''}
+        ${intake.current_weekly_hours ? `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);"><span style="color:var(--text-dim);">Weekly hours</span><strong>${intake.current_weekly_hours} hours</strong></div>` : ''}
+        ${intake.available_days ? `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);"><span style="color:var(--text-dim);">Training days</span><strong>${intake.available_days.length} days/week</strong></div>` : ''}
+        ${intake.injuries && intake.injuries !== 'none' ? `<div style="display:flex;justify-content:space-between;padding:8px 0;"><span style="color:var(--text-dim);">Injuries noted</span><strong style="text-align:right;max-width:60%;">${intake.injuries}</strong></div>` : ''}
+      </div>
+      <button class="btn ghost" style="margin-top:16px;" onclick="retakeIntake()">Retake intake</button>
+    </div>
+  `;
+}
+
+function formatGoal(g) {
+  const map = { marathon: 'Marathon', half_marathon: 'Half Marathon', '10k': '10K', '5k': '5K', olympic_tri: 'Olympic Triathlon', '70_3': '70.3 / Half Ironman', ironman: 'Ironman', general: 'General Fitness' };
+  return map[g] || g;
+}
+
+async function retakeIntake() {
+  intakeAnswers = {};
+  intakeStep = 0;
+  // Mark as not completed so renderCoach shows intake again
+  await sb.from('athlete_intake').update({ completed: false }).eq('user_id', state.user.id);
+  renderCoach();
+}
+
+// ═══════════════════════════════════════════════════════════
+// PLAN — Calendar View
+// ═══════════════════════════════════════════════════════════
+let calMonth = new Date();
+calMonth.setDate(1);
+
+async function renderPlan() {
+  const el = document.getElementById('planContent');
+  if (!state.user) { el.innerHTML = ''; return; }
+
+  // Check if intake is complete
+  const { data: intake } = await sb.from('athlete_intake').select('completed').eq('user_id', state.user.id).single();
+
+  if (!intake || !intake.completed) {
+    el.innerHTML = `
+      <div class="section-title">Your Training Plan</div>
+      <p class="section-sub">Coach will build a personalized plan based on your goals.</p>
+      <div class="plan-empty">
+        <div class="empty-icon">🧠</div>
+        <div class="empty-title">Set up Coach first</div>
+        <div class="empty-desc" style="margin-bottom:18px;">Tell Coach about your goals and Coach will build a periodized training plan that fills this calendar.</div>
+        <button class="btn" onclick="navigate('coach')">Set up Coach →</button>
+      </div>
+    `;
+    return;
+  }
+
+  // Load planned workouts for this month
+  const monthStart = new Date(calMonth.getFullYear(), calMonth.getMonth(), 1);
+  const monthEnd = new Date(calMonth.getFullYear(), calMonth.getMonth() + 1, 0);
+
+  const { data: planned } = await sb.from('planned_workouts')
+    .select('*')
+    .eq('user_id', state.user.id)
+    .gte('scheduled_date', monthStart.toISOString().split('T')[0])
+    .lte('scheduled_date', monthEnd.toISOString().split('T')[0]);
+
+  el.innerHTML = `
+    <div class="section-title">Your Training Plan</div>
+    <p class="section-sub">Coach generates this calendar from your goals. Updates automatically as you train.</p>
+
+    <div class="coach-stub">
+      <div class="stub-icon">i</div>
+      <div>
+        <h4>Plan generation coming next session</h4>
+        <p>The calendar UI is ready. Once Coach AI is connected, it'll fill this calendar with periodized workouts based on your goal date and current fitness — and adjust automatically as you upload completed sessions.</p>
+      </div>
+    </div>
+
+    <div class="plan-header">
+      <div class="plan-month">
+        <button class="month-nav" onclick="changeMonth(-1)">←</button>
+        <div class="month-label">${calMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</div>
+        <button class="month-nav" onclick="changeMonth(1)">→</button>
+      </div>
+      <button class="btn ghost" style="padding: 8px 14px; font-size: 13px;" onclick="goToday()">Today</button>
+    </div>
+
+    <div class="calendar">
+      <div class="cal-header-row">
+        <div class="cal-header-cell">Mon</div>
+        <div class="cal-header-cell">Tue</div>
+        <div class="cal-header-cell">Wed</div>
+        <div class="cal-header-cell">Thu</div>
+        <div class="cal-header-cell">Fri</div>
+        <div class="cal-header-cell">Sat</div>
+        <div class="cal-header-cell">Sun</div>
+      </div>
+      <div class="cal-grid" id="calGrid"></div>
+    </div>
+  `;
+
+  renderCalendarGrid(planned || []);
+}
+
+function renderCalendarGrid(plannedWorkouts) {
+  const grid = document.getElementById('calGrid');
+  if (!grid) return;
+  const year = calMonth.getFullYear();
+  const month = calMonth.getMonth();
+  const firstDay = new Date(year, month, 1);
+  const lastDay = new Date(year, month + 1, 0);
+  // 0 = Sunday in JS, we want Mon = 0
+  let startCol = (firstDay.getDay() + 6) % 7;
+
+  const today = new Date();
+  const isToday = (d) => d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth() && d.getDate() === today.getDate();
+
+  // Map planned workouts by date
+  const byDate = {};
+  plannedWorkouts.forEach(pw => {
+    if (!byDate[pw.scheduled_date]) byDate[pw.scheduled_date] = [];
+    byDate[pw.scheduled_date].push(pw);
+  });
+
+  let html = '';
+  // Empty cells before month starts
+  for (let i = 0; i < startCol; i++) html += `<div class="cal-day empty"></div>`;
+  // Days of month
+  for (let d = 1; d <= lastDay.getDate(); d++) {
+    const date = new Date(year, month, d);
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const dayWorkouts = byDate[dateStr] || [];
+    const todayCls = isToday(date) ? 'today' : '';
+    html += `
+      <div class="cal-day ${todayCls}">
+        <div class="cal-date">${d}</div>
+        ${dayWorkouts.map(w => `<div class="cal-workout ${w.sport || 'rest'} ${w.completed ? 'completed' : ''}">${w.workout_type || w.sport}</div>`).join('')}
+      </div>
+    `;
+  }
+
+  grid.innerHTML = html;
+}
+
+function changeMonth(delta) {
+  calMonth.setMonth(calMonth.getMonth() + delta);
+  renderPlan();
+}
+
+function goToday() {
+  calMonth = new Date();
+  calMonth.setDate(1);
+  renderPlan();
 }
 
 // ═══════════════════════════════════════════════════════════
