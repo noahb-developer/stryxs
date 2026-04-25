@@ -1740,19 +1740,21 @@ h1.hero-h .grad {
   z-index: 0;
 }
 
-/* City street map overlay — looks like a real city with bending roads */
+/* City street map overlay — real top-down city map image from Unsplash */
 .lv2-grid {
   position: absolute !important;
   inset: 0 !important;
   pointer-events: none;
   z-index: 4 !important;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1600 1600' preserveAspectRatio='xMidYMid slice'><g fill='none' stroke='white' stroke-linecap='round' stroke-linejoin='round'><g stroke-width='1.4' stroke-opacity='0.22'><path d='M0,180 C200,140 400,210 620,170 C840,130 1060,200 1280,160 C1420,135 1530,170 1600,150'/><path d='M0,560 C180,610 380,540 580,580 C780,620 980,550 1180,590 C1380,630 1490,580 1600,600'/><path d='M0,940 C220,890 420,960 640,920 C860,880 1080,950 1280,910 C1430,880 1540,920 1600,900'/><path d='M0,1320 C190,1370 390,1300 590,1340 C790,1380 990,1310 1190,1350 C1390,1390 1500,1340 1600,1360'/><path d='M260,0 C220,200 290,400 250,600 C210,800 280,1000 240,1200 C210,1380 270,1500 250,1600'/><path d='M720,0 C680,180 750,380 710,580 C670,780 740,980 700,1180 C670,1360 730,1500 720,1600'/><path d='M1200,0 C1240,200 1170,400 1210,600 C1250,800 1180,1000 1220,1200 C1250,1380 1190,1500 1200,1600'/></g><g stroke-width='0.7' stroke-opacity='0.14'><path d='M0,90 C150,80 350,100 550,85 C750,70 950,95 1150,80 C1350,65 1500,85 1600,75'/><path d='M0,250 C200,260 400,240 600,255 C800,270 1000,245 1200,260 C1400,275 1520,250 1600,260'/><path d='M0,330 C150,310 350,340 550,320 C750,300 950,335 1150,315 C1350,295 1520,325 1600,310'/><path d='M0,420 C180,440 380,410 580,430 C780,450 980,420 1180,440 C1380,460 1500,430 1600,440'/><path d='M0,640 C200,620 400,650 600,635 C800,620 1000,655 1200,640 C1400,625 1520,650 1600,635'/><path d='M0,720 C150,740 350,710 550,730 C750,750 950,720 1150,740 C1350,760 1500,730 1600,745'/><path d='M0,820 C180,800 380,830 580,815 C780,800 980,830 1180,815 C1380,800 1520,825 1600,810'/><path d='M0,1020 C200,1000 400,1030 600,1015 C800,1000 1000,1030 1200,1015 C1400,1000 1520,1025 1600,1015'/><path d='M0,1100 C150,1120 350,1090 550,1110 C750,1130 950,1100 1150,1120 C1350,1140 1500,1110 1600,1125'/><path d='M0,1200 C180,1180 380,1210 580,1195 C780,1180 980,1210 1180,1195 C1380,1180 1520,1205 1600,1195'/><path d='M0,1400 C200,1380 400,1410 600,1395 C800,1380 1000,1410 1200,1395 C1400,1380 1520,1405 1600,1400'/><path d='M0,1500 C150,1520 350,1490 550,1510 C750,1530 950,1500 1150,1520 C1350,1540 1500,1510 1600,1525'/><path d='M80,0 C100,150 70,350 90,550 C110,750 80,950 100,1150 C115,1350 85,1500 95,1600'/><path d='M170,0 C150,180 180,380 160,580 C140,780 175,980 155,1180 C140,1380 175,1500 165,1600'/><path d='M340,0 C360,200 330,400 350,600 C370,800 340,1000 360,1200 C375,1380 345,1500 360,1600'/><path d='M430,0 C410,180 440,380 420,580 C400,780 435,980 415,1180 C400,1380 435,1500 425,1600'/><path d='M540,0 C560,150 530,350 550,550 C570,750 540,950 560,1150 C580,1350 545,1500 560,1600'/><path d='M620,0 C600,200 630,400 610,600 C590,800 625,1000 605,1200 C590,1380 625,1500 615,1600'/><path d='M820,0 C800,180 830,380 810,580 C790,780 825,980 805,1180 C790,1380 825,1500 815,1600'/><path d='M920,0 C940,200 910,400 930,600 C950,800 920,1000 940,1200 C955,1380 925,1500 940,1600'/><path d='M1020,0 C1000,150 1030,350 1010,550 C990,750 1025,950 1005,1150 C990,1350 1025,1500 1015,1600'/><path d='M1120,0 C1140,200 1110,400 1130,600 C1150,800 1120,1000 1140,1200 C1155,1380 1125,1500 1140,1600'/><path d='M1300,0 C1280,180 1310,380 1290,580 C1270,780 1305,980 1285,1180 C1270,1380 1305,1500 1295,1600'/><path d='M1400,0 C1420,150 1390,350 1410,550 C1430,750 1400,950 1420,1150 C1440,1350 1405,1500 1420,1600'/><path d='M1500,0 C1480,180 1510,380 1490,580 C1470,780 1505,980 1485,1180 C1470,1380 1505,1500 1495,1600'/></g><g stroke-width='0.5' stroke-opacity='0.10'><path d='M40,0 L60,1600'/><path d='M125,0 L115,1600'/><path d='M210,0 L225,1600'/><path d='M295,0 L285,1600'/><path d='M385,0 L395,1600'/><path d='M475,0 L470,1600'/><path d='M580,0 L590,1600'/><path d='M665,0 L675,1600'/><path d='M755,0 L760,1600'/><path d='M860,0 L870,1600'/><path d='M965,0 L970,1600'/><path d='M1060,0 L1065,1600'/><path d='M1155,0 L1165,1600'/><path d='M1245,0 L1255,1600'/><path d='M1340,0 L1350,1600'/><path d='M1445,0 L1455,1600'/><path d='M1540,0 L1545,1600'/><path d='M0,40 L1600,55'/><path d='M0,130 L1600,140'/><path d='M0,210 L1600,220'/><path d='M0,290 L1600,295'/><path d='M0,380 L1600,388'/><path d='M0,460 L1600,470'/><path d='M0,500 L1600,510'/><path d='M0,600 L1600,610'/><path d='M0,680 L1600,690'/><path d='M0,770 L1600,780'/><path d='M0,860 L1600,870'/><path d='M0,980 L1600,990'/><path d='M0,1060 L1600,1070'/><path d='M0,1150 L1600,1160'/><path d='M0,1240 L1600,1250'/><path d='M0,1360 L1600,1370'/><path d='M0,1440 L1600,1450'/><path d='M0,1540 L1600,1550'/></g><g stroke-width='0.5' stroke-opacity='0.10'><path d='M50,80 L450,460'/><path d='M850,180 L1280,580'/><path d='M150,1100 L600,1480'/><path d='M950,950 L1450,1380'/><path d='M420,820 L780,1140'/><path d='M1080,1080 L1450,1420'/><path d='M250,300 L580,580'/></g><g stroke-width='0.5' stroke-opacity='0.12'><circle cx='260' cy='560' r='32'/><circle cx='720' cy='940' r='40'/><circle cx='1200' cy='560' r='34'/><circle cx='720' cy='180' r='28'/><circle cx='260' cy='1320' r='38'/><circle cx='1200' cy='1320' r='30'/></g></g></svg>");
-  background-size: 1600px 1600px;
-  background-repeat: repeat;
-  background-position: center center;
-  -webkit-mask-image: radial-gradient(ellipse 90% 80% at 50% 50%, black 0%, rgba(0,0,0,0.95) 60%, transparent 100%);
-  mask-image: radial-gradient(ellipse 90% 80% at 50% 50%, black 0%, rgba(0,0,0,0.95) 60%, transparent 100%);
-  opacity: 0.95;
+  background-image: url("https://images.unsplash.com/photo-1733194727715-94d77a13d11b?ixlib=rb-4.0.3&auto=format&fit=crop&w=2000&q=80");
+  background-size: cover;
+  background-repeat: no-repeat;
+  background-position: center top;
+  background-attachment: scroll;
+  -webkit-mask-image: radial-gradient(ellipse 95% 80% at 50% 30%, black 0%, rgba(0,0,0,0.7) 50%, rgba(0,0,0,0.3) 80%, transparent 100%);
+  mask-image: radial-gradient(ellipse 95% 80% at 50% 30%, black 0%, rgba(0,0,0,0.7) 50%, rgba(0,0,0,0.3) 80%, transparent 100%);
+  opacity: 0.55;
+  filter: brightness(0.7) saturate(0.5);
 }
 
 /* Glowing GPS path overlay — runs vertically down the entire landing page */
@@ -1773,13 +1775,14 @@ h1.hero-h .grad {
 .lv2-gps-path .gps-line {
   fill: none;
   stroke: var(--lv2-acc);
-  stroke-width: 3;
+  stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
-  filter: drop-shadow(0 0 6px var(--lv2-acc)) drop-shadow(0 0 16px var(--lv2-acc));
+  filter: drop-shadow(0 0 3px var(--lv2-acc)) drop-shadow(0 0 8px rgba(0, 255, 163, 0.4));
   stroke-dasharray: 8000;
   stroke-dashoffset: 8000;
   animation: lv2-drawGps 8s 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  opacity: 0.65;
 }
 .lv2-gps-path .gps-pin {
   fill: var(--lv2-acc);
