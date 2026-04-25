@@ -187,112 +187,116 @@ body {
   background-size: cover; background-position: center;
 }
 
-/* Slide-down menu panel */
+/* Slide-down menu panel — compact iOS style */
 .nav-menu-backdrop {
   position: fixed; inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
   z-index: 90;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.25s;
+  transition: opacity 0.18s;
 }
 .nav-menu-backdrop.open { opacity: 1; pointer-events: auto; }
 
 .nav-menu-panel {
   position: fixed;
-  top: calc(var(--safe-top) + 60px);
-  left: 12px; right: 12px;
-  background: var(--bg-2);
-  border: 1px solid var(--border);
-  border-radius: 16px;
+  top: calc(var(--safe-top) + 56px);
+  left: 12px;
+  background: rgba(20, 26, 44, 0.96);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
   z-index: 95;
-  padding: 8px;
+  padding: 5px;
+  min-width: 220px;
+  max-width: 260px;
   opacity: 0;
-  transform: translateY(-12px);
+  transform: translateY(-8px) scale(0.96);
   pointer-events: none;
-  transition: opacity 0.25s, transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
-  max-height: calc(100vh - var(--safe-top) - 80px);
-  overflow-y: auto;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
-  max-width: 380px;
-  margin: 0 auto;
+  transition: opacity 0.18s, transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5), 0 0 0 0.5px rgba(255, 255, 255, 0.04);
+  transform-origin: top left;
 }
-.nav-menu-panel.open { opacity: 1; transform: translateY(0); pointer-events: auto; }
+.nav-menu-panel.open { opacity: 1; transform: translateY(0) scale(1); pointer-events: auto; }
 
 .nav-menu-items {
-  display: flex; flex-direction: column; gap: 2px;
+  display: flex; flex-direction: column; gap: 1px;
 }
 
 .nav-menu-item {
-  display: flex; align-items: center; gap: 12px;
-  width: 100%; padding: 14px 16px;
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; padding: 9px 12px;
   background: transparent; border: none;
   color: var(--text); font-family: inherit;
-  font-size: 15px; font-weight: 600;
+  font-size: 14px; font-weight: 500;
   cursor: pointer; text-align: left;
-  border-radius: 10px;
-  transition: background 0.15s;
+  border-radius: 9px;
+  transition: background 0.12s;
 }
-.nav-menu-item:hover { background: var(--bg-3); }
-.nav-menu-item.active { background: var(--accent-soft); color: var(--accent); }
+.nav-menu-item:hover { background: rgba(255, 255, 255, 0.05); }
+.nav-menu-item.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 
 .nav-menu-icon {
-  font-size: 18px; width: 28px; text-align: center;
-  flex-shrink: 0;
+  font-size: 15px; width: 20px; text-align: center;
+  flex-shrink: 0; opacity: 0.85;
 }
 
-/* Avatar dropdown menu */
+/* Avatar dropdown menu — compact iOS style */
 .avatar-menu {
   position: fixed;
-  top: calc(var(--safe-top) + 60px);
+  top: calc(var(--safe-top) + 56px);
   right: 12px;
-  background: var(--bg-2);
-  border: 1px solid var(--border);
+  background: rgba(20, 26, 44, 0.96);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 14px;
   z-index: 95;
-  padding: 6px;
-  min-width: 220px;
+  padding: 5px;
+  min-width: 200px;
   opacity: 0;
-  transform: translateY(-8px) scale(0.95);
+  transform: translateY(-8px) scale(0.96);
   pointer-events: none;
-  transition: opacity 0.2s, transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+  transition: opacity 0.18s, transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5), 0 0 0 0.5px rgba(255, 255, 255, 0.04);
   transform-origin: top right;
 }
 .avatar-menu.open { opacity: 1; transform: translateY(0) scale(1); pointer-events: auto; }
 
 .avatar-menu-header {
-  padding: 12px 14px 10px;
-  font-size: 12px; color: var(--text-dim);
-  display: flex; flex-direction: column; gap: 2px;
+  padding: 9px 12px 8px;
+  font-size: 11px; color: var(--text-dim);
+  display: flex; flex-direction: column; gap: 1px;
+  line-height: 1.3;
 }
 .avatar-menu-header strong {
-  color: var(--text); font-size: 14px; font-weight: 700;
+  color: var(--text); font-size: 13px; font-weight: 600;
 }
 
 .avatar-menu-divider {
-  height: 1px; background: var(--border); margin: 4px 0;
+  height: 1px; background: rgba(255, 255, 255, 0.06); margin: 3px 0;
 }
 
 .avatar-menu-item {
-  display: flex; align-items: center; gap: 12px;
-  width: 100%; padding: 11px 14px;
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; padding: 8px 12px;
   background: transparent; border: none;
   color: var(--text); font-family: inherit;
-  font-size: 14px; font-weight: 500;
+  font-size: 13px; font-weight: 500;
   cursor: pointer; text-align: left;
-  border-radius: 8px;
-  transition: background 0.15s;
+  border-radius: 9px;
+  transition: background 0.12s;
 }
-.avatar-menu-item:hover { background: var(--bg-3); }
+.avatar-menu-item:hover { background: rgba(255, 255, 255, 0.05); }
 .avatar-menu-item.danger { color: #f87171; }
 .avatar-menu-item.danger:hover { background: rgba(239, 68, 68, 0.08); }
 
 .avatar-menu-icon {
-  font-size: 15px; width: 20px; text-align: center;
-  flex-shrink: 0;
+  font-size: 13px; width: 18px; text-align: center;
+  flex-shrink: 0; opacity: 0.85;
 }
 
 .container {
@@ -1237,8 +1241,8 @@ h1.hero-h .grad {
 }
 
 .cal-grid {
-  display: grid; grid-template-columns: repeat(7, 1fr);
-  gap: 4px;
+  display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px; width: 100%;
 }
 
 .cal-day {
@@ -1247,6 +1251,8 @@ h1.hero-h .grad {
   display: flex; flex-direction: column; gap: 4px;
   position: relative;
   cursor: pointer; transition: all 0.15s;
+  min-width: 0;
+  overflow: hidden;
 }
 .cal-day:hover { border-color: var(--border-light); }
 .cal-day.empty { opacity: 0.3; cursor: default; }
@@ -1265,6 +1271,7 @@ h1.hero-h .grad {
   font-size: 10px; padding: 3px 6px; border-radius: 4px;
   font-weight: 600;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 100%;
 }
 .cal-workout.run { background: rgba(59, 130, 246, 0.15); color: #60a5fa; }
 .cal-workout.bike { background: rgba(249, 115, 22, 0.15); color: #fb923c; }
@@ -1280,11 +1287,12 @@ h1.hero-h .grad {
 }
 
 @media (max-width: 720px) {
-  .cal-day { min-height: 56px; padding: 4px 6px; }
-  .cal-date { font-size: 11px; }
-  .cal-workout { font-size: 9px; padding: 2px 4px; }
-  .cal-header-cell { font-size: 10px; padding: 6px 2px; }
-  .calendar { padding: 10px; }
+  .cal-day { min-height: 60px; padding: 4px 4px; }
+  .cal-date { font-size: 10px; }
+  .cal-workout { font-size: 9px; padding: 2px 3px; }
+  .cal-header-cell { font-size: 10px; padding: 4px 2px; }
+  .calendar { padding: 8px; }
+  .cal-grid { gap: 2px; }
 }
 
 .cal-day.has-workout { cursor: pointer; }
@@ -1539,10 +1547,10 @@ h1.hero-h .grad {
   </button>
   <button class="avatar-menu-item" onclick="navigateAndCloseAvatarMenu('coach')">
     <span class="avatar-menu-icon">👤</span>
-    <span>Profile</span>
+    <span>My Profile</span>
   </button>
   <div class="avatar-menu-divider"></div>
-  <button class="avatar-menu-item danger" onclick="closeAvatarMenu(); doLogout();">
+  <button class="avatar-menu-item danger" onclick="closeAvatarMenu(); confirmLogout();">
     <span class="avatar-menu-icon">↪</span>
     <span>Log out</span>
   </button>
@@ -1802,6 +1810,22 @@ h1.hero-h .grad {
       </div>
       <button class="btn ghost" disabled style="opacity: 0.5; cursor: not-allowed;">Connect</button>
     </div>
+    <div class="connect-card">
+      <div class="connect-logo" style="background: rgba(20, 174, 92, 0.15);">📱</div>
+      <div class="connect-info">
+        <div class="connect-name">Samsung Health <span class="connect-badge">Coming soon</span></div>
+        <div class="connect-desc">Direct sync with Samsung Health for Galaxy Watch users.</div>
+      </div>
+      <button class="btn ghost" disabled style="opacity: 0.5; cursor: not-allowed;">Connect</button>
+    </div>
+    <div class="connect-card">
+      <div class="connect-logo" style="background: rgba(255, 195, 0, 0.15);">⌚</div>
+      <div class="connect-info">
+        <div class="connect-name">COROS <span class="connect-badge">Coming soon</span></div>
+        <div class="connect-desc">Auto-sync your COROS watch workouts directly to EnduraIQ.</div>
+      </div>
+      <button class="btn ghost" disabled style="opacity: 0.5; cursor: not-allowed;">Connect</button>
+    </div>
     <p style="text-align: center; color: var(--text-mute); font-size: 12px; margin-top: 16px;">
       We're working on direct integrations. For now, export a CSV manually.<br>
       <a style="color: var(--accent); cursor: pointer;" onclick="navigate('help')">See how →</a>
@@ -1857,6 +1881,17 @@ h1.hero-h .grad {
       <div class="help-step"><div class="step-num">2</div><div class="step-text">Click on any activity in your timeline.</div></div>
       <div class="help-step"><div class="step-num">3</div><div class="step-text">Click the <strong>Export</strong> button and choose <strong>CSV</strong>.</div></div>
       <div class="help-step"><div class="step-num">4</div><div class="step-text">Upload it in the <strong>Analyze</strong> tab.</div></div>
+    </div>
+
+    <div class="help-card">
+      <div class="panel-title" style="margin-bottom: 16px;">📱 Exporting from Samsung Galaxy Watch</div>
+      <div class="help-step"><div class="step-num">1</div><div class="step-text">Open <strong>Samsung Health</strong> app on your phone.</div></div>
+      <div class="help-step"><div class="step-num">2</div><div class="step-text">Tap the <strong>menu (☰)</strong> → <strong>Settings</strong> → <strong>Download personal data</strong>.</div></div>
+      <div class="help-step"><div class="step-num">3</div><div class="step-text">Confirm and wait for the email with your data ZIP.</div></div>
+      <div class="help-step"><div class="step-num">4</div><div class="step-text">For individual workouts, third-party apps like <strong>Strava</strong> (auto-syncs Samsung) or <strong>FITWatch Sync</strong> can export CSV.</div></div>
+      <p style="font-size: 12px; color: var(--text-mute); margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);">
+        Direct Samsung Health integration coming soon.
+      </p>
     </div>
 
     <div class="help-card">
@@ -1943,6 +1978,23 @@ h1.hero-h .grad {
     <div class="modal-actions">
       <button class="btn ghost" onclick="closeImportModal()">Cancel</button>
       <button class="btn" onclick="submitImport()">Import plan →</button>
+    </div>
+  </div>
+</div>
+
+<!-- Logout Confirmation Modal -->
+<div class="modal-backdrop" id="logoutModal">
+  <div class="modal" style="max-width: 380px;">
+    <div class="modal-header">
+      <div class="modal-title">Log out?</div>
+      <button class="modal-close" onclick="closeLogoutModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size: 14px; color: var(--text-dim); line-height: 1.5;">You'll need to log in again to access your account.</p>
+    </div>
+    <div class="modal-actions">
+      <button class="btn ghost" onclick="closeLogoutModal()">Cancel</button>
+      <button class="btn" style="background: var(--danger); box-shadow: 0 4px 20px rgba(239, 68, 68, 0.25);" onclick="closeLogoutModal(); doLogout();">Log out</button>
     </div>
   </div>
 </div>
@@ -2188,6 +2240,14 @@ function closeAvatarMenu() {
 function navigateAndCloseAvatarMenu(page) {
   closeAvatarMenu();
   navigate(page);
+}
+
+function confirmLogout() {
+  document.getElementById('logoutModal').classList.add('open');
+}
+
+function closeLogoutModal() {
+  document.getElementById('logoutModal').classList.remove('open');
 }
 
 // Close menus on outside click
@@ -4549,18 +4609,33 @@ function initUpload() {
         commentaryEl.innerHTML = `<div class="coach-box" style="margin-top: 16px;"><div class="coach-title">💬 Coach's Commentary</div><div class="coach-text" id="commentaryText"><span style="opacity: 0.6;">Coach is reviewing your session...</span></div></div>`;
         output.appendChild(commentaryEl);
 
-        const commentary = await callCoach('workout_commentary', { workout: analysis, intake });
-        document.getElementById('commentaryText').textContent = commentary;
+        // Race the commentary call against a 30 second timeout
+        const commentaryPromise = callCoach('workout_commentary', { workout: analysis, intake });
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Commentary timed out after 30s')), 30000)
+        );
 
-        // Save commentary as a coach message
-        await sb.from('coach_messages').insert({
-          user_id: state.user.id,
-          role: 'coach',
-          content: commentary,
-          context_type: 'workout_commentary',
-        });
+        try {
+          const commentary = await Promise.race([commentaryPromise, timeoutPromise]);
+          const txtEl = document.getElementById('commentaryText');
+          if (txtEl) txtEl.innerHTML = formatMarkdown(commentary);
+
+          // Save commentary as a coach message
+          await sb.from('coach_messages').insert({
+            user_id: state.user.id,
+            role: 'coach',
+            content: commentary,
+            context_type: 'workout_commentary',
+          });
+        } catch (innerErr) {
+          console.error('Commentary failed:', innerErr);
+          const txtEl = document.getElementById('commentaryText');
+          if (txtEl) {
+            txtEl.innerHTML = `<span style="color: var(--text-dim); font-size: 13px;">Couldn't load coach commentary right now. Your workout was saved successfully though. <a style="color: var(--accent); cursor: pointer;" onclick="navigate('coach')">Ask Coach about it →</a></span>`;
+          }
+        }
       } catch (cerr) {
-        console.error('Commentary failed:', cerr);
+        console.error('Commentary setup failed:', cerr);
       }
     } catch (err) {
       output.innerHTML = `<div class="analysis-card" style="padding: 20px;"><p style="color: var(--danger);">Error: ${err.message}</p></div>`;
