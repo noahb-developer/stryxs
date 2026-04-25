@@ -2298,7 +2298,72 @@ function classifyZone(hr, zones) {
   return 'Z5';
 }
 
+function parseCSV(text) {
+  // Proper RFC 4180 CSV parsing that handles quoted fields with newlines inside
+  text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const rows = [];
+  let row = [];
+  let cell = '';
+  let inQuotes = false;
+  let i = 0;
+
+  while (i < text.length) {
+    const ch = text[i];
+
+    if (inQuotes) {
+      if (ch === '"') {
+        // Check for escaped quote ""
+        if (text[i + 1] === '"') {
+          cell += '"';
+          i += 2;
+          continue;
+        }
+        inQuotes = false;
+        i++;
+        continue;
+      }
+      cell += ch;
+      i++;
+      continue;
+    }
+
+    // Not in quotes
+    if (ch === '"') {
+      inQuotes = true;
+      i++;
+      continue;
+    }
+    if (ch === ',') {
+      row.push(cell);
+      cell = '';
+      i++;
+      continue;
+    }
+    if (ch === '\n') {
+      row.push(cell);
+      // Only add row if it has content
+      if (row.some(c => c.trim())) rows.push(row);
+      row = [];
+      cell = '';
+      i++;
+      continue;
+    }
+    cell += ch;
+    i++;
+  }
+
+  // Handle final cell/row
+  if (cell || row.length > 0) {
+    row.push(cell);
+    if (row.some(c => c.trim())) rows.push(row);
+  }
+
+  // Normalize each cell: trim whitespace, collapse internal newlines (header rows have them)
+  return rows.map(r => r.map(c => c.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim()));
+}
+
 function parseCSVLine(line) {
+  // Kept for backwards compatibility but not used by parseCSV anymore
   const r = []; let c = ''; let q = false;
   for (let i = 0; i < line.length; i++) {
     const ch = line[i];
@@ -2310,15 +2375,12 @@ function parseCSVLine(line) {
   return r.map(s => s.trim().replace(/^"|"$/g, ''));
 }
 
-function parseCSV(text) {
-  return text.replace(/\r\n/g, '\n').split('\n').filter(l => l.trim()).map(parseCSVLine);
-}
-
 function detectActivity(text, filename = '') {
-  const f = text.split('\n')[0].toLowerCase();
+  // Use the first row of the parsed CSV as the header check
+  const lower = text.toLowerCase();
   const fn = (filename || '').toLowerCase();
-  if (f.includes('swim stroke') || f.includes('swolf') || f.includes('lengths') || fn.includes('swim')) return 'swim';
-  if ((f.includes('avg speed') && !f.includes('avg pace')) || fn.includes('bike') || fn.includes('cycl') || fn.includes('ride')) return 'bike';
+  if (lower.includes('swim stroke') || lower.includes('swolf') || lower.includes('lengths') || fn.includes('swim')) return 'swim';
+  if ((lower.includes('avg speed') && !lower.includes('avg pace')) || fn.includes('bike') || fn.includes('cycl') || fn.includes('ride')) return 'bike';
   return 'run';
 }
 
