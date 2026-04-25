@@ -2671,7 +2671,7 @@ h1.hero-h .grad {
 
 @media (max-width: 600px) {
   .lv2-auth-card {
-    margin-top: 80px;
+    margin-top: 110px;
     padding: 28px 22px;
     border-radius: 18px;
   }
@@ -3561,11 +3561,10 @@ function navigate(page) {
   // Re-trigger landing animations when navigating back to landing (fixes mobile reload bug)
   if (page === 'landing') {
     requestAnimationFrame(() => {
-      // Reset and replay reveal animations
+      // Reset reveal animations
       document.querySelectorAll('.lv2-reveal').forEach(el => {
         el.classList.remove('lv2-visible');
       });
-      // Re-observe so they animate back in
       const lv2Obs = new IntersectionObserver(entries => {
         entries.forEach(e => {
           if (e.isIntersecting) {
@@ -3575,6 +3574,17 @@ function navigate(page) {
         });
       }, { threshold: 0.15, rootMargin: '0px 0px -10% 0px' });
       document.querySelectorAll('.lv2-reveal').forEach(el => lv2Obs.observe(el));
+
+      // Replay hero animations by removing and re-adding the elements via class toggle
+      const animatedEls = document.querySelectorAll('.lv2-hero-eyebrow, .lv2-h1 .lv2-line span, .lv2-sub, .lv2-cta, .lv2-meta, .lv2-live-card, .lv2-h1 em::after');
+      animatedEls.forEach(el => {
+        // Force a reflow trick: clone the element to restart its CSS animations
+        el.style.animation = 'none';
+        // Force browser reflow
+        void el.offsetWidth;
+        // Re-enable animation by removing the override
+        el.style.animation = '';
+      });
     });
   }
 }
