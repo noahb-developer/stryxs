@@ -11,7 +11,7 @@
 <title>EnduraIQ — AI Coaching for Endurance Athletes</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <style>
@@ -1653,6 +1653,705 @@ h1.hero-h .grad {
   transition: opacity 0.6s, transform 0.6s;
 }
 .reveal.visible { opacity: 1; transform: translateY(0); }
+/* ═══════════════════════════════════════════════════════════
+   LANDING V2 — Instrument Serif redesign
+   All styles scoped under .landing-v2 to avoid breaking app interior
+   ═══════════════════════════════════════════════════════════ */
+
+#page-landing {
+  --lv2-bg: #070b14;
+  --lv2-bg-2: #0d1320;
+  --lv2-bg-3: #141c2e;
+  --lv2-text: #f0f3f8;
+  --lv2-text-dim: #8a93a8;
+  --lv2-text-mute: #5a6378;
+  --lv2-acc: #00ffa3;
+  --lv2-acc-deep: #00cc82;
+}
+
+.landing-v2 {
+  font-family: 'DM Sans', -apple-system, system-ui, sans-serif;
+  color: var(--lv2-text);
+  position: relative;
+  margin: -28px -20px 0;
+  padding: 0;
+  min-height: 100vh;
+  background: var(--lv2-bg);
+  overflow: hidden;
+}
+
+/* Animated mesh blobs inside landing-v2 */
+.landing-v2::before {
+  content: '';
+  position: absolute;
+  width: 600px; height: 600px;
+  top: -150px; left: -150px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(0, 255, 163, 0.45), transparent 70%);
+  filter: blur(110px);
+  opacity: 0.5;
+  animation: lv2-meshFloat 30s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+.landing-v2::after {
+  content: '';
+  position: absolute;
+  width: 500px; height: 500px;
+  top: 30%; right: -150px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(0, 200, 255, 0.35), transparent 70%);
+  filter: blur(110px);
+  opacity: 0.4;
+  animation: lv2-meshFloat 30s ease-in-out infinite;
+  animation-delay: -15s;
+  pointer-events: none;
+  z-index: 0;
+}
+
+@keyframes lv2-meshFloat {
+  0%, 100% { transform: translate(0, 0) scale(1) rotate(0deg); }
+  33% { transform: translate(80px, -50px) scale(1.15) rotate(120deg); }
+  66% { transform: translate(-60px, 80px) scale(0.9) rotate(240deg); }
+}
+
+.landing-v2 > * { position: relative; z-index: 2; }
+
+.landing-v2 h1, .landing-v2 h2, .landing-v2 h3, .landing-v2 p, .landing-v2 span, .landing-v2 div {
+  font-family: 'DM Sans', -apple-system, system-ui, sans-serif;
+}
+
+/* HERO */
+.lv2-hero {
+  min-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 80px 24px 40px;
+  text-align: center;
+  position: relative;
+}
+
+.lv2-hero-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px 8px 8px;
+  border-radius: 99px;
+  background: rgba(0, 255, 163, 0.06);
+  border: 1px solid rgba(0, 255, 163, 0.2);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--lv2-text);
+  margin-bottom: 32px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  font-family: 'JetBrains Mono', monospace;
+  opacity: 0;
+  animation: lv2-fadeUp 0.8s 0.1s forwards cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.lv2-hero-eyebrow span:first-child { font-family: 'JetBrains Mono', monospace; }
+.lv2-pulse {
+  width: 8px !important; height: 8px !important; border-radius: 50%;
+  background: var(--lv2-acc);
+  box-shadow: 0 0 12px var(--lv2-acc);
+  animation: lv2-blink 2s infinite;
+  flex-shrink: 0;
+  margin-left: 4px;
+  display: inline-block !important;
+}
+@keyframes lv2-blink {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(0.85); }
+}
+
+.lv2-h1 {
+  font-family: 'Instrument Serif', serif !important;
+  font-size: clamp(44px, 8vw, 110px);
+  font-weight: 400;
+  line-height: 0.94;
+  letter-spacing: -2.5px;
+  max-width: 1100px;
+  margin: 0 auto 28px;
+  font-style: normal;
+}
+.lv2-h1 .lv2-line {
+  display: block;
+  overflow: hidden;
+  font-family: 'Instrument Serif', serif !important;
+}
+.lv2-h1 .lv2-line span {
+  display: inline-block;
+  transform: translateY(110%);
+  animation: lv2-slideUp 1s forwards cubic-bezier(0.2, 0.8, 0.2, 1);
+  font-family: 'Instrument Serif', serif !important;
+}
+.lv2-h1 .lv2-line:nth-child(1) span { animation-delay: 0.2s; }
+.lv2-h1 .lv2-line:nth-child(2) span { animation-delay: 0.35s; }
+.lv2-h1 .lv2-line:nth-child(3) span { animation-delay: 0.5s; }
+.lv2-h1 em {
+  font-style: italic;
+  color: var(--lv2-acc);
+  font-family: 'Instrument Serif', serif !important;
+  position: relative;
+}
+.lv2-h1 em::after {
+  content: '';
+  position: absolute; left: 0; right: 0; bottom: -4px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--lv2-acc), transparent);
+  transform-origin: center;
+  animation: lv2-underline 1.5s 1.2s forwards;
+  transform: scaleX(0);
+}
+@keyframes lv2-underline {
+  to { transform: scaleX(1); }
+}
+@keyframes lv2-slideUp {
+  to { transform: translateY(0); }
+}
+@keyframes lv2-fadeUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.lv2-sub {
+  font-size: clamp(15px, 2vw, 19px);
+  color: var(--lv2-text-dim);
+  max-width: 580px;
+  margin: 0 auto 38px;
+  line-height: 1.5;
+  opacity: 0;
+  animation: lv2-fadeUp 0.8s 0.9s forwards cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.lv2-cta {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+  opacity: 0;
+  animation: lv2-fadeUp 0.8s 1.1s forwards cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.lv2-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--lv2-acc);
+  color: var(--lv2-bg);
+  border: none;
+  padding: 16px 28px;
+  border-radius: 99px;
+  font-size: 15px;
+  font-weight: 600;
+  font-family: 'DM Sans', sans-serif;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+.lv2-btn-primary::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  transform: translateX(-100%);
+  transition: transform 0.6s;
+}
+.lv2-btn-primary:hover::before { transform: translateX(100%); }
+.lv2-btn-primary:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 16px 40px rgba(0, 255, 163, 0.35);
+}
+.lv2-btn-primary svg { transition: transform 0.3s; }
+.lv2-btn-primary:hover svg { transform: translateX(4px); }
+
+.lv2-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: transparent;
+  color: var(--lv2-text);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 16px 24px;
+  border-radius: 99px;
+  font-size: 15px;
+  font-weight: 500;
+  font-family: 'DM Sans', sans-serif;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.lv2-btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.lv2-meta {
+  margin-top: 40px;
+  display: flex;
+  gap: 22px;
+  justify-content: center;
+  flex-wrap: wrap;
+  font-size: 11px;
+  color: var(--lv2-text-mute);
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  opacity: 0;
+  animation: lv2-fadeUp 0.8s 1.4s forwards cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.lv2-meta span { display: flex; align-items: center; gap: 8px; font-family: 'JetBrains Mono', monospace; }
+.lv2-dot { width: 4px; height: 4px; border-radius: 50%; background: var(--lv2-acc); display: inline-block; }
+
+/* LIVE WORKOUT CARD */
+.lv2-live-card {
+  margin: 60px auto 0;
+  max-width: 920px;
+  position: relative;
+  padding: 0 20px;
+  opacity: 0;
+  animation: lv2-fadeUp 1s 1.6s forwards cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.lv2-live-inner {
+  background: linear-gradient(180deg, rgba(20, 28, 46, 0.7), rgba(13, 19, 32, 0.7));
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 24px;
+  padding: 26px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+}
+.lv2-live-inner::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(0, 255, 163, 0.5), transparent);
+}
+
+.lv2-live-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 20px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--lv2-text-mute);
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.lv2-live-tag {
+  display: flex; align-items: center; gap: 8px;
+  color: var(--lv2-acc);
+  font-family: 'JetBrains Mono', monospace;
+}
+.lv2-live-tag::before {
+  content: '';
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--lv2-acc);
+  box-shadow: 0 0 10px var(--lv2-acc);
+  animation: lv2-blink 1.5s infinite;
+}
+
+.lv2-live-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin-bottom: 22px;
+}
+.lv2-live-stat {
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 14px;
+  padding: 14px;
+}
+.lv2-live-stat-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  color: var(--lv2-text-mute);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.lv2-live-stat-value {
+  font-family: 'Instrument Serif', serif !important;
+  font-size: 30px;
+  font-weight: 400;
+  letter-spacing: -1px;
+  line-height: 1;
+}
+.lv2-unit {
+  font-family: 'DM Sans', sans-serif !important;
+  font-size: 12px;
+  color: var(--lv2-text-mute);
+  margin-left: 4px;
+  font-weight: 500;
+}
+.lv2-live-stat-trend {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  margin-top: 6px;
+  color: var(--lv2-acc);
+  font-weight: 500;
+}
+
+@media (max-width: 700px) {
+  .lv2-live-stats { grid-template-columns: 1fr 1fr; }
+  .lv2-live-stat-value { font-size: 26px; }
+}
+
+.lv2-live-coach {
+  background: linear-gradient(135deg, rgba(0, 255, 163, 0.08), rgba(0, 255, 163, 0.02));
+  border: 1px solid rgba(0, 255, 163, 0.15);
+  border-radius: 14px;
+  padding: 16px 18px;
+  position: relative;
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+.lv2-coach-avatar {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  background: var(--lv2-acc);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Instrument Serif', serif !important;
+  font-size: 16px;
+  font-style: italic;
+  color: var(--lv2-bg);
+  box-shadow: 0 0 20px rgba(0, 255, 163, 0.4);
+}
+.lv2-coach-text {
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--lv2-text);
+}
+.lv2-coach-text strong { color: var(--lv2-acc); font-weight: 600; }
+.lv2-typing {
+  display: inline-block;
+  width: 6px; height: 14px;
+  background: var(--lv2-acc);
+  margin-left: 2px;
+  vertical-align: middle;
+  animation: lv2-blink 0.8s infinite;
+}
+
+/* SECTIONS */
+.lv2-section {
+  position: relative;
+  padding: 100px 24px;
+}
+
+.lv2-section-tag {
+  font-family: 'JetBrains Mono', monospace !important;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--lv2-acc);
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: center;
+}
+.lv2-section-tag::before, .lv2-section-tag::after {
+  content: '';
+  height: 1px;
+  width: 40px;
+  background: rgba(0, 255, 163, 0.3);
+}
+
+.lv2-section-h {
+  font-family: 'Instrument Serif', serif !important;
+  font-size: clamp(34px, 5.5vw, 64px);
+  font-weight: 400;
+  line-height: 1.05;
+  letter-spacing: -1.5px;
+  text-align: center;
+  margin: 0 auto 14px;
+  max-width: 900px;
+}
+.lv2-section-h em { font-style: italic; color: var(--lv2-acc); font-family: 'Instrument Serif', serif !important; }
+
+.lv2-section-sub {
+  text-align: center;
+  font-size: 16px;
+  color: var(--lv2-text-dim);
+  max-width: 560px;
+  margin: 0 auto 56px;
+  line-height: 1.55;
+}
+
+/* STEPS */
+.lv2-steps {
+  max-width: 1100px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+.lv2-step {
+  background: linear-gradient(180deg, rgba(20, 28, 46, 0.5), rgba(13, 19, 32, 0.7));
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 22px;
+  padding: 28px 24px;
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1), border-color 0.3s;
+}
+.lv2-step:hover { transform: translateY(-6px); border-color: rgba(0, 255, 163, 0.25); }
+.lv2-step::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: radial-gradient(circle at 50% 0%, rgba(0, 255, 163, 0.1), transparent 60%);
+  opacity: 0;
+  transition: opacity 0.5s;
+  pointer-events: none;
+}
+.lv2-step:hover::before { opacity: 1; }
+
+.lv2-step-num {
+  font-family: 'Instrument Serif', serif !important;
+  font-style: italic;
+  font-size: 56px;
+  line-height: 1;
+  color: rgba(0, 255, 163, 0.2);
+  margin-bottom: 18px;
+}
+.lv2-step h3 {
+  font-family: 'Instrument Serif', serif !important;
+  font-size: 26px;
+  font-weight: 400;
+  letter-spacing: -0.8px;
+  margin-bottom: 10px;
+}
+.lv2-step p { color: var(--lv2-text-dim); font-size: 14px; line-height: 1.55; }
+.lv2-step-graphic {
+  margin-top: 22px;
+  height: 110px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.lv2-hr svg { width: 100%; height: 100%; }
+.lv2-hr path {
+  fill: none;
+  stroke: var(--lv2-acc);
+  stroke-width: 1.5;
+  stroke-dasharray: 1000;
+  stroke-dashoffset: 1000;
+}
+.lv2-step:hover .lv2-hr path {
+  animation: lv2-drawLine 2s forwards;
+}
+@keyframes lv2-drawLine {
+  to { stroke-dashoffset: 0; }
+}
+
+.lv2-cal {
+  display: grid !important;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  padding: 14px;
+  align-items: stretch;
+}
+.lv2-cal-cell {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 4px;
+  height: 18px;
+}
+.lv2-cal-cell.lv2-workout { background: rgba(0, 255, 163, 0.3); }
+.lv2-cal-cell.lv2-workout.lv2-hard { background: var(--lv2-acc); }
+.lv2-cal-cell.lv2-rest { background: rgba(255, 255, 255, 0.03); }
+
+.lv2-chat {
+  flex-direction: column !important;
+  align-items: stretch !important;
+  padding: 14px;
+  gap: 6px;
+  justify-content: flex-end !important;
+}
+.lv2-chat-line {
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  width: 70%;
+}
+.lv2-chat-line.lv2-user {
+  background: rgba(0, 255, 163, 0.3);
+  align-self: flex-end;
+  width: 50%;
+}
+.lv2-chat-line.lv2-bot {
+  background: rgba(255, 255, 255, 0.08);
+  width: 80%;
+}
+
+@media (max-width: 800px) {
+  .lv2-steps { grid-template-columns: 1fr; }
+}
+
+/* MARQUEE */
+.lv2-marquee {
+  overflow: hidden;
+  margin: 60px 0;
+  padding: 14px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(0, 0, 0, 0.2);
+  position: relative;
+}
+.lv2-marquee-track {
+  display: flex;
+  gap: 60px;
+  width: fit-content;
+  animation: lv2-marquee 40s linear infinite;
+}
+@keyframes lv2-marquee {
+  to { transform: translateX(-50%); }
+}
+.lv2-marquee-item {
+  font-family: 'Instrument Serif', serif !important;
+  font-size: 30px;
+  font-style: italic;
+  color: var(--lv2-text-dim);
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 60px;
+}
+.lv2-marquee-item::after {
+  content: '✦';
+  color: var(--lv2-acc);
+  font-size: 14px;
+  font-style: normal;
+}
+
+/* COMPARE */
+.lv2-compare-section { max-width: 1100px; margin: 0 auto; }
+.lv2-compare-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin-top: 28px;
+}
+.lv2-compare-card {
+  background: linear-gradient(180deg, rgba(20, 28, 46, 0.5), rgba(13, 19, 32, 0.7));
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 20px;
+  padding: 26px 22px;
+  transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.lv2-compare-card:hover { transform: translateY(-6px); }
+.lv2-compare-card.lv2-featured {
+  background: linear-gradient(135deg, rgba(0, 255, 163, 0.12), rgba(0, 255, 163, 0.04));
+  border: 1px solid rgba(0, 255, 163, 0.3);
+  position: relative;
+}
+
+.lv2-compare-emoji { font-size: 30px; margin-bottom: 12px; }
+.lv2-compare-name {
+  font-family: 'Instrument Serif', serif !important;
+  font-size: 22px;
+  margin-bottom: 6px;
+}
+.lv2-compare-tag {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 99px;
+  font-family: 'JetBrains Mono', monospace !important;
+  font-size: 9px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--lv2-text-dim);
+  margin-bottom: 12px;
+  font-weight: 500;
+}
+.lv2-compare-card.lv2-featured .lv2-compare-tag { background: var(--lv2-acc); color: var(--lv2-bg); }
+.lv2-compare-desc { color: var(--lv2-text-dim); font-size: 13px; line-height: 1.5; }
+
+@media (max-width: 800px) {
+  .lv2-compare-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 480px) {
+  .lv2-compare-grid { grid-template-columns: 1fr; }
+}
+
+/* CTA STRIP */
+.lv2-cta-strip {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 70px 32px;
+  text-align: center;
+  background:
+    radial-gradient(ellipse at 50% 50%, rgba(0, 255, 163, 0.15), transparent 70%),
+    rgba(13, 19, 32, 0.8);
+  border: 1px solid rgba(0, 255, 163, 0.15);
+  border-radius: 28px;
+  position: relative;
+  overflow: hidden;
+}
+.lv2-cta-strip::before {
+  content: '';
+  position: absolute; top: 0; left: 50%;
+  width: 300px; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--lv2-acc), transparent);
+  transform: translateX(-50%);
+}
+.lv2-cta-strip h2 {
+  font-family: 'Instrument Serif', serif !important;
+  font-size: clamp(34px, 5vw, 56px);
+  font-weight: 400;
+  line-height: 1.05;
+  letter-spacing: -1.5px;
+  margin-bottom: 14px;
+}
+.lv2-cta-strip h2 em { font-style: italic; color: var(--lv2-acc); font-family: 'Instrument Serif', serif !important; }
+.lv2-cta-strip p { color: var(--lv2-text-dim); font-size: 16px; max-width: 480px; margin: 0 auto 28px; line-height: 1.5; }
+
+.lv2-footer {
+  text-align: center;
+  padding: 30px 20px 60px;
+  color: var(--lv2-text-mute);
+  font-size: 11px;
+  font-family: 'JetBrains Mono', monospace !important;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+/* Reveal on scroll */
+.lv2-reveal {
+  opacity: 0;
+  transform: translateY(28px);
+  transition: opacity 0.8s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.lv2-reveal.lv2-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Hide the landing nav when on landing page since we use the existing nav */
+@media (max-width: 600px) {
+  .lv2-section { padding: 80px 18px; }
+  .lv2-cta-strip { padding: 56px 24px; }
+}
+
 </style>
 </head>
 
@@ -1752,142 +2451,194 @@ h1.hero-h .grad {
 
 <!-- LANDING -->
 <div class="page active" id="page-landing">
-  <div class="landing-hero">
-    <div class="hero-badge"><span class="dot"></span> AI coaching for endurance athletes</div>
-    <h1 class="hero-h">Your watch records.<br><span class="grad">EnduraIQ coaches.</span></h1>
-    <p class="hero-sub">Stop staring at charts. Upload your workout data and get professional-grade coaching analysis in seconds — cardiac drift, zone distribution, race projections, and plain-language insights that tell you exactly what to change.</p>
-    <div class="hero-cta">
-      <button class="btn" onclick="navigate('signup')">Start free →</button>
-      <button class="btn ghost" onclick="document.getElementById('features').scrollIntoView({behavior:'smooth'})">See how it works</button>
-    </div>
-    <p style="color: var(--text-mute); font-size: 13px;">Free forever tier · No credit card · Garmin, Apple Watch, COROS & more</p>
-  </div>
-
-  <!-- Live showcase — animated preview -->
-  <div class="showcase reveal" id="liveShowcase">
-    <div class="showcase-header">
-      <div class="showcase-title">
-        <span class="live-dot"></span>
-        Live workout analysis
+  <div class="landing-v2">
+    <!-- HERO -->
+    <section class="lv2-hero">
+      <div class="lv2-hero-eyebrow">
+        <span>AI Endurance Coach</span>
+        <span class="lv2-pulse"></span>
       </div>
-      <div class="showcase-badge" id="showcaseBadge">Easy / Zone 2</div>
-    </div>
 
-    <!-- Animated heart rate trace -->
-    <div class="hr-trace-container">
-      <svg class="hr-trace" viewBox="0 0 600 100" preserveAspectRatio="none">
-        <defs>
-          <linearGradient id="hrGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.4"/>
-            <stop offset="100%" stop-color="var(--accent)" stop-opacity="0"/>
-          </linearGradient>
-        </defs>
-        <path id="hrLine" d="M0,60 Q50,55 100,52 T200,48 T300,45 T400,42 T500,48 T600,52" stroke="var(--accent)" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-dasharray="2000" stroke-dashoffset="2000"/>
-        <path d="M0,60 Q50,55 100,52 T200,48 T300,45 T400,42 T500,48 T600,52 L600,100 L0,100 Z" fill="url(#hrGrad)" opacity="0" id="hrFill"/>
-        <circle id="hrPulse" cx="600" cy="52" r="0" fill="var(--accent)"/>
-      </svg>
-    </div>
+      <h1 class="lv2-h1">
+        <div class="lv2-line"><span>Your watch records.</span></div>
+        <div class="lv2-line"><span><em>Coach</em> understands.</span></div>
+        <div class="lv2-line"><span>You get faster.</span></div>
+      </h1>
 
-    <div class="showcase-stats">
-      <div class="showcase-stat">
-        <div class="showcase-stat-label">Avg HR</div>
-        <div class="showcase-stat-val"><span class="count-up" data-target="136" data-suffix=" bpm">0</span></div>
-      </div>
-      <div class="showcase-stat">
-        <div class="showcase-stat-label">Cardiac Drift</div>
-        <div class="showcase-stat-val" style="color: var(--success);">+<span class="count-up" data-target="4.2" data-decimals="1" data-suffix="%">0</span></div>
-      </div>
-      <div class="showcase-stat">
-        <div class="showcase-stat-label">Time in Z2</div>
-        <div class="showcase-stat-val"><span class="count-up" data-target="78" data-suffix="%">0</span></div>
-      </div>
-    </div>
+      <p class="lv2-sub">An AI coach that actually reads your training data. Builds your plan. Adapts as you go. The first endurance coach that lives in your pocket.</p>
 
-    <!-- Mini zone bar -->
-    <div class="zone-mini-bar">
-      <div class="zone-mini" style="background: var(--z1); --w: 10%;"></div>
-      <div class="zone-mini" style="background: var(--z2); --w: 78%;"></div>
-      <div class="zone-mini" style="background: var(--z3); --w: 9%;"></div>
-      <div class="zone-mini" style="background: var(--z4); --w: 2%;"></div>
-      <div class="zone-mini" style="background: var(--z5); --w: 1%;"></div>
-    </div>
-
-    <div class="showcase-coach">
-      <strong style="color: var(--accent);">Coach's read —</strong> Well-executed aerobic run. You stayed under Zone 2 ceiling (157 bpm) for the entire run. Drift of +4.2% indicates a solid aerobic base. Keep building volume at this intensity.
-    </div>
-  </div>
-
-  <div id="features"></div>
-  <div class="features reveal">
-    <div class="feature">
-      <div class="feature-icon">⚡</div>
-      <div class="feature-title">Instant analysis</div>
-      <div class="feature-desc">Upload your workout and get professional coaching in under 5 seconds. No waiting.</div>
-    </div>
-    <div class="feature">
-      <div class="feature-icon">⌚</div>
-      <div class="feature-title">Works with any watch</div>
-      <div class="feature-desc">Garmin, Apple Watch, COROS, Polar, Suunto. If it exports data, we analyze it.</div>
-    </div>
-    <div class="feature">
-      <div class="feature-icon">💓</div>
-      <div class="feature-title">Cardiac drift detection</div>
-      <div class="feature-desc">The single best marker of aerobic fitness. We catch what Strava and Garmin miss.</div>
-    </div>
-    <div class="feature">
-      <div class="feature-icon">🎯</div>
-      <div class="feature-title">LTHR-based zones</div>
-      <div class="feature-desc">Personalized to your physiology, not age formulas. The same system Joe Friel uses.</div>
-    </div>
-    <div class="feature">
-      <div class="feature-icon">📊</div>
-      <div class="feature-title">80/20 tracking</div>
-      <div class="feature-desc">Know if you're stuck in the "gray zone" that kills aerobic development.</div>
-    </div>
-    <div class="feature">
-      <div class="feature-icon">🏁</div>
-      <div class="feature-title">Race projections</div>
-      <div class="feature-desc">Realistic race splits based on your actual fitness. Updates as you improve.</div>
-    </div>
-  </div>
-
-  <div style="margin-top: 60px;">
-    <div class="section-title reveal">The gap nobody filled</div>
-    <div class="section-sub reveal">Every endurance athlete has the same problem. Tools show data. Nobody tells you what it means.</div>
-    <div class="compare reveal">
-      <div class="compare-card">
-        <div class="compare-icon">⌚</div>
-        <div class="compare-name">Garmin</div>
-        <div class="compare-tag">Records</div>
-        <div class="compare-desc">Great at capturing data. Doesn't interpret or coach.</div>
+      <div class="lv2-cta">
+        <button class="lv2-btn-primary" onclick="navigate('signup')">
+          Start training free
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </button>
+        <button class="lv2-btn-ghost" onclick="document.getElementById('lv2-how').scrollIntoView({behavior:'smooth'})">See how it works</button>
       </div>
-      <div class="compare-card">
-        <div class="compare-icon">🧡</div>
-        <div class="compare-name">Strava</div>
-        <div class="compare-tag">Summarizes</div>
-        <div class="compare-desc">"Nice run!" — thanks for nothing.</div>
+
+      <div class="lv2-meta">
+        <span><span class="lv2-dot"></span>Free forever tier</span>
+        <span><span class="lv2-dot"></span>Garmin · Apple · COROS · Samsung</span>
+        <span><span class="lv2-dot"></span>No credit card</span>
       </div>
-      <div class="compare-card">
-        <div class="compare-icon">📈</div>
-        <div class="compare-name">TrainingPeaks</div>
-        <div class="compare-tag">Displays</div>
-        <div class="compare-desc">Numbers without meaning. Unless you pay $300/mo for a coach.</div>
-      </div>
-      <div class="compare-card highlight">
-        <div class="compare-icon">🧠</div>
-        <div class="compare-name">EnduraIQ</div>
-        <div class="compare-tag">Coaches</div>
-        <div class="compare-desc">Analyzes your data. Tells you what to change. Like a coach, at $15/mo.</div>
+    </section>
+
+    <!-- LIVE WORKOUT CARD -->
+    <div class="lv2-live-card">
+      <div class="lv2-live-inner">
+        <div class="lv2-live-header">
+          <span class="lv2-live-tag">Live coaching</span>
+          <span>13.94 km · long run · Saturday</span>
+        </div>
+        <div class="lv2-live-stats">
+          <div class="lv2-live-stat">
+            <div class="lv2-live-stat-label">Avg HR</div>
+            <div class="lv2-live-stat-value">136<span class="lv2-unit">bpm</span></div>
+            <div class="lv2-live-stat-trend">↓ Z2 zone held</div>
+          </div>
+          <div class="lv2-live-stat">
+            <div class="lv2-live-stat-label">Drift</div>
+            <div class="lv2-live-stat-value">+4.2<span class="lv2-unit">%</span></div>
+            <div class="lv2-live-stat-trend">strong aerobic</div>
+          </div>
+          <div class="lv2-live-stat">
+            <div class="lv2-live-stat-label">Time in Z2</div>
+            <div class="lv2-live-stat-value">78<span class="lv2-unit">%</span></div>
+            <div class="lv2-live-stat-trend">on target</div>
+          </div>
+          <div class="lv2-live-stat">
+            <div class="lv2-live-stat-label">Pace</div>
+            <div class="lv2-live-stat-value">5:21<span class="lv2-unit">/km</span></div>
+            <div class="lv2-live-stat-trend">conversational</div>
+          </div>
+        </div>
+        <div class="lv2-live-coach">
+          <div class="lv2-coach-avatar">C</div>
+          <div class="lv2-coach-text">
+            <strong>Coach &mdash;</strong> Solid execution. You held under your Z2 ceiling (157 bpm) the entire run, and 4.2% drift confirms a strong aerobic engine. Tomorrow's recovery day will let you absorb this work. Keep building base. <span class="lv2-typing"></span>
+          </div>
+        </div>
       </div>
     </div>
-  </div>
 
-  <div class="cta-strip reveal">
-    <h2>Stop guessing.<br>Start being coached.</h2>
-    <p>Free tier includes unlimited analyses and 7-day history. Upgrade when you need long-term tracking.</p>
-    <button class="btn" onclick="navigate('signup')">Create free account →</button>
+    <!-- HOW IT WORKS -->
+    <section id="lv2-how" class="lv2-section">
+      <div class="lv2-section-tag">How it works</div>
+      <h2 class="lv2-section-h">Three steps to a <em>smarter</em> training week</h2>
+      <p class="lv2-section-sub">From signup to coached workout in under three minutes. No coach, no spreadsheets, no guessing.</p>
+
+      <div class="lv2-steps">
+        <div class="lv2-step lv2-reveal">
+          <div class="lv2-step-num">i</div>
+          <h3>Tell Coach about you</h3>
+          <p>Quick intake. Your goal, your time, your level. Coach uses this to design a plan calibrated to your life, not a generic template.</p>
+          <div class="lv2-step-graphic lv2-chat">
+            <div class="lv2-chat-line lv2-bot"></div>
+            <div class="lv2-chat-line lv2-user"></div>
+            <div class="lv2-chat-line lv2-bot"></div>
+            <div class="lv2-chat-line lv2-user"></div>
+          </div>
+        </div>
+        <div class="lv2-step lv2-reveal">
+          <div class="lv2-step-num">ii</div>
+          <h3>Get your plan</h3>
+          <p>Periodized training built on Friel's framework, your LTHR zones, and 80/20 distribution. Loaded into a calendar you can actually use.</p>
+          <div class="lv2-step-graphic lv2-cal">
+            <div class="lv2-cal-cell lv2-workout"></div>
+            <div class="lv2-cal-cell lv2-rest"></div>
+            <div class="lv2-cal-cell lv2-workout lv2-hard"></div>
+            <div class="lv2-cal-cell lv2-workout"></div>
+            <div class="lv2-cal-cell lv2-rest"></div>
+            <div class="lv2-cal-cell lv2-workout"></div>
+            <div class="lv2-cal-cell lv2-workout lv2-hard"></div>
+          </div>
+        </div>
+        <div class="lv2-step lv2-reveal">
+          <div class="lv2-step-num">iii</div>
+          <h3>Train, upload, adapt</h3>
+          <p>Upload after each session. Coach reads your data, comments on the run, and adjusts the plan when patterns emerge. You just train.</p>
+          <div class="lv2-step-graphic lv2-hr">
+            <svg viewBox="0 0 200 100" preserveAspectRatio="none">
+              <path d="M0,80 L20,75 L40,72 L50,40 L60,72 L80,68 L100,30 L120,68 L140,65 L160,20 L180,65 L200,60"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- MARQUEE -->
+    <div class="lv2-marquee">
+      <div class="lv2-marquee-track">
+        <div class="lv2-marquee-item">cardiac drift</div>
+        <div class="lv2-marquee-item">LTHR zones</div>
+        <div class="lv2-marquee-item">80/20 polarized</div>
+        <div class="lv2-marquee-item">acute:chronic load</div>
+        <div class="lv2-marquee-item">aerobic base</div>
+        <div class="lv2-marquee-item">tempo</div>
+        <div class="lv2-marquee-item">threshold</div>
+        <div class="lv2-marquee-item">VO2 max</div>
+        <div class="lv2-marquee-item">cardiac drift</div>
+        <div class="lv2-marquee-item">LTHR zones</div>
+        <div class="lv2-marquee-item">80/20 polarized</div>
+        <div class="lv2-marquee-item">acute:chronic load</div>
+        <div class="lv2-marquee-item">aerobic base</div>
+        <div class="lv2-marquee-item">tempo</div>
+        <div class="lv2-marquee-item">threshold</div>
+        <div class="lv2-marquee-item">VO2 max</div>
+      </div>
+    </div>
+
+    <!-- COMPARE -->
+    <section class="lv2-section lv2-compare-section">
+      <div class="lv2-section-tag">The gap</div>
+      <h2 class="lv2-section-h">What others <em>do</em>. What we do.</h2>
+      <p class="lv2-section-sub">Tools today record data. They don't coach you. EnduraIQ closes that gap.</p>
+
+      <div class="lv2-compare-grid">
+        <div class="lv2-compare-card lv2-reveal">
+          <div class="lv2-compare-emoji">&#x231a;</div>
+          <div class="lv2-compare-name">Garmin</div>
+          <div class="lv2-compare-tag">Records</div>
+          <div class="lv2-compare-desc">Captures everything. Tells you nothing about what to change.</div>
+        </div>
+        <div class="lv2-compare-card lv2-reveal">
+          <div class="lv2-compare-emoji">&#x1f9e1;</div>
+          <div class="lv2-compare-name">Strava</div>
+          <div class="lv2-compare-tag">Cheers</div>
+          <div class="lv2-compare-desc">"Nice run!" is not a training adjustment.</div>
+        </div>
+        <div class="lv2-compare-card lv2-reveal">
+          <div class="lv2-compare-emoji">&#x1f4ca;</div>
+          <div class="lv2-compare-name">TrainingPeaks</div>
+          <div class="lv2-compare-tag">Displays</div>
+          <div class="lv2-compare-desc">Numbers without meaning, unless you pay $300/mo for a coach.</div>
+        </div>
+        <div class="lv2-compare-card lv2-featured lv2-reveal">
+          <div class="lv2-compare-emoji">&#x26a1;</div>
+          <div class="lv2-compare-name">EnduraIQ</div>
+          <div class="lv2-compare-tag">Coaches</div>
+          <div class="lv2-compare-desc">Reads your data, decides what's next, tells you why. From $15/mo.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="lv2-section">
+      <div class="lv2-cta-strip">
+        <h2>Stop guessing.<br>Start <em>training</em>.</h2>
+        <p>Free forever tier with unlimited analyses. Upgrade when you want long-term tracking and adaptive plans.</p>
+        <button class="lv2-btn-primary" onclick="navigate('signup')">
+          Create your free account
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </button>
+      </div>
+    </section>
+
+    <footer class="lv2-footer">
+      EnduraIQ &middot; Built for athletes
+    </footer>
   </div>
 </div>
+
 
 <!-- SIGNUP -->
 <div class="page" id="page-signup">
@@ -4935,6 +5686,27 @@ function initReveals() {
     });
   }, { threshold: 0.15 });
   document.querySelectorAll('.reveal').forEach(el => obs.observe(el));
+
+  // Landing v2 reveals
+  const lv2Obs = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) e.target.classList.add('lv2-visible');
+    });
+  }, { threshold: 0.15, rootMargin: '0px 0px -10% 0px' });
+  document.querySelectorAll('.lv2-reveal').forEach(el => lv2Obs.observe(el));
+
+  // Tilt effect on landing v2 cards (desktop only)
+  if (window.matchMedia('(pointer: fine)').matches) {
+    document.querySelectorAll('.lv2-step, .lv2-compare-card').forEach(card => {
+      card.addEventListener('mousemove', (ev) => {
+        const rect = card.getBoundingClientRect();
+        const x = (ev.clientX - rect.left) / rect.width - 0.5;
+        const y = (ev.clientY - rect.top) / rect.height - 0.5;
+        card.style.transform = `translateY(-6px) rotateX(${-y * 4}deg) rotateY(${x * 4}deg)`;
+      });
+      card.addEventListener('mouseleave', () => { card.style.transform = ''; });
+    });
+  }
 
   // Count-up observer
   const countObs = new IntersectionObserver(entries => {
