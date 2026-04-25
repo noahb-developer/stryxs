@@ -2512,6 +2512,180 @@ h1.hero-h .grad {
   transform: translateY(0);
 }
 
+/* AUTH PAGES — landing v2 styled */
+#page-signup, #page-login {
+  --lv2-bg: #070b14;
+  --lv2-bg-2: #0d1320;
+  --lv2-bg-3: #141c2e;
+  --lv2-text: #f0f3f8;
+  --lv2-text-dim: #8a93a8;
+  --lv2-text-mute: #5a6378;
+  --lv2-acc: #00ffa3;
+  --lv2-acc-deep: #00cc82;
+}
+
+.lv2-auth-wrap {
+  position: relative;
+  width: 100%;
+  min-height: 100vh;
+  background: var(--lv2-bg);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  font-family: 'DM Sans', -apple-system, system-ui, sans-serif;
+  color: var(--lv2-text);
+}
+
+/* Mesh blobs for auth pages */
+.lv2-auth-wrap::before {
+  content: '';
+  position: absolute;
+  width: 600px; height: 600px;
+  top: -150px; left: -150px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(0, 255, 163, 0.55), transparent 70%);
+  filter: blur(120px);
+  opacity: 0.45;
+  animation: lv2-meshFloat 30s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+.lv2-auth-wrap::after {
+  content: '';
+  position: absolute;
+  width: 500px; height: 500px;
+  bottom: -100px; right: -150px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(0, 200, 255, 0.4), transparent 70%);
+  filter: blur(120px);
+  opacity: 0.4;
+  animation: lv2-meshFloat 30s ease-in-out infinite;
+  animation-delay: -10s;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.lv2-auth-card {
+  position: relative;
+  z-index: 5;
+  margin: auto;
+  width: 100%;
+  max-width: 460px;
+  padding: 36px 32px;
+  background: linear-gradient(180deg, rgba(20, 28, 46, 0.7), rgba(13, 19, 32, 0.7));
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 22px;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+  margin-top: 100px;
+  margin-bottom: 60px;
+}
+.lv2-auth-card::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(0, 255, 163, 0.5), transparent);
+  border-radius: 22px 22px 0 0;
+}
+
+.lv2-auth-title {
+  font-family: 'Instrument Serif', serif !important;
+  font-size: clamp(32px, 5vw, 44px);
+  font-weight: 400;
+  line-height: 1.05;
+  letter-spacing: -1.5px;
+  text-align: center;
+  margin-bottom: 8px;
+}
+.lv2-auth-title em {
+  font-style: italic;
+  color: var(--lv2-acc);
+  font-family: 'Instrument Serif', serif !important;
+}
+
+.lv2-auth-sub {
+  text-align: center;
+  color: var(--lv2-text-dim);
+  font-size: 14px;
+  margin-bottom: 28px;
+  line-height: 1.5;
+}
+
+.lv2-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.lv2-field label {
+  font-family: 'JetBrains Mono', monospace !important;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: var(--lv2-text-mute);
+  font-weight: 600;
+}
+.lv2-field input {
+  width: 100%;
+  padding: 14px 16px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  color: var(--lv2-text);
+  font-size: 15px;
+  font-family: 'DM Sans', sans-serif;
+  outline: none;
+  transition: border-color 0.2s, background 0.2s;
+}
+.lv2-field input:focus {
+  border-color: var(--lv2-acc);
+  background: rgba(0, 0, 0, 0.4);
+}
+.lv2-field input::placeholder {
+  color: var(--lv2-text-mute);
+}
+
+.lv2-full {
+  width: 100%;
+  justify-content: center;
+  margin-top: 8px;
+}
+
+.lv2-auth-switch {
+  text-align: center;
+  margin-top: 22px;
+  font-size: 13px;
+  color: var(--lv2-text-dim);
+}
+.lv2-auth-switch a {
+  color: var(--lv2-acc);
+  cursor: pointer;
+  font-weight: 600;
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.2s;
+}
+.lv2-auth-switch a:hover {
+  border-bottom-color: var(--lv2-acc);
+}
+
+@media (max-width: 600px) {
+  .lv2-auth-card {
+    margin-top: 80px;
+    padding: 28px 22px;
+    border-radius: 18px;
+  }
+}
+
+/* Hide app's ambient orbs on auth pages too */
+body.on-auth .bg-orbs { display: none; }
+body.on-auth #mainNav,
+body.on-auth #landingNav { display: none !important; }
+body.on-auth .container {
+  max-width: none;
+  padding: 0;
+}
+
 /* Hide the landing nav when on landing page since we use the existing nav */
 @media (max-width: 600px) {
   .lv2-section { padding: 80px 18px; }
@@ -2824,41 +2998,81 @@ h1.hero-h .grad {
 
 <!-- SIGNUP -->
 <div class="page" id="page-signup">
-  <div class="auth-wrap">
-    <h2 class="auth-title">Create your account</h2>
-    <p class="auth-sub">Free forever · No credit card required</p>
-    <div class="field">
-      <label>Name</label>
-      <input type="text" id="signupName" placeholder="Alex" autocomplete="name" />
+  <div class="lv2-auth-wrap">
+    <div class="lv2-blob-3"></div>
+    <div class="lv2-grid"></div>
+    <div class="lv2-grain"></div>
+
+    <nav class="lv2-nav">
+      <div class="lv2-brand" onclick="navigate('landing')">
+        <div class="lv2-brand-mark"></div>
+        <span>Endura<em>IQ</em></span>
+      </div>
+      <div class="lv2-nav-cta">
+        <button class="lv2-nav-login" onclick="navigate('login')">Log in</button>
+      </div>
+    </nav>
+
+    <div class="lv2-auth-card">
+      <h2 class="lv2-auth-title">Create your <em>account</em></h2>
+      <p class="lv2-auth-sub">Free forever — no credit card required</p>
+
+      <div class="lv2-field">
+        <label>Name</label>
+        <input type="text" id="signupName" placeholder="Alex" autocomplete="name" />
+      </div>
+      <div class="lv2-field">
+        <label>Email</label>
+        <input type="email" id="signupEmail" placeholder="you@example.com" autocomplete="email" />
+      </div>
+      <div class="lv2-field">
+        <label>Password</label>
+        <input type="password" id="signupPassword" placeholder="At least 6 characters" autocomplete="new-password" />
+      </div>
+      <button class="lv2-btn-primary lv2-full" onclick="doSignup()">
+        Create account
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </button>
+      <p class="lv2-auth-switch">Already have an account? <a onclick="navigate('login')">Log in</a></p>
     </div>
-    <div class="field">
-      <label>Email</label>
-      <input type="email" id="signupEmail" placeholder="you@example.com" autocomplete="email" />
-    </div>
-    <div class="field">
-      <label>Password</label>
-      <input type="password" id="signupPassword" placeholder="At least 6 characters" autocomplete="new-password" />
-    </div>
-    <button class="btn full" onclick="doSignup()">Create account</button>
-    <p class="auth-switch">Already have an account? <a onclick="navigate('login')">Log in</a></p>
   </div>
 </div>
 
 <!-- LOGIN -->
 <div class="page" id="page-login">
-  <div class="auth-wrap">
-    <h2 class="auth-title">Welcome back</h2>
-    <p class="auth-sub">Log in to your EnduraIQ account</p>
-    <div class="field">
-      <label>Email</label>
-      <input type="email" id="loginEmail" placeholder="you@example.com" autocomplete="email" />
+  <div class="lv2-auth-wrap">
+    <div class="lv2-blob-3"></div>
+    <div class="lv2-grid"></div>
+    <div class="lv2-grain"></div>
+
+    <nav class="lv2-nav">
+      <div class="lv2-brand" onclick="navigate('landing')">
+        <div class="lv2-brand-mark"></div>
+        <span>Endura<em>IQ</em></span>
+      </div>
+      <div class="lv2-nav-cta">
+        <button class="lv2-nav-signup" onclick="navigate('signup')">Get started →</button>
+      </div>
+    </nav>
+
+    <div class="lv2-auth-card">
+      <h2 class="lv2-auth-title">Welcome <em>back</em></h2>
+      <p class="lv2-auth-sub">Log in to your EnduraIQ account</p>
+
+      <div class="lv2-field">
+        <label>Email</label>
+        <input type="email" id="loginEmail" placeholder="you@example.com" autocomplete="email" />
+      </div>
+      <div class="lv2-field">
+        <label>Password</label>
+        <input type="password" id="loginPassword" placeholder="Your password" autocomplete="current-password" />
+      </div>
+      <button class="lv2-btn-primary lv2-full" onclick="doLogin()">
+        Log in
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </button>
+      <p class="lv2-auth-switch">Don't have an account? <a onclick="navigate('signup')">Sign up</a></p>
     </div>
-    <div class="field">
-      <label>Password</label>
-      <input type="password" id="loginPassword" placeholder="Your password" autocomplete="current-password" />
-    </div>
-    <button class="btn full" onclick="doLogin()">Log in</button>
-    <p class="auth-switch">Don't have an account? <a onclick="navigate('signup')">Sign up</a></p>
   </div>
 </div>
 
@@ -3327,21 +3541,15 @@ function navigate(page) {
   const target = document.getElementById(`page-${page}`);
   if (target) target.classList.add('active');
   document.querySelectorAll('.nav-menu-item').forEach(t => t.classList.toggle('active', t.dataset.page === page));
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  window.scrollTo({ top: 0, behavior: 'instant' });
 
   // Add body class so we know which page is active (for full-width landing styling)
   document.body.classList.toggle('on-landing', page === 'landing');
+  document.body.classList.toggle('on-auth', page === 'login' || page === 'signup');
 
-  // Show landingNav (simple top bar with Log in / Get started) on login/signup
-  // since those pages don't have an embedded nav like the landing does
+  // Hide old landingNav — auth pages now have their own embedded nav
   const landingNav = document.getElementById('landingNav');
-  if (landingNav && !state.user) {
-    if (page === 'login' || page === 'signup') {
-      landingNav.style.display = 'block';
-    } else {
-      landingNav.style.display = 'none';
-    }
-  }
+  if (landingNav) landingNav.style.display = 'none';
 
   if (page === 'dashboard') renderDashboard();
   if (page === 'coach') renderCoach();
@@ -3349,6 +3557,26 @@ function navigate(page) {
   if (page === 'history') renderHistory();
   if (page === 'trends') renderTrends();
   if (page === 'settings') renderSettings();
+
+  // Re-trigger landing animations when navigating back to landing (fixes mobile reload bug)
+  if (page === 'landing') {
+    requestAnimationFrame(() => {
+      // Reset and replay reveal animations
+      document.querySelectorAll('.lv2-reveal').forEach(el => {
+        el.classList.remove('lv2-visible');
+      });
+      // Re-observe so they animate back in
+      const lv2Obs = new IntersectionObserver(entries => {
+        entries.forEach(e => {
+          if (e.isIntersecting) {
+            e.target.classList.add('lv2-visible');
+            lv2Obs.unobserve(e.target);
+          }
+        });
+      }, { threshold: 0.15, rootMargin: '0px 0px -10% 0px' });
+      document.querySelectorAll('.lv2-reveal').forEach(el => lv2Obs.observe(el));
+    });
+  }
 }
 
 // Hamburger menu controls
