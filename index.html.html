@@ -422,6 +422,17 @@ body {
   overflow-x: hidden;
 }
 
+/* When the landing page is active, let it break out of the container */
+.container:has(#page-landing.active) {
+  max-width: none;
+  padding: 0;
+}
+/* Fallback for browsers without :has() support */
+body.on-landing .container {
+  max-width: none;
+  padding: 0;
+}
+
 .page { display: none; animation: fadeIn 0.25s ease-out; width: 100%; position: relative; }
 .page.active { display: block; }
 
@@ -1673,22 +1684,21 @@ h1.hero-h .grad {
   font-family: 'DM Sans', -apple-system, system-ui, sans-serif;
   color: var(--lv2-text);
   position: relative;
-  margin: -28px -20px 0;
-  padding: 0;
+  width: 100%;
   min-height: 100vh;
   background: var(--lv2-bg);
   overflow: hidden;
 }
 
-/* Animated mesh blobs inside landing-v2 */
+/* Layer 1: Animated mesh blobs */
 .landing-v2::before {
   content: '';
   position: absolute;
-  width: 600px; height: 600px;
-  top: -150px; left: -150px;
+  width: 700px; height: 700px;
+  top: -200px; left: -200px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(0, 255, 163, 0.45), transparent 70%);
-  filter: blur(110px);
+  background: radial-gradient(circle, rgba(0, 255, 163, 0.6), transparent 70%);
+  filter: blur(120px);
   opacity: 0.5;
   animation: lv2-meshFloat 30s ease-in-out infinite;
   pointer-events: none;
@@ -1697,16 +1707,54 @@ h1.hero-h .grad {
 .landing-v2::after {
   content: '';
   position: absolute;
-  width: 500px; height: 500px;
-  top: 30%; right: -150px;
+  width: 600px; height: 600px;
+  top: 30%; right: -200px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(0, 200, 255, 0.35), transparent 70%);
-  filter: blur(110px);
-  opacity: 0.4;
+  background: radial-gradient(circle, rgba(0, 200, 255, 0.4), transparent 70%);
+  filter: blur(120px);
+  opacity: 0.5;
   animation: lv2-meshFloat 30s ease-in-out infinite;
-  animation-delay: -15s;
+  animation-delay: -10s;
   pointer-events: none;
   z-index: 0;
+}
+
+/* Third blob via separate child for the orange/red one */
+.lv2-blob-3 {
+  position: absolute;
+  width: 500px; height: 500px;
+  bottom: -100px; left: 30%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 87, 51, 0.3), transparent 70%);
+  filter: blur(120px);
+  opacity: 0.4;
+  animation: lv2-meshFloat 30s ease-in-out infinite;
+  animation-delay: -20s;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Grid overlay — checkered pattern that fades at edges */
+.lv2-grid {
+  position: absolute; inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: radial-gradient(ellipse at 50% 50%, black 30%, transparent 80%);
+  -webkit-mask-image: radial-gradient(ellipse at 50% 50%, black 30%, transparent 80%);
+}
+
+/* Noise grain overlay */
+.lv2-grain {
+  position: absolute; inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  opacity: 0.04;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='300'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' /></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/></svg>");
+  mix-blend-mode: overlay;
 }
 
 @keyframes lv2-meshFloat {
@@ -1716,6 +1764,97 @@ h1.hero-h .grad {
 }
 
 .landing-v2 > * { position: relative; z-index: 2; }
+
+/* Landing-specific top nav */
+.lv2-nav {
+  position: absolute; top: 0; left: 0; right: 0;
+  z-index: 50;
+  padding: calc(20px + var(--safe-top)) max(20px, env(safe-area-inset-left)) 20px max(20px, env(safe-area-inset-right));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.lv2-nav.scrolled {
+  position: fixed;
+  background: rgba(7, 11, 20, 0.7);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding-top: calc(14px + var(--safe-top));
+  padding-bottom: 14px;
+  transition: background 0.3s, padding 0.3s;
+}
+
+.lv2-brand {
+  display: flex; align-items: center; gap: 10px;
+  font-family: 'Instrument Serif', serif !important;
+  font-size: 22px;
+  letter-spacing: -0.5px;
+  cursor: pointer;
+  user-select: none;
+  color: var(--lv2-text);
+}
+.lv2-brand span { font-family: 'Instrument Serif', serif !important; }
+.lv2-brand em { font-style: italic; color: var(--lv2-acc); font-family: 'Instrument Serif', serif !important; }
+.lv2-brand-mark {
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  background: var(--lv2-acc);
+  position: relative;
+  box-shadow: 0 0 24px var(--lv2-acc), inset 0 0 8px rgba(0, 0, 0, 0.3);
+  animation: lv2-brandPulse 3s ease-in-out infinite;
+  flex-shrink: 0;
+}
+.lv2-brand-mark::after {
+  content: '';
+  position: absolute; inset: 4px;
+  border-radius: 50%;
+  background: var(--lv2-bg);
+}
+@keyframes lv2-brandPulse {
+  0%, 100% { box-shadow: 0 0 24px var(--lv2-acc), inset 0 0 8px rgba(0, 0, 0, 0.3); }
+  50% { box-shadow: 0 0 36px var(--lv2-acc), inset 0 0 8px rgba(0, 0, 0, 0.3); }
+}
+
+.lv2-nav-cta {
+  display: flex; gap: 10px;
+}
+.lv2-nav-cta button {
+  font-family: 'DM Sans', sans-serif;
+  border: none;
+  cursor: pointer;
+  padding: 10px 18px;
+  border-radius: 99px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  transition: all 0.2s;
+}
+.lv2-nav-login {
+  background: transparent;
+  color: var(--lv2-text);
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+.lv2-nav-login:hover { background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.2) !important; }
+.lv2-nav-signup {
+  background: var(--lv2-acc);
+  color: var(--lv2-bg);
+  position: relative;
+  overflow: hidden;
+}
+.lv2-nav-signup::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+  transform: translateX(-100%);
+  transition: transform 0.6s;
+}
+.lv2-nav-signup:hover::before { transform: translateX(100%); }
+.lv2-nav-signup:hover { transform: translateY(-1px); box-shadow: 0 8px 30px rgba(0, 255, 163, 0.3); }
+
+@media (max-width: 600px) {
+  .lv2-nav-login { display: none; }
+}
 
 .landing-v2 h1, .landing-v2 h2, .landing-v2 h3, .landing-v2 p, .landing-v2 span, .landing-v2 div {
   font-family: 'DM Sans', -apple-system, system-ui, sans-serif;
@@ -2452,6 +2591,22 @@ h1.hero-h .grad {
 <!-- LANDING -->
 <div class="page active" id="page-landing">
   <div class="landing-v2">
+    <div class="lv2-blob-3"></div>
+    <div class="lv2-grid"></div>
+    <div class="lv2-grain"></div>
+
+    <!-- Landing-specific nav (visible only when logged out) -->
+    <nav class="lv2-nav" id="lv2Nav">
+      <div class="lv2-brand">
+        <div class="lv2-brand-mark"></div>
+        <span>Endura<em>IQ</em></span>
+      </div>
+      <div class="lv2-nav-cta">
+        <button class="lv2-nav-login" onclick="navigate('login')">Log in</button>
+        <button class="lv2-nav-signup" onclick="navigate('signup')">Get started →</button>
+      </div>
+    </nav>
+
     <!-- HERO -->
     <section class="lv2-hero">
       <div class="lv2-hero-eyebrow">
@@ -3132,7 +3287,8 @@ function showApp() {
 
 function showLanding() {
   document.getElementById('mainNav').style.display = 'none';
-  document.getElementById('landingNav').style.display = 'block';
+  // Hide the old landingNav too — landing v2 has its own embedded nav
+  document.getElementById('landingNav').style.display = 'none';
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -3144,6 +3300,21 @@ function navigate(page) {
   if (target) target.classList.add('active');
   document.querySelectorAll('.nav-menu-item').forEach(t => t.classList.toggle('active', t.dataset.page === page));
   window.scrollTo({ top: 0, behavior: 'smooth' });
+
+  // Add body class so we know which page is active (for full-width landing styling)
+  document.body.classList.toggle('on-landing', page === 'landing');
+
+  // Show landingNav (simple top bar with Log in / Get started) on login/signup
+  // since those pages don't have an embedded nav like the landing does
+  const landingNav = document.getElementById('landingNav');
+  if (landingNav && !state.user) {
+    if (page === 'login' || page === 'signup') {
+      landingNav.style.display = 'block';
+    } else {
+      landingNav.style.display = 'none';
+    }
+  }
+
   if (page === 'dashboard') renderDashboard();
   if (page === 'coach') renderCoach();
   if (page === 'plan') renderPlan();
