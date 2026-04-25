@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+\<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -114,6 +114,9 @@ body {
   .bg-orb.one { width: 300px; height: 300px; }
   .bg-orb.two, .bg-orb.three { display: none; }
 }
+
+/* Hide app's ambient orbs when on landing page — landing has its own background system */
+body.on-landing .bg-orbs { display: none; }
 
 @keyframes float {
   0%, 100% { transform: translate(0, 0) scale(1); }
@@ -1739,14 +1742,14 @@ h1.hero-h .grad {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  z-index: 1;
+  z-index: 3;
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.12) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.12) 1px, transparent 1px);
+    linear-gradient(rgba(255, 255, 255, 0.18) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.18) 1px, transparent 1px);
   background-size: 64px 64px;
   background-position: center center;
-  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, black 0%, rgba(0,0,0,0.7) 50%, transparent 100%);
-  mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, black 0%, rgba(0,0,0,0.7) 50%, transparent 100%);
+  -webkit-mask-image: radial-gradient(ellipse 65% 55% at 50% 35%, black 0%, rgba(0,0,0,0.85) 40%, transparent 95%);
+  mask-image: radial-gradient(ellipse 65% 55% at 50% 35%, black 0%, rgba(0,0,0,0.85) 40%, transparent 95%);
 }
 
 /* Noise grain overlay */
@@ -1880,7 +1883,7 @@ h1.hero-h .grad {
   flex-direction: column;
   justify-content: flex-start;
   align-items: center;
-  padding: 90px 24px 60px;
+  padding: 80px 24px 60px;
   text-align: center;
   position: relative;
 }
@@ -1900,7 +1903,7 @@ h1.hero-h .grad {
   font-size: 12px;
   font-weight: 500;
   color: var(--lv2-text);
-  margin-bottom: 32px;
+  margin-bottom: 22px;
   letter-spacing: 0.4px;
   text-transform: uppercase;
   font-family: 'JetBrains Mono', monospace;
