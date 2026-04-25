@@ -49,6 +49,26 @@
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html { scroll-behavior: smooth; }
 
+/* Loading state - prevents flash of landing page on app load */
+body.app-loading .app, body.app-loading .nav { visibility: hidden; }
+body.app-loading::after {
+  content: '';
+  position: fixed; inset: 0;
+  background: var(--bg);
+  z-index: 9999;
+}
+body.app-loading::before {
+  content: '';
+  position: fixed; top: 50%; left: 50%;
+  width: 32px; height: 32px;
+  margin: -16px 0 0 -16px;
+  border: 3px solid rgba(255, 255, 255, 0.08);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  z-index: 10000;
+  animation: spin 0.7s linear infinite;
+}
+
 body {
   background: var(--bg);
   color: var(--text);
@@ -187,7 +207,7 @@ body {
   background-size: cover; background-position: center;
 }
 
-/* Slide-down menu panel — compact iOS style */
+/* Slide-down menu panel — compact iOS style (desktop default) */
 .nav-menu-backdrop {
   position: fixed; inset: 0;
   background: rgba(0, 0, 0, 0.4);
@@ -196,7 +216,7 @@ body {
   z-index: 90;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.18s;
+  transition: opacity 0.22s;
 }
 .nav-menu-backdrop.open { opacity: 1; pointer-events: auto; }
 
@@ -216,7 +236,7 @@ body {
   opacity: 0;
   transform: translateY(-8px) scale(0.96);
   pointer-events: none;
-  transition: opacity 0.18s, transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: opacity 0.22s, transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5), 0 0 0 0.5px rgba(255, 255, 255, 0.04);
   transform-origin: top left;
 }
@@ -237,6 +257,7 @@ body {
   transition: background 0.12s;
 }
 .nav-menu-item:hover { background: rgba(255, 255, 255, 0.05); }
+.nav-menu-item:active { background: rgba(255, 255, 255, 0.1); }
 .nav-menu-item.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 
 .nav-menu-icon {
@@ -244,7 +265,7 @@ body {
   flex-shrink: 0; opacity: 0.85;
 }
 
-/* Avatar dropdown menu — compact iOS style */
+/* Avatar dropdown menu — compact iOS style (desktop default) */
 .avatar-menu {
   position: fixed;
   top: calc(var(--safe-top) + 56px);
@@ -260,7 +281,7 @@ body {
   opacity: 0;
   transform: translateY(-8px) scale(0.96);
   pointer-events: none;
-  transition: opacity 0.18s, transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: opacity 0.22s, transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5), 0 0 0 0.5px rgba(255, 255, 255, 0.04);
   transform-origin: top right;
 }
@@ -297,6 +318,98 @@ body {
 .avatar-menu-icon {
   font-size: 13px; width: 18px; text-align: center;
   flex-shrink: 0; opacity: 0.85;
+}
+
+/* ════ MOBILE: convert dropdowns to bottom sheets ════ */
+@media (max-width: 720px) {
+  /* Nav menu becomes a bottom sheet */
+  .nav-menu-panel {
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    max-width: none;
+    min-width: 0;
+    width: 100%;
+    border-radius: 20px 20px 0 0;
+    border-bottom: none;
+    border-left: none;
+    border-right: none;
+    padding: 8px 12px calc(20px + var(--safe-bottom));
+    transform: translateY(100%);
+    transform-origin: bottom center;
+    box-shadow: 0 -12px 50px rgba(0, 0, 0, 0.6);
+  }
+  .nav-menu-panel.open { transform: translateY(0) scale(1); }
+
+  /* Add a drag handle at the top of the sheet */
+  .nav-menu-panel::before {
+    content: '';
+    display: block;
+    width: 40px; height: 4px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.18);
+    margin: 6px auto 14px;
+  }
+
+  .nav-menu-item {
+    padding: 14px 14px;
+    font-size: 15px;
+    border-radius: 11px;
+  }
+  .nav-menu-icon { font-size: 17px; width: 24px; }
+
+  /* Avatar menu also becomes a bottom sheet */
+  .avatar-menu {
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    max-width: none;
+    min-width: 0;
+    width: 100%;
+    border-radius: 20px 20px 0 0;
+    border-bottom: none;
+    border-left: none;
+    border-right: none;
+    padding: 8px 12px calc(20px + var(--safe-bottom));
+    transform: translateY(100%);
+    transform-origin: bottom center;
+    box-shadow: 0 -12px 50px rgba(0, 0, 0, 0.6);
+  }
+  .avatar-menu.open { transform: translateY(0) scale(1); }
+
+  .avatar-menu::before {
+    content: '';
+    display: block;
+    width: 40px; height: 4px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.18);
+    margin: 6px auto 14px;
+  }
+
+  .avatar-menu-header { padding: 6px 14px 12px; }
+  .avatar-menu-header strong { font-size: 15px; }
+
+  .avatar-menu-item {
+    padding: 13px 14px;
+    font-size: 15px;
+    border-radius: 11px;
+  }
+  .avatar-menu-icon { font-size: 16px; width: 22px; }
+
+  /* Show backdrop for avatar menu on mobile too */
+  .avatar-menu-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    z-index: 90;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.22s;
+  }
+  .avatar-menu-backdrop.open { opacity: 1; pointer-events: auto; }
 }
 
 .container {
@@ -466,6 +579,7 @@ h1.hero-h .grad {
   padding: 14px 16px; border-radius: 10px;
   font-size: 13px; line-height: 1.55; color: var(--text);
   position: relative; overflow: hidden;
+  margin-top: 16px;
 }
 
 .showcase-coach::after {
@@ -478,6 +592,70 @@ h1.hero-h .grad {
 @keyframes sweep {
   0%, 100% { transform: translateX(100%); }
   50% { transform: translateX(-400%); }
+}
+
+/* Live indicator dot in showcase title */
+.live-dot {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  margin-right: 8px;
+  vertical-align: middle;
+  position: relative;
+}
+.live-dot::after {
+  content: '';
+  position: absolute; inset: -4px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.4;
+  animation: livePulse 1.6s ease-in-out infinite;
+}
+@keyframes livePulse {
+  0%, 100% { transform: scale(1); opacity: 0.4; }
+  50% { transform: scale(1.8); opacity: 0; }
+}
+
+/* HR trace */
+.hr-trace-container {
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 8px 8px;
+  margin-bottom: 16px;
+  position: relative;
+  overflow: hidden;
+}
+.hr-trace {
+  width: 100%; height: 80px; display: block;
+}
+.hr-trace-container::before {
+  content: 'HEART RATE';
+  position: absolute; top: 8px; left: 12px;
+  font-size: 9px; color: var(--text-mute);
+  letter-spacing: 1px; font-weight: 700;
+}
+
+/* Mini zone bar */
+.zone-mini-bar {
+  display: flex; gap: 2px;
+  height: 6px; border-radius: 3px; overflow: hidden;
+  margin-top: 14px; margin-bottom: 4px;
+  background: var(--bg-3);
+}
+.zone-mini {
+  width: 0;
+  animation: zoneFill 1.2s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  animation-delay: 0.6s;
+}
+.zone-mini:nth-child(1) { animation-delay: 0.4s; }
+.zone-mini:nth-child(2) { animation-delay: 0.6s; }
+.zone-mini:nth-child(3) { animation-delay: 0.8s; }
+.zone-mini:nth-child(4) { animation-delay: 1.0s; }
+.zone-mini:nth-child(5) { animation-delay: 1.2s; }
+@keyframes zoneFill {
+  to { width: var(--w); }
 }
 
 /* FEATURE GRID */
@@ -1478,7 +1656,7 @@ h1.hero-h .grad {
 </style>
 </head>
 
-<body>
+<body class="app-loading">
 <div class="safe-area-top"></div>
 <div class="bg-orbs">
   <div class="bg-orb one"></div>
@@ -1538,6 +1716,7 @@ h1.hero-h .grad {
 </div>
 
 <!-- Avatar dropdown menu -->
+<div class="avatar-menu-backdrop" id="avatarMenuBackdrop" onclick="closeAvatarMenu()"></div>
 <div class="avatar-menu" id="avatarMenu">
   <div class="avatar-menu-header" id="avatarMenuHeader"></div>
   <div class="avatar-menu-divider"></div>
@@ -1584,26 +1763,55 @@ h1.hero-h .grad {
     <p style="color: var(--text-mute); font-size: 13px;">Free forever tier · No credit card · Garmin, Apple Watch, COROS & more</p>
   </div>
 
-  <!-- Live showcase -->
-  <div class="showcase reveal">
+  <!-- Live showcase — animated preview -->
+  <div class="showcase reveal" id="liveShowcase">
     <div class="showcase-header">
-      <div class="showcase-title">🏃 Example — 13.94 km Long Run</div>
-      <div class="showcase-badge">Easy / Zone 2</div>
+      <div class="showcase-title">
+        <span class="live-dot"></span>
+        Live workout analysis
+      </div>
+      <div class="showcase-badge" id="showcaseBadge">Easy / Zone 2</div>
     </div>
+
+    <!-- Animated heart rate trace -->
+    <div class="hr-trace-container">
+      <svg class="hr-trace" viewBox="0 0 600 100" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="hrGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.4"/>
+            <stop offset="100%" stop-color="var(--accent)" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <path id="hrLine" d="M0,60 Q50,55 100,52 T200,48 T300,45 T400,42 T500,48 T600,52" stroke="var(--accent)" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-dasharray="2000" stroke-dashoffset="2000"/>
+        <path d="M0,60 Q50,55 100,52 T200,48 T300,45 T400,42 T500,48 T600,52 L600,100 L0,100 Z" fill="url(#hrGrad)" opacity="0" id="hrFill"/>
+        <circle id="hrPulse" cx="600" cy="52" r="0" fill="var(--accent)"/>
+      </svg>
+    </div>
+
     <div class="showcase-stats">
       <div class="showcase-stat">
         <div class="showcase-stat-label">Avg HR</div>
-        <div class="showcase-stat-val">136 bpm</div>
+        <div class="showcase-stat-val"><span class="count-up" data-target="136" data-suffix=" bpm">0</span></div>
       </div>
       <div class="showcase-stat">
         <div class="showcase-stat-label">Cardiac Drift</div>
-        <div class="showcase-stat-val" style="color: var(--success);">+4.2%</div>
+        <div class="showcase-stat-val" style="color: var(--success);">+<span class="count-up" data-target="4.2" data-decimals="1" data-suffix="%">0</span></div>
       </div>
       <div class="showcase-stat">
         <div class="showcase-stat-label">Time in Z2</div>
-        <div class="showcase-stat-val">78%</div>
+        <div class="showcase-stat-val"><span class="count-up" data-target="78" data-suffix="%">0</span></div>
       </div>
     </div>
+
+    <!-- Mini zone bar -->
+    <div class="zone-mini-bar">
+      <div class="zone-mini" style="background: var(--z1); --w: 10%;"></div>
+      <div class="zone-mini" style="background: var(--z2); --w: 78%;"></div>
+      <div class="zone-mini" style="background: var(--z3); --w: 9%;"></div>
+      <div class="zone-mini" style="background: var(--z4); --w: 2%;"></div>
+      <div class="zone-mini" style="background: var(--z5); --w: 1%;"></div>
+    </div>
+
     <div class="showcase-coach">
       <strong style="color: var(--accent);">Coach's read —</strong> Well-executed aerobic run. You stayed under Zone 2 ceiling (157 bpm) for the entire run. Drift of +4.2% indicates a solid aerobic base. Keep building volume at this intensity.
     </div>
@@ -2220,6 +2428,7 @@ function navigateAndCloseMenu(page) {
 function toggleAvatarMenu(event) {
   if (event) event.stopPropagation();
   const menu = document.getElementById('avatarMenu');
+  const backdrop = document.getElementById('avatarMenuBackdrop');
   const isOpen = menu.classList.contains('open');
   if (isOpen) closeAvatarMenu();
   else {
@@ -2229,12 +2438,15 @@ function toggleAvatarMenu(event) {
       header.innerHTML = `<strong>${state.user.name || 'Athlete'}</strong><span>${state.user.email || ''}</span>`;
     }
     menu.classList.add('open');
+    if (backdrop) backdrop.classList.add('open');
     closeNavMenu();
   }
 }
 
 function closeAvatarMenu() {
   document.getElementById('avatarMenu').classList.remove('open');
+  const backdrop = document.getElementById('avatarMenuBackdrop');
+  if (backdrop) backdrop.classList.remove('open');
 }
 
 function navigateAndCloseAvatarMenu(page) {
@@ -4671,10 +4883,10 @@ function initUpload() {
         commentaryEl.innerHTML = `<div class="coach-box" style="margin-top: 16px;"><div class="coach-title">💬 Coach's Commentary</div><div class="coach-text" id="commentaryText"><span style="opacity: 0.6;">Coach is reviewing your session...</span></div></div>`;
         output.appendChild(commentaryEl);
 
-        // Race the commentary call against a 30 second timeout
+        // Race the commentary call against a 60 second timeout
         const commentaryPromise = callCoach('workout_commentary', { workout: analysis, intake });
         const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Commentary timed out after 30s')), 30000)
+          setTimeout(() => reject(new Error('Commentary timed out')), 60000)
         );
 
         try {
@@ -4693,7 +4905,7 @@ function initUpload() {
           console.error('Commentary failed:', innerErr);
           const txtEl = document.getElementById('commentaryText');
           if (txtEl) {
-            txtEl.innerHTML = `<span style="color: var(--text-dim); font-size: 13px;">Couldn't load coach commentary right now. Your workout was saved successfully though. <a style="color: var(--accent); cursor: pointer;" onclick="navigate('coach')">Ask Coach about it →</a></span>`;
+            txtEl.innerHTML = `<span style="color: var(--text-dim); font-size: 13px;">Coach is busy right now. Your workout is saved. <a style="color: var(--accent); cursor: pointer;" onclick="navigate('coach')">Ask Coach about it →</a></span>`;
           }
         }
       } catch (cerr) {
@@ -4708,12 +4920,94 @@ function initUpload() {
 // FAQ
 function toggleFaq(el) { el.parentElement.classList.toggle('open'); }
 
-// SCROLL REVEALS
+// SCROLL REVEALS + LIVE SHOWCASE ANIMATIONS
 function initReveals() {
   const obs = new IntersectionObserver(entries => {
-    entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
-  }, { threshold: 0.1 });
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        e.target.classList.add('visible');
+        // Trigger live showcase animations once
+        if (e.target.id === 'liveShowcase' && !e.target.dataset.animated) {
+          e.target.dataset.animated = '1';
+          animateShowcase();
+        }
+      }
+    });
+  }, { threshold: 0.15 });
   document.querySelectorAll('.reveal').forEach(el => obs.observe(el));
+
+  // Count-up observer
+  const countObs = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting && !e.target.dataset.counted) {
+        e.target.dataset.counted = '1';
+        animateCountUp(e.target);
+      }
+    });
+  }, { threshold: 0.5 });
+  document.querySelectorAll('.count-up').forEach(el => countObs.observe(el));
+}
+
+function animateCountUp(el) {
+  const target = parseFloat(el.dataset.target) || 0;
+  const decimals = parseInt(el.dataset.decimals) || 0;
+  const suffix = el.dataset.suffix || '';
+  const duration = 1500;
+  const start = performance.now();
+  function tick(now) {
+    const elapsed = now - start;
+    const progress = Math.min(elapsed / duration, 1);
+    const eased = 1 - Math.pow(1 - progress, 3); // ease-out cubic
+    const value = (target * eased).toFixed(decimals);
+    el.textContent = value + suffix.replace('%', ''); // suffix added separately
+    el.parentElement.dataset.suffixed || (el.parentElement.dataset.suffixed = '1');
+    if (progress < 1) requestAnimationFrame(tick);
+    else el.textContent = target.toFixed(decimals) + (suffix === ' bpm' ? '' : '');
+  }
+  // Suffix gets handled separately by appending - simpler approach below
+  function tickSimple(now) {
+    const elapsed = now - start;
+    const progress = Math.min(elapsed / duration, 1);
+    const eased = 1 - Math.pow(1 - progress, 3);
+    const value = (target * eased).toFixed(decimals);
+    el.textContent = value;
+    if (progress < 1) requestAnimationFrame(tickSimple);
+    else el.textContent = target.toFixed(decimals);
+  }
+  requestAnimationFrame(tickSimple);
+
+  // Append suffix to the parent's existing content
+  if (suffix && !el.parentElement.querySelector('.suffix-added')) {
+    const sfx = document.createElement('span');
+    sfx.className = 'suffix-added';
+    sfx.style.fontSize = '14px';
+    sfx.style.color = 'var(--text-dim)';
+    sfx.style.marginLeft = '3px';
+    sfx.textContent = suffix.trim();
+    el.insertAdjacentElement('afterend', sfx);
+  }
+}
+
+function animateShowcase() {
+  const line = document.getElementById('hrLine');
+  const fill = document.getElementById('hrFill');
+  const pulse = document.getElementById('hrPulse');
+
+  if (line) {
+    // Animate the line draw
+    line.style.transition = 'stroke-dashoffset 2s cubic-bezier(0.2, 0.8, 0.2, 1)';
+    setTimeout(() => { line.style.strokeDashoffset = '0'; }, 100);
+  }
+  if (fill) {
+    fill.style.transition = 'opacity 1s ease-out';
+    setTimeout(() => { fill.style.opacity = '1'; }, 1000);
+  }
+  if (pulse) {
+    setTimeout(() => {
+      pulse.setAttribute('r', '5');
+      pulse.style.animation = 'pulsePoint 1.4s ease-in-out infinite';
+    }, 2000);
+  }
 }
 
 // INIT
@@ -4723,6 +5017,8 @@ function initReveals() {
   const loggedIn = await checkSession();
   if (loggedIn) { showApp(); navigate('dashboard'); }
   else { showLanding(); navigate('landing'); }
+  // Reveal app after session check
+  document.body.classList.remove('app-loading');
 })();
 </script>
 </body>
