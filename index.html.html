@@ -5685,12 +5685,30 @@ async function renderProgress() {
   }
 
   // Flatten: pull distance + duration out of the JSONB blob
+  // Helper: for swims, distance isn't a top-level field — sum up set labels like "100m" or "50m"
+  const swimDistanceFromSets = (sets) => {
+    if (!Array.isArray(sets)) return 0;
+    let totalMeters = 0;
+    for (const s of sets) {
+      const label = (s.set || '').toString();
+      // Match patterns like "100m", "50 m", "200 yard", etc — pull out the number
+      const match = label.match(/(\d+(?:\.\d+)?)/);
+      if (match) totalMeters += parseFloat(match[1]);
+    }
+    return totalMeters / 1000; // convert to km
+  };
+
   const allWorkouts = workoutsRaw.map(w => {
     const wd = w.workout_data || {};
+    let distKm = parseFloat(wd.distance || wd.distance_km || 0) || 0;
+    // For swims with no top-level distance, calculate from sets
+    if (distKm === 0 && w.sport === 'swim' && wd.sets) {
+      distKm = swimDistanceFromSets(wd.sets);
+    }
     return {
       sport: w.sport,
       created_at: w.created_at,
-      distance_km: parseFloat(wd.distance || wd.distance_km || 0) || 0,
+      distance_km: distKm,
       duration_minutes: parseFloat(wd.duration || wd.duration_minutes || 0) || 0,
     };
   });
