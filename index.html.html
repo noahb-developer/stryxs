@@ -3941,25 +3941,61 @@ function parseSwimCSV(text) {
   const paceIdx = findCol(h, ['avg pace']);
   const swolfIdx = findCol(h, ['swolf']);
   const strokeIdx = findCol(h, ['swim stroke']);
+  const distIdx = findCol(h, ['distance']);
   if (hrIdx === -1) return null;
-  const sets = []; let summary = null;
+
+  const sets = [];
+  let summary = null;
+  let totalMeters = 0;
+
   for (let i = 1; i < rows.length; i++) {
     const r = rows[i]; const label = r[1] || '';
-    if (label.toLowerCase() === 'summary') { summary = { avgHr: parseInt(r[hrIdx]) || 0 }; continue; }
+
+    // Summary row: pull total distance + avgHr
+    if (label.toLowerCase() === 'summary') {
+      summary = { avgHr: parseInt(r[hrIdx]) || 0 };
+      // Parse summary distance — format like "1,775" or "1775"
+      if (distIdx >= 0) {
+        const distStr = (r[distIdx] || '').toString().replace(/,/g, '').trim();
+        const distNum = parseFloat(distStr);
+        if (!isNaN(distNum) && distNum > 0) summary.totalMeters = distNum;
+      }
+      continue;
+    }
+
     if (strokeIdx >= 0) {
       const stk = (r[strokeIdx] || '').toLowerCase();
       if (stk === 'rest' || stk === '--') continue;
     }
+
+    // Sum up parent intervals (label like "1", "2") not sub-intervals ("1.1", "1.2")
+    if (!label.includes('.') && label !== '' && label.toLowerCase() !== 'summary') {
+      if (distIdx >= 0) {
+        const intervalDist = parseFloat((r[distIdx] || '').toString().replace(/,/g, '')) || 0;
+        if (intervalDist > 0) totalMeters += intervalDist;
+      }
+    }
+
     if (label.includes('.')) continue;
     const hr = parseInt(r[hrIdx]);
     if (hr > 0 && label) {
       const s = { set: label, hr };
       if (paceIdx >= 0) { s.pace = r[paceIdx]; s.paceMin = paceToMin(r[paceIdx]); }
       if (swolfIdx >= 0) s.swolf = parseInt(r[swolfIdx]) || 0;
+      // Pull distance for this set too
+      if (distIdx >= 0) {
+        const setDist = parseFloat((r[distIdx] || '').toString().replace(/,/g, '')) || 0;
+        if (setDist > 0) s.distance = setDist;
+      }
       sets.push(s);
     }
   }
-  return { sets, summary };
+
+  // Prefer summary total if available, else sum of intervals
+  const finalMeters = summary?.totalMeters || totalMeters;
+  if (summary && finalMeters) summary.totalMeters = finalMeters;
+
+  return { sets, summary, totalMeters: finalMeters };
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -4135,6 +4171,7 @@ function analyzeSwim(data) {
   return {
     sport: 'swim', name: 'Swim Analysis', icon: '🏊',
     sets, avgHr, drift, dv, dc, swolfInfo, coach, insights,
+    distance: data.totalMeters ? data.totalMeters / 1000 : 0,
     date: new Date().toISOString(),
   };
 }
@@ -5685,17 +5722,14 @@ async function renderProgress() {
   }
 
   // Flatten: pull distance + duration out of the JSONB blob
-  // Helper: for swims, distance isn't a top-level field — sum up set labels like "100m" or "50m"
+  // For OLD swims saved before the swim parser fix, fall back to summing set distances if present
   const swimDistanceFromSets = (sets) => {
     if (!Array.isArray(sets)) return 0;
     let totalMeters = 0;
     for (const s of sets) {
-      const label = (s.set || '').toString();
-      // Match patterns like "100m", "50 m", "200 yard", etc — pull out the number
-      const match = label.match(/(\d+(?:\.\d+)?)/);
-      if (match) totalMeters += parseFloat(match[1]);
+      if (s.distance && s.distance > 0) totalMeters += s.distance;
     }
-    return totalMeters / 1000; // convert to km
+    return totalMeters / 1000;
   };
 
   const allWorkouts = workoutsRaw.map(w => {
