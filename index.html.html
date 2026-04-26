@@ -852,6 +852,65 @@ h1.hero-h .grad {
 .field input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .field input::placeholder { color: var(--text-mute); }
 
+/* Coach unread badges */
+.nav-menu-badge {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ef4444;
+  margin-left: auto;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 2px var(--bg-2), 0 0 12px rgba(239, 68, 68, 0.6);
+  animation: badgePulse 2s ease-in-out infinite;
+}
+.hamburger-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ef4444;
+  box-shadow: 0 0 0 2px var(--bg), 0 0 12px rgba(239, 68, 68, 0.7);
+  animation: badgePulse 2s ease-in-out infinite;
+}
+@keyframes badgePulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(0.85); }
+}
+
+/* Style ALL select elements to match dark theme + custom chevron */
+select, .field select {
+  width: 100%;
+  padding: 13px 40px 13px 14px;
+  background-color: var(--bg-3);
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'%3E%3Cpath d='M1 1L6 6L11 1' stroke='%2378819b' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 15px;
+  font-family: inherit;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+select:hover, .field select:hover { border-color: var(--border-light); }
+select:focus, .field select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+/* Style options too — limited cross-browser but helps in some */
+select option {
+  background: var(--bg-2);
+  color: var(--text);
+  padding: 10px;
+}
+
 .auth-switch {
   text-align: center; margin-top: 20px; color: var(--text-dim); font-size: 13px;
 }
@@ -892,6 +951,31 @@ h1.hero-h .grad {
   font-size: 11px; color: var(--text-dim); text-transform: uppercase;
   letter-spacing: 0.8px; font-weight: 600; margin-bottom: 8px;
 }
+.stat-label-row {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 8px; gap: 8px;
+}
+.stat-label-row .stat-label { margin-bottom: 0; flex: 1; min-width: 0; }
+.stat-mini-picker {
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 4px 22px 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6' fill='none'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%2378819b' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+  flex-shrink: 0;
+}
+.stat-mini-picker:hover { border-color: var(--accent); color: var(--accent); }
 
 .stat-value {
   font-size: 26px; font-weight: 800; letter-spacing: -0.8px;
@@ -2960,8 +3044,9 @@ body.on-auth .container {
 
 <nav class="nav" id="mainNav" style="display:none;">
   <div class="nav-inner">
-    <button class="hamburger" onclick="toggleNavMenu()" aria-label="Open menu">
+    <button class="hamburger" onclick="toggleNavMenu()" aria-label="Open menu" style="position: relative;">
       <span></span><span></span><span></span>
+      <span class="hamburger-badge" id="hamburgerCoachBadge" style="display: none;"></span>
     </button>
     <div class="logo" onclick="navigate('dashboard')">
       <div class="logo-mark"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M17 4L7 13H12L7 20L17 11H12L17 4Z" fill="#070b14" stroke="#070b14" stroke-width="0.5" stroke-linejoin="round"/></svg></div>
@@ -2984,6 +3069,7 @@ body.on-auth .container {
     <button class="nav-menu-item" data-page="coach" onclick="navigateAndCloseMenu('coach')">
       <span class="nav-menu-icon">🧠</span>
       <span class="nav-menu-label">Coach</span>
+      <span class="nav-menu-badge" id="coachUnreadBadge" style="display: none;"></span>
     </button>
     <button class="nav-menu-item" data-page="plan" onclick="navigateAndCloseMenu('plan')">
       <span class="nav-menu-icon">📅</span>
@@ -3804,6 +3890,8 @@ function showApp() {
       avatarEl.textContent = initial;
     }
   }
+  // Check for unread Coach messages on every app show
+  checkCoachUnreadOnLoad();
 }
 
 function showLanding() {
@@ -3816,6 +3904,25 @@ function showLanding() {
 // ═══════════════════════════════════════════════════════════
 // ROUTING
 // ═══════════════════════════════════════════════════════════
+
+// Coach unread badge helpers
+function setCoachUnread(hasUnread) {
+  const menuBadge = document.getElementById('coachUnreadBadge');
+  const hamBadge = document.getElementById('hamburgerCoachBadge');
+  if (menuBadge) menuBadge.style.display = hasUnread ? 'block' : 'none';
+  if (hamBadge) hamBadge.style.display = hasUnread ? 'block' : 'none';
+  try {
+    if (hasUnread) localStorage.setItem('stryxs_coach_unread', '1');
+    else localStorage.removeItem('stryxs_coach_unread');
+  } catch (e) {}
+}
+
+function checkCoachUnreadOnLoad() {
+  try {
+    if (localStorage.getItem('stryxs_coach_unread') === '1') setCoachUnread(true);
+  } catch (e) {}
+}
+
 function navigate(page) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   const target = document.getElementById(`page-${page}`);
@@ -3830,6 +3937,9 @@ function navigate(page) {
   // Hide old landingNav — auth pages now have their own embedded nav
   const landingNav = document.getElementById('landingNav');
   if (landingNav) landingNav.style.display = 'none';
+
+  // Clear Coach unread badge when entering Coach tab
+  if (page === 'coach') setCoachUnread(false);
 
   if (page === 'dashboard') renderDashboard();
   if (page === 'coach') renderCoach();
@@ -4720,14 +4830,47 @@ async function renderDashboard() {
   const runs = recent.filter(w => w.sport === 'run');
   const bikes = recent.filter(w => w.sport === 'bike');
   const swims = recent.filter(w => w.sport === 'swim');
-  const avgDrift = runs.length ? runs.reduce((s,r) => s + r.drift, 0) / runs.length : null;
+  const gyms = recent.filter(w => w.sport === 'strength' || w.sport === 'gym');
+  const others = recent.filter(w => !['run', 'bike', 'swim', 'strength', 'gym'].includes(w.sport));
+
+  // Helper to compute drift for a sport set
+  const driftForSport = (workouts) => {
+    const withDrift = workouts.filter(w => w.drift !== null && w.drift !== undefined && !isNaN(w.drift));
+    return withDrift.length ? withDrift.reduce((s,w) => s + w.drift, 0) / withDrift.length : null;
+  };
+  // Initial sport for drift card (default: pick first sport with data)
+  if (!state.dashDriftSport) {
+    if (runs.length) state.dashDriftSport = 'run';
+    else if (bikes.length) state.dashDriftSport = 'bike';
+    else if (swims.length) state.dashDriftSport = 'swim';
+    else state.dashDriftSport = 'overall';
+  }
+  if (!state.dashLthrSport) state.dashLthrSport = 'run';
+
   const totalKm = recent.reduce((s,w) => s + (w.distance || 0), 0);
+
+  // Compute drift for selected sport
+  let currentDrift = null;
+  let driftCount = 0;
+  if (state.dashDriftSport === 'overall') {
+    const all = [...runs, ...bikes, ...swims];
+    currentDrift = driftForSport(all);
+    driftCount = all.filter(w => w.drift !== null && w.drift !== undefined).length;
+  } else {
+    const sportWorkouts = state.dashDriftSport === 'run' ? runs : state.dashDriftSport === 'bike' ? bikes : swims;
+    currentDrift = driftForSport(sportWorkouts);
+    driftCount = sportWorkouts.filter(w => w.drift !== null && w.drift !== undefined).length;
+  }
+
+  // LTHR for selected sport
+  const currentLthr = state.dashLthrSport === 'run' ? state.profile.runLthr : state.profile.bikeLthr;
+  const lthrLabel = state.dashLthrSport === 'run' ? 'Run LTHR' : 'Bike LTHR';
 
   document.getElementById('statGrid').innerHTML = `
     <div class="stat-card">
       <div class="stat-label">Workouts (7d)</div>
       <div class="stat-value">${recent.length}</div>
-      <div class="stat-meta">${runs.length} run · ${bikes.length} bike · ${swims.length} swim</div>
+      <div class="stat-meta">${runs.length} run · ${bikes.length} bike · ${swims.length} swim${gyms.length > 0 ? ' · ' + gyms.length + ' gym' : ''}${others.length > 0 ? ' · ' + others.length + ' other' : ''}</div>
     </div>
     <div class="stat-card">
       <div class="stat-label">Total Distance</div>
@@ -4735,27 +4878,88 @@ async function renderDashboard() {
       <div class="stat-meta">last 7 days</div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">Avg Cardiac Drift</div>
-      <div class="stat-value">${avgDrift !== null ? avgDrift.toFixed(1) + '%' : '—'}</div>
-      <div class="stat-meta ${avgDrift!==null && avgDrift < 5 ? 'good' : avgDrift !== null && avgDrift > 8 ? 'bad' : ''}">${avgDrift === null ? 'need data' : avgDrift < 5 ? '✓ strong aerobic' : avgDrift < 8 ? 'building' : 'needs work'}</div>
+      <div class="stat-label-row">
+        <div class="stat-label">Avg Cardiac Drift</div>
+        <select class="stat-mini-picker" onchange="setDashDriftSport(this.value)">
+          <option value="overall" ${state.dashDriftSport === 'overall' ? 'selected' : ''}>Overall</option>
+          <option value="run" ${state.dashDriftSport === 'run' ? 'selected' : ''}>Run</option>
+          <option value="bike" ${state.dashDriftSport === 'bike' ? 'selected' : ''}>Bike</option>
+          <option value="swim" ${state.dashDriftSport === 'swim' ? 'selected' : ''}>Swim</option>
+        </select>
+      </div>
+      <div class="stat-value">${currentDrift !== null ? currentDrift.toFixed(1) + '%' : '—'}</div>
+      <div class="stat-meta ${currentDrift!==null && currentDrift < 5 ? 'good' : currentDrift !== null && currentDrift > 8 ? 'bad' : ''}">${currentDrift === null ? (driftCount === 0 ? 'no data yet' : 'no drift data') : currentDrift < 5 ? '✓ strong aerobic' : currentDrift < 8 ? 'building' : 'needs work'}</div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">Run LTHR</div>
-      <div class="stat-value">${state.profile.runLthr}</div>
-      <div class="stat-meta">Z2: ${Math.floor(state.profile.runLthr*0.81)}-${Math.floor(state.profile.runLthr*0.9)} bpm</div>
+      <div class="stat-label-row">
+        <div class="stat-label">${lthrLabel}</div>
+        <select class="stat-mini-picker" onchange="setDashLthrSport(this.value)">
+          <option value="run" ${state.dashLthrSport === 'run' ? 'selected' : ''}>Run</option>
+          <option value="bike" ${state.dashLthrSport === 'bike' ? 'selected' : ''}>Bike</option>
+        </select>
+      </div>
+      <div class="stat-value">${currentLthr || '—'}</div>
+      <div class="stat-meta">${currentLthr ? `Z2: ${Math.floor(currentLthr*0.81)}-${Math.floor(currentLthr*0.9)} bpm` : 'set in settings'}</div>
     </div>
   `;
 
+  // Recent workouts — compact list grouped by sport
   const rec = document.getElementById('dashRecent');
-  const recentList = state.workouts.slice(-5).reverse();
+  const recentList = state.workouts.slice(-30).reverse();
   if (recentList.length === 0) {
     rec.innerHTML = `<div class="empty"><div class="empty-icon">📊</div><div class="empty-title">No workouts yet</div><div class="empty-desc">Upload your first workout to see analysis here</div></div>`;
     document.getElementById('recentCount').textContent = 'Upload your first workout';
   } else {
-    rec.innerHTML = recentList.map((w, i) => renderHistoryItem(w, state.workouts.length - 1 - i)).join('');
-    document.getElementById('recentCount').textContent = `Showing last ${recentList.length} of ${state.workouts.length}`;
-    // Fitness trend is hidden until we have a better composite metric
+    // Group by sport
+    const sportGroups = {};
+    const sportEmojis = { run: '🏃', bike: '🚴', swim: '🏊', strength: '💪', gym: '💪', other: '⚡' };
+    const sportLabels = { run: 'Run', bike: 'Bike', swim: 'Swim', strength: 'Gym', gym: 'Gym', other: 'Other' };
+    recentList.forEach(w => {
+      const key = ['run','bike','swim','strength','gym'].includes(w.sport) ? (w.sport === 'gym' ? 'strength' : w.sport) : 'other';
+      if (!sportGroups[key]) sportGroups[key] = { count: 0, distance: 0, hours: 0 };
+      sportGroups[key].count++;
+      sportGroups[key].distance += parseFloat(w.distance) || 0;
+      sportGroups[key].hours += (parseFloat(w.duration) || 0) / 3600;
+    });
+
+    const order = ['run', 'bike', 'swim', 'strength', 'other'];
+    rec.innerHTML = `
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        ${order.filter(k => sportGroups[k]).map(k => {
+          const g = sportGroups[k];
+          const emoji = sportEmojis[k] || '⚡';
+          const label = sportLabels[k] || k;
+          const showDistance = k !== 'strength' && k !== 'other' && g.distance > 0;
+          return `
+            <div onclick="navigate('history')" style="display: flex; align-items: center; gap: 14px; padding: 14px 16px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 12px; cursor: pointer; transition: all 0.15s;" onmouseover="this.style.borderColor='var(--border-light)'" onmouseout="this.style.borderColor='var(--border)'">
+              <div style="font-size: 22px; flex-shrink: 0;">${emoji}</div>
+              <div style="flex: 1; min-width: 0;">
+                <div style="font-weight: 600; color: var(--text); font-size: 15px;">${label}</div>
+                <div style="font-size: 12px; color: var(--text-dim); margin-top: 2px;">
+                  ${g.count} workout${g.count > 1 ? 's' : ''}${showDistance ? ` · ${g.distance.toFixed(1)} km` : ''}${g.hours > 0 ? ` · ${g.hours.toFixed(1)} hrs` : ''}
+                </div>
+              </div>
+              <div style="font-size: 18px; color: var(--text-mute);">›</div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+      <div style="margin-top: 14px; text-align: center;">
+        <button class="btn ghost" onclick="navigate('history')" style="padding: 10px 20px;">View all workouts →</button>
+      </div>
+    `;
+    document.getElementById('recentCount').textContent = `${state.workouts.length} total`;
   }
+}
+
+function setDashDriftSport(sport) {
+  state.dashDriftSport = sport;
+  renderDashboard();
+}
+
+function setDashLthrSport(sport) {
+  state.dashLthrSport = sport;
+  renderDashboard();
 }
 
 function renderFitnessTrend() {
@@ -4838,12 +5042,45 @@ function renderTrends() {
     return;
   }
   const recent = state.workouts.slice(-20);
-  const sportCounts = { run: 0, bike: 0, swim: 0 };
-  recent.forEach(w => sportCounts[w.sport]++);
+
+  // Initialize trend sport pickers
+  if (!state.trendsDriftSport) state.trendsDriftSport = 'overall';
+  if (!state.trendsIntensitySport) state.trendsIntensitySport = 'overall';
+
+  // Normalize sport for grouping
+  const normalizeSport = (s) => {
+    if (!s) return 'other';
+    if (s === 'gym') return 'strength';
+    if (['run', 'bike', 'swim', 'strength'].includes(s)) return s;
+    return 'other';
+  };
+
+  // Sport counts for Training Mix (now includes gym + other)
+  const sportCounts = { run: 0, bike: 0, swim: 0, strength: 0, other: 0 };
+  recent.forEach(w => {
+    const s = normalizeSport(w.sport);
+    sportCounts[s]++;
+  });
   const totalS = Object.values(sportCounts).reduce((a,b) => a+b, 0);
-  const runs = recent.filter(w => w.sport === 'run' && w.drift !== undefined);
-  const avgDrift = runs.length ? runs.reduce((s,r) => s+r.drift, 0) / runs.length : null;
-  const landW = recent.filter(w => (w.sport === 'run' || w.sport === 'bike') && w.pct !== undefined);
+
+  // Compute drift for selected sport
+  const driftWorkouts = (sport) => {
+    if (sport === 'overall') {
+      return recent.filter(w => (w.sport === 'run' || w.sport === 'bike' || w.sport === 'swim') && w.drift !== undefined && w.drift !== null);
+    }
+    return recent.filter(w => w.sport === sport && w.drift !== undefined && w.drift !== null);
+  };
+  const driftSet = driftWorkouts(state.trendsDriftSport);
+  const avgDrift = driftSet.length ? driftSet.reduce((s,r) => s + r.drift, 0) / driftSet.length : null;
+
+  // Intensity distribution per sport
+  const intensityWorkouts = (sport) => {
+    if (sport === 'overall') {
+      return recent.filter(w => (w.sport === 'run' || w.sport === 'bike') && w.pct !== undefined && w.pct !== null);
+    }
+    return recent.filter(w => w.sport === sport && w.pct !== undefined && w.pct !== null);
+  };
+  const landW = intensityWorkouts(state.trendsIntensitySport);
   const easy = landW.filter(w => w.pct < 85).length;
   const hard = landW.filter(w => w.pct >= 91).length;
   const easyPct = landW.length ? Math.round(easy * 100 / landW.length) : 0;
@@ -4854,53 +5091,107 @@ function renderTrends() {
   else if (easyPct >= 60) { rv = 'Too much moderate intensity (gray zone)'; rc = 'ok'; }
   else { rv = 'Too much high intensity'; rc = 'bad'; }
 
+  const sportDisplayLabels = {
+    run: '🏃 Run',
+    bike: '🚴 Bike',
+    swim: '🏊 Swim',
+    strength: '💪 Gym',
+    other: '⚡ Other',
+    overall: 'All sports',
+  };
+
+  // Compact picker HTML helper
+  const sportPicker = (id, current, onChangeFn, options) => `
+    <select class="stat-mini-picker" onchange="${onChangeFn}(this.value)">
+      ${options.map(o => `<option value="${o}" ${current === o ? 'selected' : ''}>${sportDisplayLabels[o] || o}</option>`).join('')}
+    </select>
+  `;
+
   el.innerHTML = `
-    <div class="panel">
-      <div class="panel-header"><div><div class="panel-title">Training Mix</div><div class="panel-sub">Last ${recent.length} workouts</div></div></div>
+    <div class="panel" style="padding: 18px;">
+      <div class="panel-header" style="margin-bottom: 14px;">
+        <div>
+          <div class="panel-title" style="font-size: 15px;">Training Mix</div>
+          <div class="panel-sub">Last ${recent.length} workouts</div>
+        </div>
+      </div>
       <div class="donut-wrap">
         ${renderSportDonut(sportCounts, totalS)}
         <div class="donut-legend">
-          <div class="legend-row"><div class="legend-label"><div class="legend-dot" style="background:#3b82f6;"></div>🏃 Running</div><div class="legend-value">${sportCounts.run}</div></div>
-          <div class="legend-row"><div class="legend-label"><div class="legend-dot" style="background:#f97316;"></div>🚴 Cycling</div><div class="legend-value">${sportCounts.bike}</div></div>
-          <div class="legend-row"><div class="legend-label"><div class="legend-dot" style="background:#22c55e;"></div>🏊 Swimming</div><div class="legend-value">${sportCounts.swim}</div></div>
+          ${sportCounts.run > 0 ? `<div class="legend-row"><div class="legend-label"><div class="legend-dot" style="background:#3b82f6;"></div>🏃 Run</div><div class="legend-value">${sportCounts.run}</div></div>` : ''}
+          ${sportCounts.bike > 0 ? `<div class="legend-row"><div class="legend-label"><div class="legend-dot" style="background:#f97316;"></div>🚴 Bike</div><div class="legend-value">${sportCounts.bike}</div></div>` : ''}
+          ${sportCounts.swim > 0 ? `<div class="legend-row"><div class="legend-label"><div class="legend-dot" style="background:#22c55e;"></div>🏊 Swim</div><div class="legend-value">${sportCounts.swim}</div></div>` : ''}
+          ${sportCounts.strength > 0 ? `<div class="legend-row"><div class="legend-label"><div class="legend-dot" style="background:#a78bfa;"></div>💪 Gym</div><div class="legend-value">${sportCounts.strength}</div></div>` : ''}
+          ${sportCounts.other > 0 ? `<div class="legend-row"><div class="legend-label"><div class="legend-dot" style="background:#94a3b8;"></div>⚡ Other</div><div class="legend-value">${sportCounts.other}</div></div>` : ''}
         </div>
       </div>
     </div>
-    ${avgDrift !== null ? `
-    <div class="panel">
-      <div class="panel-header"><div><div class="panel-title">Average Run Cardiac Drift</div><div class="panel-sub">The best indicator of aerobic fitness</div></div></div>
-      <div style="display: flex; align-items: center; gap: 24px; flex-wrap: wrap;">
-        <div>
-          <div style="font-size: 48px; font-weight: 800; letter-spacing: -1.5px; font-family: 'JetBrains Mono', monospace;">${avgDrift.toFixed(1)}%</div>
-          <div class="verdict ${avgDrift < 5 ? 'good' : avgDrift < 8 ? 'ok' : 'bad'}" style="display: inline-flex; margin-top: 10px;">
-            <span class="verdict-icon">${avgDrift < 5 ? '✓' : avgDrift < 8 ? '!' : '✕'}</span>
-            ${avgDrift < 5 ? 'Excellent aerobic base' : avgDrift < 8 ? 'Building aerobic fitness' : 'Aerobic engine needs work'}
-          </div>
+
+    <div class="panel" style="padding: 18px;">
+      <div class="panel-header" style="margin-bottom: 14px;">
+        <div style="flex: 1; min-width: 0;">
+          <div class="panel-title" style="font-size: 15px;">Average Cardiac Drift</div>
+          <div class="panel-sub">Best indicator of aerobic fitness</div>
         </div>
+        ${sportPicker('trendsDrift', state.trendsDriftSport, 'setTrendsDriftSport', ['overall', 'run', 'bike', 'swim'])}
       </div>
-    </div>` : ''}
-    ${landW.length > 0 ? `
-    <div class="panel">
-      <div class="panel-header"><div><div class="panel-title">Intensity Distribution (80/20 Rule)</div><div class="panel-sub">Elite athletes spend ~80% of training easy</div></div></div>
-      <div class="zone-bars">
-        <div class="zone-row"><div class="zone-info"><div class="zone-chip" style="background: var(--z2);">Ez</div><span class="zone-name">Easy / Z2</span></div><div class="zone-track"><div class="zone-fill" style="width: ${easyPct}%; background: var(--z2);"></div></div><div class="zone-pct">${easyPct}%</div></div>
-        <div class="zone-row"><div class="zone-info"><div class="zone-chip" style="background: var(--z3);">Mo</div><span class="zone-name">Moderate</span></div><div class="zone-track"><div class="zone-fill" style="width: ${medPct}%; background: var(--z3);"></div></div><div class="zone-pct">${medPct}%</div></div>
-        <div class="zone-row"><div class="zone-info"><div class="zone-chip" style="background: var(--z5);">Hd</div><span class="zone-name">Hard / Thresh+</span></div><div class="zone-track"><div class="zone-fill" style="width: ${hardPct}%; background: var(--z5);"></div></div><div class="zone-pct">${hardPct}%</div></div>
+      ${avgDrift !== null ? `
+        <div style="display: flex; align-items: center; gap: 18px; flex-wrap: wrap;">
+          <div>
+            <div style="font-size: 40px; font-weight: 800; letter-spacing: -1.5px; font-family: 'JetBrains Mono', monospace; line-height: 1;">${avgDrift.toFixed(1)}%</div>
+            <div class="verdict ${avgDrift < 5 ? 'good' : avgDrift < 8 ? 'ok' : 'bad'}" style="display: inline-flex; margin-top: 10px;">
+              <span class="verdict-icon">${avgDrift < 5 ? '✓' : avgDrift < 8 ? '!' : '✕'}</span>
+              ${avgDrift < 5 ? 'Excellent aerobic base' : avgDrift < 8 ? 'Building aerobic fitness' : 'Aerobic engine needs work'}
+            </div>
+          </div>
+          <div style="font-size: 12px; color: var(--text-mute); flex: 1; min-width: 140px;">Based on ${driftSet.length} ${state.trendsDriftSport === 'overall' ? '' : state.trendsDriftSport + ' '}workout${driftSet.length === 1 ? '' : 's'}</div>
+        </div>
+      ` : `
+        <div style="font-size: 13px; color: var(--text-dim); padding: 8px 0;">No drift data for ${state.trendsDriftSport === 'overall' ? 'any sport yet' : state.trendsDriftSport}. Try uploading more workouts.</div>
+      `}
+    </div>
+
+    <div class="panel" style="padding: 18px;">
+      <div class="panel-header" style="margin-bottom: 14px;">
+        <div style="flex: 1; min-width: 0;">
+          <div class="panel-title" style="font-size: 15px;">Intensity Distribution</div>
+          <div class="panel-sub">Elite athletes train ~80% easy</div>
+        </div>
+        ${sportPicker('trendsIntensity', state.trendsIntensitySport, 'setTrendsIntensitySport', ['overall', 'run', 'bike'])}
       </div>
-      <div class="verdict ${rc}" style="margin-top: 16px;"><span class="verdict-icon">${rc==='good'?'✓':rc==='ok'?'!':'✕'}</span> ${rv}</div>
-    </div>` : ''}
+      ${landW.length > 0 ? `
+        <div class="zone-bars">
+          <div class="zone-row"><div class="zone-info"><div class="zone-chip" style="background: var(--z2);">Ez</div><span class="zone-name">Easy / Z2</span></div><div class="zone-track"><div class="zone-fill" style="width: ${easyPct}%; background: var(--z2);"></div></div><div class="zone-pct">${easyPct}%</div></div>
+          <div class="zone-row"><div class="zone-info"><div class="zone-chip" style="background: var(--z3);">Mo</div><span class="zone-name">Moderate</span></div><div class="zone-track"><div class="zone-fill" style="width: ${medPct}%; background: var(--z3);"></div></div><div class="zone-pct">${medPct}%</div></div>
+          <div class="zone-row"><div class="zone-info"><div class="zone-chip" style="background: var(--z5);">Hd</div><span class="zone-name">Hard / Thresh+</span></div><div class="zone-track"><div class="zone-fill" style="width: ${hardPct}%; background: var(--z5);"></div></div><div class="zone-pct">${hardPct}%</div></div>
+        </div>
+        <div class="verdict ${rc}" style="margin-top: 14px;"><span class="verdict-icon">${rc==='good'?'✓':rc==='ok'?'!':'✕'}</span> ${rv}</div>
+      ` : `
+        <div style="font-size: 13px; color: var(--text-dim); padding: 8px 0;">No intensity data for ${state.trendsIntensitySport === 'overall' ? 'cardio sports' : state.trendsIntensitySport} yet.</div>
+      `}
+    </div>
   `;
 }
 
+function setTrendsDriftSport(sport) {
+  state.trendsDriftSport = sport;
+  renderTrends();
+}
+
+function setTrendsIntensitySport(sport) {
+  state.trendsIntensitySport = sport;
+  renderTrends();
+}
+
 function renderSportDonut(counts, total) {
-  const size = 170; const stroke = 22;
+  const size = 150; const stroke = 20;
   const r = (size - stroke) / 2;
   const cx = size / 2; const cy = size / 2;
   const c = 2 * Math.PI * r;
-  const colors = { run: '#3b82f6', bike: '#f97316', swim: '#22c55e' };
+  const colors = { run: '#3b82f6', bike: '#f97316', swim: '#22c55e', strength: '#a78bfa', other: '#94a3b8' };
   let offset = 0;
   const segs = [];
-  for (const sp of ['run', 'bike', 'swim']) {
+  for (const sp of ['run', 'bike', 'swim', 'strength', 'other']) {
     const pct = counts[sp] / total;
     if (pct === 0) continue;
     const len = pct * c;
@@ -5584,7 +5875,7 @@ async function renderCoachChat(el, intake) {
 
     <div class="coach-chat">
       <div class="chat-messages" id="chatMessages">
-        ${(history && history.length > 0) ? history.map(m => renderMsg(m.role, m.content)).join('') : renderMsg('coach', `Hey ${state.user.name.split(' ')[0]}. I built your plan based on what you told me — check the Plan tab to see the calendar. Upload your workouts as you do them and I'll give you specific feedback. Ask me anything here.`)}
+        ${(history && history.length > 0) ? history.map(m => renderMsg(m.role, m.content, m.context_type)).join('') : renderMsg('coach', `Hey ${state.user.name.split(' ')[0]}. I built your plan based on what you told me — check the Plan tab to see the calendar. Upload your workouts as you do them and I'll give you specific feedback. Ask me anything here.`)}
       </div>
       <div class="chat-input-row">
         <input type="text" id="chatInput" placeholder="Ask Coach anything..." onkeydown="if(event.key==='Enter')sendChatMsg()" />
@@ -5682,15 +5973,69 @@ async function loadCoachPersonaBadge(intake) {
   }
 }
 
-function renderMsg(role, content) {
+function renderMsg(role, content, contextType = null) {
   const avatar = role === 'coach' ? '🧠' : (state.user?.name?.[0]?.toUpperCase() || 'A');
   const formatted = role === 'coach' ? formatMarkdown(content) : escapeHtml(content);
+
+  // Special button for settings_change_reactive context
+  let actionsHtml = '';
+  if (role === 'coach' && contextType === 'settings_change_reactive') {
+    actionsHtml = `
+      <div style="margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap;">
+        <button class="btn" style="font-size: 13px; padding: 8px 14px;" onclick="regeneratePlanFromReactive(this)">
+          🔄 Regenerate plan now
+        </button>
+        <button class="btn ghost" style="font-size: 13px; padding: 8px 14px;" onclick="this.closest('.msg-actions-wrap').remove()">
+          Maybe later
+        </button>
+      </div>
+    `;
+  }
+
   return `
     <div class="chat-msg ${role === 'coach' ? '' : 'user'}">
       <div class="msg-avatar">${avatar}</div>
-      <div class="msg-bubble">${formatted}</div>
+      <div class="msg-bubble">
+        ${formatted}
+        ${actionsHtml ? `<div class="msg-actions-wrap">${actionsHtml}</div>` : ''}
+      </div>
     </div>
   `;
+}
+
+async function regeneratePlanFromReactive(btn) {
+  if (!state.user) return;
+  btn.disabled = true;
+  btn.textContent = 'Regenerating...';
+
+  try {
+    // Get current intake
+    const { data: intake } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).single();
+
+    // Delete upcoming planned workouts (today and forward)
+    const today = new Date().toISOString().split('T')[0];
+    await sb.from('planned_workouts').delete().eq('user_id', state.user.id).gte('scheduled_date', today);
+
+    // Generate new plan
+    const plan = await callCoach('generate_plan', { intake });
+    await savePlanToDb(plan, state.user.id);
+
+    toast('Plan regenerated based on your changes');
+
+    // Disable the button so they don't click again
+    const wrap = btn.closest('.msg-actions-wrap');
+    if (wrap) wrap.innerHTML = `<div style="font-size: 12px; color: var(--accent); padding: 4px 0;">✓ Plan regenerated</div>`;
+
+    // If user is on plan tab, refresh it
+    if (document.getElementById('page-plan').classList.contains('active')) {
+      renderPlan();
+    }
+  } catch (err) {
+    console.error('Regenerate failed:', err);
+    toast('Regeneration failed: ' + err.message);
+    btn.disabled = false;
+    btn.textContent = '🔄 Regenerate plan now';
+  }
 }
 
 function formatMarkdown(text) {
@@ -6317,16 +6662,28 @@ async function renderProjections() {
     }
 
     if (proj.data_sufficiency === 'low' || !proj.primary_projection) {
+      const TARGET_WORKOUTS = 8;
+      const haveWorkouts = recentWorkouts.length;
+      const needed = Math.max(0, TARGET_WORKOUTS - haveWorkouts);
+      const hasPb = !!(intake.pb_5k || intake.pb_10k || intake.pb_half || intake.pb_marathon || intake.last_race);
+
       container.innerHTML = `
         <div class="panel" style="margin-bottom: 20px; border-color: rgba(255, 209, 102, 0.2); background: rgba(255, 209, 102, 0.04);">
           <div class="panel-header">
             <div>
               <div class="panel-title">🎯 Race Projections</div>
-              <div class="panel-sub">Need more data to calculate</div>
+              <div class="panel-sub">Available after ${needed > 0 ? needed : 'a few more'} more ${needed === 1 ? 'workout' : 'workouts'} of consistent training</div>
             </div>
           </div>
-          <div style="font-size: 13px; color: var(--text-dim); line-height: 1.55;">
-            Add a recent PB or race result in <a style="color: var(--accent); cursor: pointer; text-decoration: underline;" onclick="navigate('settings')">Settings</a>, OR upload a few quality workouts to unlock pace and time projections.
+          <div style="display: flex; flex-direction: column; gap: 10px; font-size: 13px; color: var(--text-dim); line-height: 1.55;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span style="font-size: 16px;">${haveWorkouts >= TARGET_WORKOUTS ? '✓' : '⏳'}</span>
+              <span>${haveWorkouts}/${TARGET_WORKOUTS} workouts uploaded ${haveWorkouts >= TARGET_WORKOUTS ? '' : `<span style="color: var(--text-mute);">(${needed} more needed)</span>`}</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span style="font-size: 16px;">${hasPb ? '✓' : '○'}</span>
+              <span>${hasPb ? 'PB/race result on file' : 'Add a recent PB or race time'} ${!hasPb ? '<a style="color: var(--accent); cursor: pointer; text-decoration: underline; margin-left: 6px;" onclick="navigate(\'settings\')">in Settings</a>' : ''}</span>
+            </div>
           </div>
         </div>
       `;
@@ -6412,7 +6769,6 @@ async function renderProgress() {
   }
 
   // Flatten: pull distance + duration out of the JSONB blob
-  // For OLD swims saved before the swim parser fix, fall back to summing set distances if present
   const swimDistanceFromSets = (sets) => {
     if (!Array.isArray(sets)) return 0;
     let totalMeters = 0;
@@ -6422,10 +6778,26 @@ async function renderProgress() {
     return totalMeters / 1000;
   };
 
+  // Helper to extract duration in MINUTES from workout_data (handles seconds, minutes, or string formats)
+  const extractMinutes = (wd) => {
+    if (!wd) return 0;
+    // Try duration_minutes first
+    if (wd.duration_minutes) return parseFloat(wd.duration_minutes) || 0;
+    // Then try duration (could be seconds or minutes depending on source)
+    if (wd.duration) {
+      const d = parseFloat(wd.duration) || 0;
+      // If duration is > 600 it's almost certainly in seconds (>10hr would be unusual in minutes)
+      if (d > 600) return d / 60;
+      return d;
+    }
+    if (wd.totalTimerTime) return parseFloat(wd.totalTimerTime) / 60; // Garmin seconds
+    if (wd.elapsed_time) return parseFloat(wd.elapsed_time) / 60;
+    return 0;
+  };
+
   const allWorkouts = workoutsRaw.map(w => {
     const wd = w.workout_data || {};
     let distKm = parseFloat(wd.distance || wd.distance_km || 0) || 0;
-    // For swims with no top-level distance, calculate from sets
     if (distKm === 0 && w.sport === 'swim' && wd.sets) {
       distKm = swimDistanceFromSets(wd.sets);
     }
@@ -6433,19 +6805,49 @@ async function renderProgress() {
       sport: w.sport,
       created_at: w.created_at,
       distance_km: distKm,
-      duration_minutes: parseFloat(wd.duration || wd.duration_minutes || 0) || 0,
+      duration_minutes: extractMinutes(wd),
     };
   });
 
-  // Pull completed planned workouts for plan adherence streak
-  const { data: completedPlanned } = await sb.from('planned_workouts')
-    .select('scheduled_date, completed')
-    .eq('user_id', state.user.id)
-    .eq('completed', true)
-    .order('scheduled_date', { ascending: false });
+  // ─── PLAN ADHERENCE — only count completed workouts that match the planned sport ───
+  // Get all planned workouts (not just completed) so we can match
+  const { data: allPlanned } = await sb.from('planned_workouts')
+    .select('scheduled_date, sport, completed')
+    .eq('user_id', state.user.id);
+
+  // For plan adherence, we need: completed planned workouts where sport matches actual upload that day
+  // Build a map of date → planned sport
+  const plannedBySport = {};
+  (allPlanned || []).forEach(p => {
+    if (p.completed && p.scheduled_date) {
+      if (!plannedBySport[p.scheduled_date]) plannedBySport[p.scheduled_date] = [];
+      plannedBySport[p.scheduled_date].push(p.sport);
+    }
+  });
+
+  // Build a map of date → uploaded sports
+  const uploadedBySport = {};
+  allWorkouts.forEach(w => {
+    const dateStr = new Date(w.created_at).toISOString().split('T')[0];
+    if (!uploadedBySport[dateStr]) uploadedBySport[dateStr] = [];
+    uploadedBySport[dateStr].push(w.sport);
+  });
+
+  // Plan adherence days = days where planned sport had a matching upload
+  const adherenceDays = new Set();
+  for (const date in plannedBySport) {
+    const plannedSports = plannedBySport[date];
+    const uploadedSports = uploadedBySport[date] || [];
+    // Match if any planned sport matches any uploaded sport (allow strength/gym aliases)
+    const normalize = (s) => (s === 'gym' ? 'strength' : s);
+    const planned = plannedSports.map(normalize);
+    const uploaded = uploadedSports.map(normalize);
+    if (planned.some(p => uploaded.includes(p))) {
+      adherenceDays.add(date);
+    }
+  }
 
   // ─── Calculate Streaks ───
-  // Training streak: consecutive days with at least one workout
   const trainingDays = new Set();
   allWorkouts.forEach(w => {
     const d = new Date(w.created_at);
@@ -6462,7 +6864,6 @@ async function renderProgress() {
 
   let currentTrainingStreak = 0;
   let cursor = new Date(today);
-  // If trained today, start from today; if not but trained yesterday, start from yesterday
   if (!trainingDays.has(todayStr) && trainingDays.has(yesterdayStr)) {
     cursor.setDate(cursor.getDate() - 1);
   }
@@ -6471,7 +6872,6 @@ async function renderProgress() {
     cursor.setDate(cursor.getDate() - 1);
   }
 
-  // Longest training streak
   const sortedDays = Array.from(trainingDays).sort();
   let longestTrainingStreak = 0;
   let runningStreak = 0;
@@ -6489,8 +6889,7 @@ async function renderProgress() {
     prevDate = d;
   }
 
-  // Plan adherence streak: consecutive days where planned workout was completed
-  const adherenceDays = new Set((completedPlanned || []).map(p => p.scheduled_date));
+  // Plan adherence streak: consecutive days where matching workout was completed
   let currentAdherenceStreak = 0;
   let cursor2 = new Date(today);
   if (!adherenceDays.has(todayStr) && adherenceDays.has(yesterdayStr)) {
@@ -6501,7 +6900,7 @@ async function renderProgress() {
     cursor2.setDate(cursor2.getDate() - 1);
   }
 
-  // ─── Calculate This Month + This Year totals ───
+  // ─── This Month + This Year totals ───
   const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
   const yearStart = new Date(today.getFullYear(), 0, 1);
 
@@ -6509,20 +6908,31 @@ async function renderProgress() {
   const yearWorkouts = allWorkouts.filter(w => new Date(w.created_at) >= yearStart);
 
   const sumDist = arr => arr.reduce((s, w) => s + (parseFloat(w.distance_km) || 0), 0);
-  const sumMin = arr => arr.reduce((s, w) => s + (parseInt(w.duration_minutes) || 0), 0);
+  const sumMin = arr => arr.reduce((s, w) => s + (parseFloat(w.duration_minutes) || 0), 0);
 
   const monthKm = sumDist(monthWorkouts);
   const monthHours = sumMin(monthWorkouts) / 60;
   const yearKm = sumDist(yearWorkouts);
   const yearHours = sumMin(yearWorkouts) / 60;
 
-  // ─── Sport breakdown (this month) ───
-  const monthBySport = { run: 0, bike: 0, swim: 0, other: 0 };
+  // ─── Sport breakdown (this month) — now in HOURS not km, and includes gym + other ───
+  const normalizeSport = (s) => {
+    if (!s) return 'other';
+    if (s === 'gym') return 'strength';
+    if (['run', 'bike', 'swim', 'strength'].includes(s)) return s;
+    return 'other';
+  };
+
+  const monthBySportHours = { run: 0, bike: 0, swim: 0, strength: 0, other: 0 };
+  const monthBySportDist = { run: 0, bike: 0, swim: 0, strength: 0, other: 0 };
+  const monthBySportCount = { run: 0, bike: 0, swim: 0, strength: 0, other: 0 };
   monthWorkouts.forEach(w => {
-    const sport = w.sport || 'other';
-    monthBySport[sport] = (monthBySport[sport] || 0) + (parseFloat(w.distance_km) || 0);
+    const sport = normalizeSport(w.sport);
+    monthBySportHours[sport] = (monthBySportHours[sport] || 0) + ((parseFloat(w.duration_minutes) || 0) / 60);
+    monthBySportDist[sport] = (monthBySportDist[sport] || 0) + (parseFloat(w.distance_km) || 0);
+    monthBySportCount[sport] = (monthBySportCount[sport] || 0) + 1;
   });
-  const monthTotal = Object.values(monthBySport).reduce((s, v) => s + v, 0) || 1;
+  const monthHoursTotal = Object.values(monthBySportHours).reduce((s, v) => s + v, 0) || 1;
 
   // Get unit preference for display
   const { data: intake } = await sb.from('athlete_intake').select('unit_preference').eq('user_id', state.user.id).single();
@@ -6531,6 +6941,10 @@ async function renderProgress() {
   const convertDist = km => isImperial ? km * 0.621371 : km;
 
   const monthName = today.toLocaleDateString('en-US', { month: 'long' });
+
+  const sportColor = { run: '#60a5fa', bike: '#fb923c', swim: '#4ade80', strength: '#a78bfa', other: '#94a3b8' };
+  const sportLabel = { run: 'Run', bike: 'Bike', swim: 'Swim', strength: 'Gym', other: 'Other' };
+  const sportEmoji = { run: '🏃', bike: '🚴', swim: '🏊', strength: '💪', other: '⚡' };
 
   container.innerHTML = `
     <div class="panel" style="margin-bottom: 20px;">
@@ -6542,7 +6956,7 @@ async function renderProgress() {
       </div>
 
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 18px;">
-        <div style="background: var(--bg-3); border: 1px solid var(--border); border-radius: 12px; padding: 16px; position: relative; overflow: hidden;">
+        <div style="background: var(--bg-3); border: 1px solid var(--border); border-radius: 12px; padding: 16px;">
           <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; margin-bottom: 8px;">🔥 Training Streak</div>
           <div style="font-size: 32px; font-weight: 800; line-height: 1; font-family: 'JetBrains Mono', monospace;">${currentTrainingStreak}</div>
           <div style="font-size: 12px; color: var(--text-dim); margin-top: 4px;">days · longest ${longestTrainingStreak}</div>
@@ -6569,17 +6983,22 @@ async function renderProgress() {
 
       ${monthWorkouts.length > 0 ? `
         <div>
-          <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; margin-bottom: 10px;">${monthName} sport split</div>
+          <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; margin-bottom: 10px;">${monthName} sport split (by hours)</div>
           <div style="display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--bg); margin-bottom: 10px;">
-            ${monthBySport.run > 0 ? `<div style="width: ${(monthBySport.run / monthTotal) * 100}%; background: #60a5fa;" title="Run"></div>` : ''}
-            ${monthBySport.bike > 0 ? `<div style="width: ${(monthBySport.bike / monthTotal) * 100}%; background: #fb923c;" title="Bike"></div>` : ''}
-            ${monthBySport.swim > 0 ? `<div style="width: ${(monthBySport.swim / monthTotal) * 100}%; background: #4ade80;" title="Swim"></div>` : ''}
-            ${monthBySport.other > 0 ? `<div style="width: ${(monthBySport.other / monthTotal) * 100}%; background: var(--text-mute);" title="Other"></div>` : ''}
+            ${['run', 'bike', 'swim', 'strength', 'other'].map(s => {
+              const v = monthBySportHours[s];
+              return v > 0 ? `<div style="width: ${(v / monthHoursTotal) * 100}%; background: ${sportColor[s]};" title="${sportLabel[s]}"></div>` : '';
+            }).join('')}
           </div>
-          <div style="display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--text-dim);">
-            ${monthBySport.run > 0 ? `<div><span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #60a5fa; margin-right: 6px;"></span>Run ${convertDist(monthBySport.run).toFixed(1)} ${distLabel}</div>` : ''}
-            ${monthBySport.bike > 0 ? `<div><span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #fb923c; margin-right: 6px;"></span>Bike ${convertDist(monthBySport.bike).toFixed(1)} ${distLabel}</div>` : ''}
-            ${monthBySport.swim > 0 ? `<div><span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #4ade80; margin-right: 6px;"></span>Swim ${convertDist(monthBySport.swim).toFixed(1)} ${distLabel}</div>` : ''}
+          <div style="display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--text-dim);">
+            ${['run', 'bike', 'swim', 'strength', 'other'].map(s => {
+              const hrs = monthBySportHours[s];
+              const dist = monthBySportDist[s];
+              const cnt = monthBySportCount[s];
+              if (cnt === 0) return '';
+              const distText = (s !== 'strength' && s !== 'other' && dist > 0) ? ` · ${convertDist(dist).toFixed(1)} ${distLabel}` : '';
+              return `<div><span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: ${sportColor[s]}; margin-right: 6px;"></span>${sportLabel[s]} ${hrs.toFixed(1)}h${distText}</div>`;
+            }).filter(Boolean).join('')}
           </div>
         </div>
       ` : ''}
@@ -7484,14 +7903,14 @@ async function renderSettings() {
         <div class="settings-section-inner">
       <div class="field">
         <label>Units</label>
-        <select id="settingsUnits" style="width: 100%; padding: 13px 14px; background: var(--bg-3); color: var(--text); border: 1px solid var(--border); border-radius: 10px; font-size: 15px; font-family: inherit; outline: none;">
+        <select id="settingsUnits">
           <option value="metric" ${!isImperial ? 'selected' : ''}>Metric (kg, cm, km)</option>
           <option value="imperial" ${isImperial ? 'selected' : ''}>Imperial (lbs, ft/in, mi)</option>
         </select>
       </div>
       <div class="field">
         <label>Sex</label>
-        <select id="settingsSex" style="width: 100%; padding: 13px 14px; background: var(--bg-3); color: var(--text); border: 1px solid var(--border); border-radius: 10px; font-size: 15px; font-family: inherit; outline: none;">
+        <select id="settingsSex">
           <option value="" ${!intake?.sex ? 'selected' : ''}>Prefer not to say</option>
           <option value="male" ${intake?.sex === 'male' ? 'selected' : ''}>Male</option>
           <option value="female" ${intake?.sex === 'female' ? 'selected' : ''}>Female</option>
@@ -7543,7 +7962,7 @@ async function renderSettings() {
         <div class="settings-section-inner">
       <div class="field">
         <label>Primary goal</label>
-        <select id="settingsGoal" style="width: 100%; padding: 13px 14px; background: var(--bg-3); color: var(--text); border: 1px solid var(--border); border-radius: 10px; font-size: 15px; font-family: inherit; outline: none;">
+        <select id="settingsGoal">
           <option value="general" ${intake?.goal_event === 'general' ? 'selected' : ''}>General Fitness</option>
           <option value="5k" ${intake?.goal_event === '5k' ? 'selected' : ''}>5K</option>
           <option value="10k" ${intake?.goal_event === '10k' ? 'selected' : ''}>10K</option>
@@ -7560,7 +7979,7 @@ async function renderSettings() {
       </div>
       <div class="field">
         <label>Experience level</label>
-        <select id="settingsExperience" style="width: 100%; padding: 13px 14px; background: var(--bg-3); color: var(--text); border: 1px solid var(--border); border-radius: 10px; font-size: 15px; font-family: inherit; outline: none;">
+        <select id="settingsExperience">
           <option value="beginner" ${intake?.experience_level === 'beginner' ? 'selected' : ''}>Beginner (under 1 year)</option>
           <option value="intermediate" ${intake?.experience_level === 'intermediate' ? 'selected' : ''}>Intermediate (1-3 years)</option>
           <option value="advanced" ${intake?.experience_level === 'advanced' ? 'selected' : ''}>Advanced (3+ years)</option>
@@ -7789,6 +8208,10 @@ function updateZonePreview() {
 async function saveAllSettings(silent = false) {
   if (!state.user) return;
 
+  // Snapshot the OLD values BEFORE updating, to compare for important changes
+  const { data: oldIntake } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).single();
+  const { data: oldProfile } = await sb.from('profiles').select('*').eq('id', state.user.id).single();
+
   // Account
   const name = document.getElementById('settingsName')?.value.trim();
 
@@ -7880,8 +8303,176 @@ async function saveAllSettings(silent = false) {
     updated_at: new Date().toISOString(),
   }).eq('user_id', state.user.id);
 
+  // ═══ DETECT IMPORTANT CHANGES (silent mode skips this) ═══
+  if (!silent) {
+    const importantChanges = detectImportantSettingsChanges(oldIntake, oldProfile, {
+      goal_event: goal,
+      race_date: raceDate,
+      experience_level: experience,
+      current_weekly_hours: hours,
+      injuries: injuries,
+      equipment: Array.from(settingsEquipmentSelected),
+      run_lthr: runLthr,
+      bike_lthr: bikeLthr,
+      weight_kg: weight_kg,
+    });
+
+    if (importantChanges.length > 0) {
+      // Don't await — let it run in background
+      sendCoachReactiveMessage(importantChanges).catch(err => console.error('Coach reactive msg failed:', err));
+    }
+  }
+
   showApp();
   if (!silent) toast('Settings saved');
+}
+
+// Detect which IMPORTANT settings changed (ignore profile pic, name, bio, units, age, sex, height)
+function detectImportantSettingsChanges(oldIntake, oldProfile, newValues) {
+  const changes = [];
+  if (!oldIntake) return changes;
+
+  // Equipment changes
+  const oldEq = (oldIntake.equipment || []).slice().sort();
+  const newEq = (newValues.equipment || []).slice().sort();
+  if (JSON.stringify(oldEq) !== JSON.stringify(newEq)) {
+    const added = newEq.filter(e => !oldEq.includes(e));
+    const removed = oldEq.filter(e => !newEq.includes(e));
+    changes.push({
+      field: 'equipment',
+      label: 'Equipment',
+      detail: [
+        added.length > 0 ? `added ${added.join(', ')}` : '',
+        removed.length > 0 ? `removed ${removed.join(', ')}` : '',
+      ].filter(Boolean).join(' and '),
+    });
+  }
+
+  // Race goal change
+  if (oldIntake.goal_event !== newValues.goal_event && newValues.goal_event) {
+    changes.push({
+      field: 'goal_event',
+      label: 'Race goal',
+      detail: `changed to ${newValues.goal_event}`,
+    });
+  }
+
+  // Race date change
+  if (oldIntake.race_date !== newValues.race_date) {
+    changes.push({
+      field: 'race_date',
+      label: 'Race date',
+      detail: newValues.race_date ? `set to ${newValues.race_date}` : 'removed',
+    });
+  }
+
+  // Experience level
+  if (oldIntake.experience_level !== newValues.experience_level && newValues.experience_level) {
+    changes.push({
+      field: 'experience_level',
+      label: 'Experience level',
+      detail: `changed to ${newValues.experience_level}`,
+    });
+  }
+
+  // Weekly hours change (>1 hour difference)
+  const oldHours = parseFloat(oldIntake.current_weekly_hours) || 0;
+  const newHours = parseFloat(newValues.current_weekly_hours) || 0;
+  if (Math.abs(oldHours - newHours) >= 1) {
+    changes.push({
+      field: 'current_weekly_hours',
+      label: 'Weekly training hours',
+      detail: `changed from ${oldHours} to ${newHours}`,
+    });
+  }
+
+  // Injuries change (text comparison, ignore casing)
+  const oldInjuries = (oldIntake.injuries || '').trim().toLowerCase();
+  const newInjuries = (newValues.injuries || '').trim().toLowerCase();
+  if (oldInjuries !== newInjuries && newInjuries.length > 3) {
+    changes.push({
+      field: 'injuries',
+      label: 'Injuries / health notes',
+      detail: 'updated',
+    });
+  }
+
+  // LTHR changes (>3bpm difference is significant)
+  const oldRunLthr = parseInt(oldProfile?.run_lthr) || 0;
+  const newRunLthr = parseInt(newValues.run_lthr) || 0;
+  if (Math.abs(oldRunLthr - newRunLthr) >= 3) {
+    changes.push({
+      field: 'run_lthr',
+      label: 'Run LTHR',
+      detail: `changed from ${oldRunLthr} to ${newRunLthr} bpm`,
+    });
+  }
+  const oldBikeLthr = parseInt(oldProfile?.bike_lthr) || 0;
+  const newBikeLthr = parseInt(newValues.bike_lthr) || 0;
+  if (Math.abs(oldBikeLthr - newBikeLthr) >= 3) {
+    changes.push({
+      field: 'bike_lthr',
+      label: 'Bike LTHR',
+      detail: `changed from ${oldBikeLthr} to ${newBikeLthr} bpm`,
+    });
+  }
+
+  // Weight change (>3kg difference)
+  const oldWeight = parseFloat(oldIntake.weight_kg) || 0;
+  const newWeight = parseFloat(newValues.weight_kg) || 0;
+  if (Math.abs(oldWeight - newWeight) >= 3) {
+    changes.push({
+      field: 'weight_kg',
+      label: 'Weight',
+      detail: `changed from ${oldWeight}kg to ${newWeight}kg`,
+    });
+  }
+
+  return changes;
+}
+
+async function sendCoachReactiveMessage(changes) {
+  try {
+    const summary = changes.map(c => `**${c.label}**: ${c.detail}`).join('\n• ');
+
+    // Generate a Coach message acknowledging the change and offering to regenerate
+    const introLines = [
+      `I noticed you updated some important settings:`,
+      `\n• ${summary}\n`,
+      `\nLet me know if you want me to regenerate your upcoming plan to reflect these changes.`,
+    ];
+
+    // Get current intake for context
+    const { data: intake } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).single();
+
+    // Call Coach to write a methodology-aware response
+    let coachResponse;
+    try {
+      const messages = [{
+        role: 'user',
+        content: `I just updated my settings. Specifically: ${summary.replace(/\*\*/g, '')}. Briefly explain (in 2-3 sentences) how this affects my training, then ask if I want to regenerate my plan. Speak in your methodology's voice.`,
+      }];
+      coachResponse = await callCoach('chat', { messages, intake, recentWorkouts: [], plannedWorkouts: [], profile: state.profile });
+    } catch (err) {
+      console.error('Coach chat for reactive msg failed:', err);
+      coachResponse = introLines.join('\n');
+    }
+
+    // Save the message with a special context_type so we can render the regenerate button
+    await sb.from('coach_messages').insert({
+      user_id: state.user.id,
+      role: 'coach',
+      content: coachResponse,
+      context_type: 'settings_change_reactive',
+    });
+
+    // Mark Coach tab as having unread message
+    setCoachUnread(true);
+
+    toast('Coach has a message about your changes');
+  } catch (err) {
+    console.error('sendCoachReactiveMessage failed:', err);
+  }
 }
 
 // Legacy alias
