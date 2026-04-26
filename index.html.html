@@ -5901,7 +5901,21 @@ async function savePlanToDb(plan, userId, startDate = null) {
   console.log('[Stryxs] Plan row saved, id:', planRow?.id);
 
   if (plan.workouts && Array.isArray(plan.workouts)) {
-    const baseDate = startDate ? new Date(startDate + 'T12:00:00') : new Date();
+    // Anchor: date_offset_days=0 means MONDAY of the start week (matches Coach's "0=Monday" convention)
+    // If startDate provided, treat that AS Monday. Otherwise, find this week's Monday.
+    let baseDate;
+    if (startDate) {
+      baseDate = new Date(startDate + 'T12:00:00');
+    } else {
+      // Find this week's Monday (or NEXT Monday if today IS already past the week)
+      baseDate = new Date();
+      baseDate.setHours(12, 0, 0, 0);
+      const dow = baseDate.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+      const daysToMonday = dow === 0 ? -6 : 1 - dow; // Sunday → go back 6, Mon → 0, Tue → -1, etc.
+      baseDate.setDate(baseDate.getDate() + daysToMonday);
+    }
+    console.log('[Stryxs] Base date (Monday anchor):', baseDate.toISOString().split('T')[0]);
+
     const rows = plan.workouts.map(w => {
       const d = new Date(baseDate);
       d.setDate(d.getDate() + (w.date_offset_days || 0));
@@ -6514,11 +6528,18 @@ async function generateNextWeek() {
       return;
     }
 
-    // Next week starts the day AFTER the last scheduled day
+    // Next week starts the Monday AFTER the last scheduled day (so dates align with day-of-week)
     const lastDate = new Date(latestPlanned[0].scheduled_date + 'T12:00:00');
     const nextStart = new Date(lastDate);
     nextStart.setDate(lastDate.getDate() + 1);
+    // Roll forward to next Monday if we didn't land on one
+    const nextStartDow = nextStart.getDay(); // 0=Sun, 1=Mon
+    if (nextStartDow !== 1) {
+      const daysToMon = nextStartDow === 0 ? 1 : (8 - nextStartDow); // Sun → +1, Tue → +6, etc.
+      nextStart.setDate(nextStart.getDate() + daysToMon);
+    }
     const nextStartStr = nextStart.toISOString().split('T')[0];
+    console.log('[Stryxs] Next week starts (Monday):', nextStartStr);
 
     // 2. Count how many weeks the athlete already has — for context
     const { data: allPlanned } = await sb.from('planned_workouts')
