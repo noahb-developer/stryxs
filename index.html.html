@@ -4841,6 +4841,66 @@ function renderSportDonut(counts, total) {
 let intakeAnswers = {};
 let intakeStep = 0;
 
+// ─── Adaptive intake helpers ───
+function formatEventNice(goal) {
+  const map = {
+    'marathon': 'marathon',
+    'half_marathon': 'half marathon',
+    '10k': '10K',
+    '5k': '5K',
+    'olympic_tri': 'Olympic triathlon',
+    'sprint_tri': 'sprint triathlon',
+    '70_3': '70.3',
+    'ironman': 'Ironman',
+    'general': 'training',
+  };
+  return map[goal] || 'race';
+}
+
+function goalTimePlaceholder(goal) {
+  const map = {
+    'marathon': 'e.g. sub-3:30 or 3:15:00',
+    'half_marathon': 'e.g. sub-1:30 or 1:25:00',
+    '10k': 'e.g. sub-40:00',
+    '5k': 'e.g. sub-19:00',
+    'ironman': 'e.g. sub-10:00:00',
+    '70_3': 'e.g. sub-5:00:00',
+    'olympic_tri': 'e.g. sub-2:30:00',
+    'sprint_tri': 'e.g. sub-1:15:00',
+    'general': 'leave blank if no specific time',
+  };
+  return map[goal] || 'optional';
+}
+
+function lastRacePlaceholder(goal) {
+  const map = {
+    'marathon': 'e.g. 3:25:00 in March 2026',
+    'half_marathon': 'e.g. 1:32:00 in February 2026',
+    '10k': 'e.g. 41:30 in January 2026',
+    '5k': 'e.g. 19:45 in March 2026',
+    'ironman': 'e.g. 11:45 at IMFL Oct 2025',
+    '70_3': 'e.g. 5:30 at 70.3 Augusta 2025',
+    'olympic_tri': 'e.g. 2:35 at Escape Alcatraz 2025',
+    'sprint_tri': 'e.g. 1:18 at local sprint 2025',
+    'general': 'leave blank if none',
+  };
+  return map[goal] || '';
+}
+
+function isQuestionRelevant(q, answers) {
+  if (!q.condition) return true;
+  return q.condition(answers);
+}
+
+function getNextRelevantStep(currentStep, direction = 1) {
+  let i = currentStep + direction;
+  while (i >= 0 && i < intakeQuestions.length) {
+    if (isQuestionRelevant(intakeQuestions[i], intakeAnswers)) return i;
+    i += direction;
+  }
+  return -1;
+}
+
 const intakeQuestions = [
   {
     id: 'unit_preference',
@@ -4918,10 +4978,10 @@ const intakeQuestions = [
   },
   {
     id: 'goal_time',
-    question: "Got a goal time for this race?",
-    context: "Optional. Helps Coach project paces and pace targets. Skip if you're not sure yet.",
+    question: (a) => `Got a goal time for your ${formatEventNice(a.goal_event)}?`,
+    context: "Optional. Helps Coach project paces. Skip if you're not sure yet.",
     type: 'text',
-    placeholder: 'e.g. sub-3:30 marathon, sub-10 Ironman, 19:00 5K (or leave blank)',
+    placeholder: (a) => goalTimePlaceholder(a.goal_event),
     optional: true,
   },
   {
@@ -4931,6 +4991,7 @@ const intakeQuestions = [
     type: 'text',
     placeholder: 'e.g. 19:30',
     optional: true,
+    condition: (a) => ['5k', '10k', 'half_marathon', 'marathon', 'olympic_tri', 'sprint_tri', '70_3', 'ironman', 'general'].includes(a.goal_event),
   },
   {
     id: 'pb_10k',
@@ -4939,6 +5000,7 @@ const intakeQuestions = [
     type: 'text',
     placeholder: 'e.g. 41:00',
     optional: true,
+    condition: (a) => ['5k', '10k', 'half_marathon', 'marathon', 'olympic_tri', 'sprint_tri', '70_3', 'ironman', 'general'].includes(a.goal_event),
   },
   {
     id: 'pb_half',
@@ -4947,6 +5009,7 @@ const intakeQuestions = [
     type: 'text',
     placeholder: 'e.g. 1:30:00',
     optional: true,
+    condition: (a) => ['half_marathon', 'marathon', '70_3', 'ironman', 'general'].includes(a.goal_event),
   },
   {
     id: 'pb_marathon',
@@ -4955,13 +5018,14 @@ const intakeQuestions = [
     type: 'text',
     placeholder: 'e.g. 3:15:00',
     optional: true,
+    condition: (a) => ['marathon', 'ironman'].includes(a.goal_event),
   },
   {
     id: 'last_race',
-    question: "Most recent race result?",
-    context: "Optional. Free text — helps Coach calibrate current fitness. Anything you've raced recently.",
+    question: (a) => `Most recent ${formatEventNice(a.goal_event)} result?`,
+    context: "Optional. Free text. Anything you've raced recently.",
     type: 'text',
-    placeholder: 'e.g. 5K 19:45 in March 2026',
+    placeholder: (a) => lastRacePlaceholder(a.goal_event),
     optional: true,
   },
   {
@@ -5060,16 +5124,25 @@ function renderIntake(el, existingIntake) {
 }
 
 function renderIntakeStep() {
+  // Filter to only relevant questions for progress display
+  const relevantQuestions = intakeQuestions.filter(q => isQuestionRelevant(q, intakeAnswers));
+  const currentQ = intakeQuestions[intakeStep];
+  const relevantStepIndex = relevantQuestions.findIndex(q => q.id === currentQ.id);
+
   const progress = document.getElementById('intakeProgress');
-  progress.innerHTML = intakeQuestions.map((_, i) => {
+  progress.innerHTML = relevantQuestions.map((_, i) => {
     let cls = '';
-    if (i < intakeStep) cls = 'done';
-    else if (i === intakeStep) cls = 'current';
+    if (i < relevantStepIndex) cls = 'done';
+    else if (i === relevantStepIndex) cls = 'current';
     return `<div class="intake-step ${cls}"></div>`;
   }).join('');
 
-  const q = intakeQuestions[intakeStep];
+  const q = currentQ;
   const body = document.getElementById('intakeBody');
+
+  // Resolve dynamic question/placeholder text
+  const questionText = typeof q.question === 'function' ? q.question(intakeAnswers) : q.question;
+  const placeholderText = typeof q.placeholder === 'function' ? q.placeholder(intakeAnswers) : (q.placeholder || '');
 
   let inputHtml = '';
   if (q.type === 'single' || q.type === 'multi') {
@@ -5095,7 +5168,7 @@ function renderIntakeStep() {
   } else if (q.type === 'number') {
     const current = intakeAnswers[q.id] || '';
     inputHtml = `
-      <input type="number" id="intakeInput" value="${current}" placeholder="${q.placeholder || ''}" min="${q.min || 0}" max="${q.max || 999}" style="width:100%;padding:14px;background:var(--bg-3);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:15px;font-family:inherit;outline:none;" />
+      <input type="number" id="intakeInput" value="${current}" placeholder="${placeholderText}" min="${q.min || 0}" max="${q.max || 999}" style="width:100%;padding:14px;background:var(--bg-3);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:15px;font-family:inherit;outline:none;" />
     `;
   } else if (q.type === 'weight') {
     const isImperial = intakeAnswers.unit_preference === 'imperial';
@@ -5134,20 +5207,24 @@ function renderIntakeStep() {
   } else if (q.type === 'text') {
     const current = intakeAnswers[q.id] || '';
     inputHtml = `
-      <textarea id="intakeInput" placeholder="${q.placeholder || ''}" style="width:100%;padding:14px;background:var(--bg-3);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:15px;font-family:inherit;outline:none;min-height:80px;resize:vertical;">${current}</textarea>
+      <textarea id="intakeInput" placeholder="${placeholderText}" style="width:100%;padding:14px;background:var(--bg-3);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:15px;font-family:inherit;outline:none;min-height:80px;resize:vertical;">${current}</textarea>
     `;
   }
 
+  // Determine if this is the LAST relevant step
+  const isLastStep = getNextRelevantStep(intakeStep, 1) === -1;
+  const isFirstStep = getNextRelevantStep(intakeStep, -1) === -1;
+
   body.innerHTML = `
     <div class="intake-card">
-      <div class="intake-question">${q.question}${q.optional ? ' <span style="font-size: 12px; color: var(--text-mute); font-weight: 500;">(optional)</span>' : ''}</div>
+      <div class="intake-question">${questionText}${q.optional ? ' <span style="font-size: 12px; color: var(--text-mute); font-weight: 500;">(optional)</span>' : ''}</div>
       <div class="intake-context">${q.context}</div>
       ${inputHtml}
       <div class="intake-actions">
-        <button class="btn ghost" onclick="intakeBack()" ${intakeStep === 0 ? 'style="visibility:hidden;"' : ''}>← Back</button>
+        <button class="btn ghost" onclick="intakeBack()" ${isFirstStep ? 'style="visibility:hidden;"' : ''}>← Back</button>
         <div style="display: flex; gap: 8px;">
           ${q.optional ? `<button class="btn ghost" onclick="intakeSkip()">Skip</button>` : ''}
-          <button class="btn" onclick="intakeNext()">${intakeStep === intakeQuestions.length - 1 ? 'Build my plan →' : 'Next →'}</button>
+          <button class="btn" onclick="intakeNext()">${isLastStep ? 'Build my plan →' : 'Next →'}</button>
         </div>
       </div>
     </div>
@@ -5174,15 +5251,17 @@ function renderIntakeStep() {
 }
 
 function intakeBack() {
-  if (intakeStep > 0) { intakeStep--; renderIntakeStep(); }
+  const prev = getNextRelevantStep(intakeStep, -1);
+  if (prev >= 0) { intakeStep = prev; renderIntakeStep(); }
 }
 
 function intakeSkip() {
   const q = intakeQuestions[intakeStep];
   // Mark as empty/skipped
   intakeAnswers[q.id] = '';
-  if (intakeStep < intakeQuestions.length - 1) {
-    intakeStep++;
+  const next = getNextRelevantStep(intakeStep, 1);
+  if (next >= 0) {
+    intakeStep = next;
     renderIntakeStep();
   } else {
     completeIntake();
@@ -5206,7 +5285,6 @@ async function intakeNext() {
       if (ft && inches) {
         intakeAnswers.height_ft = ft.value;
         intakeAnswers.height_in = inches.value;
-        // Convert to cm for storage
         const totalIn = (parseFloat(ft.value) || 0) * 12 + (parseFloat(inches.value) || 0);
         intakeAnswers.height = totalIn > 0 ? Math.round(totalIn * 2.54) : '';
       }
@@ -5236,8 +5314,10 @@ async function intakeNext() {
     intakeAnswers[q.id] = q.optional ? '' : 'none';
   }
 
-  if (intakeStep < intakeQuestions.length - 1) {
-    intakeStep++;
+  // Move to next relevant step
+  const next = getNextRelevantStep(intakeStep, 1);
+  if (next >= 0) {
+    intakeStep = next;
     renderIntakeStep();
   } else {
     await completeIntake();
