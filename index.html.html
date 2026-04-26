@@ -5441,8 +5441,18 @@ async function completeIntake() {
 
   // Now generate plan with Claude
   try {
+    console.log('[Stryxs] Calling generate_plan with payload:', payload);
     const plan = await callCoach('generate_plan', { intake: payload });
-    await savePlanToDb(plan, state.user.id);
+    console.log('[Stryxs] Plan received:', plan);
+    console.log('[Stryxs] Plan workouts count:', plan?.workouts?.length || 0);
+    console.log('[Stryxs] Plan persona used:', plan?._persona_used, plan?._coach_brain);
+
+    if (!plan || !plan.workouts || plan.workouts.length === 0) {
+      throw new Error('Coach returned an empty plan');
+    }
+
+    const saveResult = await savePlanToDb(plan, state.user.id);
+    console.log('[Stryxs] Save result:', saveResult);
 
     // Generate Coach's intro message explaining the plan
     try {
@@ -5463,6 +5473,7 @@ async function completeIntake() {
     renderCoach();
   } catch (err) {
     console.error('Plan generation failed:', err);
+    console.error('Full error:', err.stack || err);
     toast('Plan generation failed: ' + err.message);
     renderCoach();
   }
@@ -5874,12 +5885,20 @@ function closeConfirmModal() {
 // Helper: save a plan (and create planned_workouts rows)
 // startDate optional — defaults to today. Used to save "next week" plans starting next Monday.
 async function savePlanToDb(plan, userId, startDate = null) {
-  const { data: planRow } = await sb.from('training_plans').insert({
+  console.log('[Stryxs] savePlanToDb starting, userId:', userId, 'workouts:', plan?.workouts?.length);
+
+  const { data: planRow, error: planErr } = await sb.from('training_plans').insert({
     user_id: userId,
     plan_data: plan,
     current_phase: plan.phase || 'base',
     active: true,
   }).select().single();
+
+  if (planErr) {
+    console.error('[Stryxs] training_plans insert failed:', planErr);
+    throw new Error('Failed to save plan: ' + planErr.message);
+  }
+  console.log('[Stryxs] Plan row saved, id:', planRow?.id);
 
   if (plan.workouts && Array.isArray(plan.workouts)) {
     const baseDate = startDate ? new Date(startDate + 'T12:00:00') : new Date();
@@ -5898,8 +5917,20 @@ async function savePlanToDb(plan, userId, startDate = null) {
         intensity_target: w.intensity_target || '',
       };
     });
-    if (rows.length > 0) await sb.from('planned_workouts').insert(rows);
+    console.log('[Stryxs] Inserting', rows.length, 'planned_workouts rows. Sample:', rows[0]);
+
+    if (rows.length > 0) {
+      const { error: workoutErr } = await sb.from('planned_workouts').insert(rows);
+      if (workoutErr) {
+        console.error('[Stryxs] planned_workouts insert failed:', workoutErr);
+        throw new Error('Failed to save workouts: ' + workoutErr.message);
+      }
+      console.log('[Stryxs] All workouts saved successfully');
+    }
+  } else {
+    console.warn('[Stryxs] Plan has no workouts array');
   }
+  return { success: true, planId: planRow?.id };
 }
 
 // ─── Smart Plan Adjustments — Pattern Analysis ───
