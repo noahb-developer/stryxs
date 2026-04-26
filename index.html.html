@@ -51,6 +51,10 @@ html { scroll-behavior: smooth; }
 
 /* Loading state - prevents flash of landing page on app load */
 body.app-loading .app, body.app-loading .nav { visibility: hidden; }
+body.share-public .nav, body.share-public .sidebar, body.share-public .topbar, body.share-public .lv2-nav, body.share-public .landing-v2 { display: none !important; }
+body.share-public { background: var(--bg-1); }
+body.share-public .page#page-share { display: block !important; opacity: 1 !important; padding: 0 !important; min-height: 100vh; }
+body.share-public .app { display: block !important; padding: 0 !important; }
 body.app-loading::after {
   content: '';
   position: fixed; inset: 0;
@@ -3344,6 +3348,11 @@ body.on-auth .container {
   <div id="settingsContent"></div>
 </div>
 
+<!-- Public Share Page — shown when URL is /share/{token} -->
+<div class="page" id="page-share">
+  <div id="shareContent"></div>
+</div>
+
 </div>
 
 <div id="toast" class="toast"></div>
@@ -3397,6 +3406,19 @@ body.on-auth .container {
     <div class="modal-actions">
       <button class="btn ghost" onclick="closeImportModal()">Cancel</button>
       <button class="btn" onclick="submitImport()">Import plan →</button>
+    </div>
+  </div>
+</div>
+
+<!-- Share Plan Modal -->
+<div class="modal-backdrop" id="shareModal">
+  <div class="modal" style="max-width: 520px;">
+    <div class="modal-header">
+      <div class="modal-title">🔗 Share your plan</div>
+      <button class="modal-close" onclick="closeShareModal()">×</button>
+    </div>
+    <div class="modal-body" id="shareModalBody">
+      <p style="color: var(--text-dim); font-size: 14px; line-height: 1.55; margin-bottom: 16px;">Loading...</p>
     </div>
   </div>
 </div>
@@ -5994,6 +6016,366 @@ function closeImportModal() {
   document.getElementById('importModal').classList.remove('open');
 }
 
+// ─── Share Plan ───
+async function openShareModal() {
+  if (!state.user) return;
+  const modal = document.getElementById('shareModal');
+  const body = document.getElementById('shareModalBody');
+  body.innerHTML = '<p style="color: var(--text-dim); font-size: 14px;">Loading...</p>';
+  modal.classList.add('open');
+
+  try {
+    // Check if user already has an active share
+    const { data: existingShare } = await sb.from('shared_plans')
+      .select('*')
+      .eq('user_id', state.user.id)
+      .eq('active', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    // Get all weeks (group planned_workouts by week start)
+    const { data: planned } = await sb.from('planned_workouts')
+      .select('scheduled_date')
+      .eq('user_id', state.user.id)
+      .order('scheduled_date', { ascending: true });
+
+    if (!planned || planned.length === 0) {
+      body.innerHTML = '<p style="color: var(--text-dim); font-size: 14px;">You have no plan to share yet. Generate a plan first.</p>';
+      return;
+    }
+
+    // Group dates by ISO week (week starts Monday)
+    const weeks = {};
+    for (const p of planned) {
+      const d = new Date(p.scheduled_date + 'T12:00:00');
+      const day = d.getDay();
+      const mondayOffset = day === 0 ? -6 : 1 - day;
+      const monday = new Date(d);
+      monday.setDate(d.getDate() + mondayOffset);
+      const weekKey = monday.toISOString().split('T')[0];
+      if (!weeks[weekKey]) weeks[weekKey] = { start: weekKey, count: 0 };
+      weeks[weekKey].count++;
+    }
+    const weekList = Object.values(weeks).sort((a, b) => a.start.localeCompare(b.start));
+
+    // Pre-select weeks based on existing share, or all weeks if no existing share
+    const preSelected = existingShare?.weeks_to_share || weekList.map(w => w.start);
+    const showProfilePref = existingShare ? existingShare.show_profile : true;
+
+    body.innerHTML = `
+      <p style="color: var(--text-dim); font-size: 14px; line-height: 1.55; margin-bottom: 18px;">Send a public read-only link to your coach, friends, or training partners. They won't need a Stryxs account.</p>
+
+      <div style="margin-bottom: 18px;">
+        <div style="font-size: 13px; color: var(--text); font-weight: 600; margin-bottom: 10px;">Which weeks to share?</div>
+        <div id="shareWeeksList" style="display: flex; flex-direction: column; gap: 8px; max-height: 200px; overflow-y: auto; padding: 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px;">
+          ${weekList.map(w => {
+            const startDate = new Date(w.start + 'T12:00:00');
+            const endDate = new Date(startDate);
+            endDate.setDate(startDate.getDate() + 6);
+            const label = `${startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+            const checked = preSelected.includes(w.start) ? 'checked' : '';
+            return `
+              <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 6px 0; font-size: 14px;">
+                <input type="checkbox" class="share-week-cb" data-week="${w.start}" ${checked} style="width: 16px; height: 16px; accent-color: var(--accent);">
+                <span>${label}</span>
+                <span style="margin-left: auto; font-size: 12px; color: var(--text-dim);">${w.count} workout${w.count === 1 ? '' : 's'}</span>
+              </label>
+            `;
+          }).join('')}
+        </div>
+      </div>
+
+      <div style="margin-bottom: 20px; padding: 14px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px;">
+        <label style="display: flex; align-items: flex-start; gap: 10px; cursor: pointer;">
+          <input type="checkbox" id="shareShowProfile" ${showProfilePref ? 'checked' : ''} style="width: 16px; height: 16px; accent-color: var(--accent); margin-top: 2px; flex-shrink: 0;">
+          <div>
+            <div style="font-size: 14px; color: var(--text); font-weight: 600;">Show my profile info</div>
+            <div style="font-size: 12px; color: var(--text-dim); margin-top: 2px; line-height: 1.4;">Includes your name, goal event, experience level, and LTHRs. Recommended for sharing with coaches.</div>
+          </div>
+        </label>
+      </div>
+
+      ${existingShare ? `
+        <div id="shareLinkBox" style="margin-bottom: 16px; padding: 14px; background: rgba(0, 255, 163, 0.06); border: 1px solid rgba(0, 255, 163, 0.2); border-radius: 10px;">
+          <div style="font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; margin-bottom: 8px;">Your share link</div>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <input id="shareLinkInput" readonly value="${window.location.origin}/share/${existingShare.share_token}" style="flex: 1; padding: 10px 12px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 13px; font-family: 'JetBrains Mono', monospace; outline: none;">
+            <button class="btn" style="padding: 10px 14px; font-size: 13px;" onclick="copyShareLink()">Copy</button>
+          </div>
+        </div>
+      ` : ''}
+
+      <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+        <button class="btn" onclick="saveShareSettings()" style="flex: 1; min-width: 140px;">${existingShare ? 'Update share' : 'Generate link →'}</button>
+        ${existingShare ? `<button class="btn ghost" onclick="revokeShare('${existingShare.id}')" style="flex: 1; min-width: 100px; color: #f87171;">Revoke link</button>` : ''}
+      </div>
+    `;
+  } catch (err) {
+    console.error('Share modal error:', err);
+    body.innerHTML = `<p style="color: var(--danger); font-size: 14px;">Failed to load: ${err.message}</p>`;
+  }
+}
+
+function closeShareModal() {
+  document.getElementById('shareModal').classList.remove('open');
+}
+
+async function saveShareSettings() {
+  if (!state.user) return;
+
+  // Get selected weeks
+  const checkboxes = document.querySelectorAll('.share-week-cb:checked');
+  const weeks = Array.from(checkboxes).map(cb => cb.dataset.week);
+  if (weeks.length === 0) {
+    toast('Pick at least one week to share');
+    return;
+  }
+  const showProfile = document.getElementById('shareShowProfile').checked;
+
+  try {
+    // Check for existing active share
+    const { data: existing } = await sb.from('shared_plans')
+      .select('*')
+      .eq('user_id', state.user.id)
+      .eq('active', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (existing) {
+      // Update existing share
+      await sb.from('shared_plans').update({
+        weeks_to_share: weeks,
+        show_profile: showProfile,
+      }).eq('id', existing.id);
+      toast('Share settings updated');
+    } else {
+      // Generate new token (random 16-char alphanumeric)
+      const token = Array.from(crypto.getRandomValues(new Uint8Array(12)))
+        .map(b => b.toString(36).padStart(2, '0')).join('').slice(0, 16);
+
+      await sb.from('shared_plans').insert({
+        user_id: state.user.id,
+        share_token: token,
+        weeks_to_share: weeks,
+        show_profile: showProfile,
+        active: true,
+      });
+      toast('Share link created');
+    }
+
+    // Reload modal
+    openShareModal();
+  } catch (err) {
+    console.error('Save share failed:', err);
+    toast('Failed: ' + err.message);
+  }
+}
+
+async function revokeShare(shareId) {
+  if (!confirm('Revoke this share link? Anyone with the link will lose access.')) return;
+  try {
+    await sb.from('shared_plans').update({ active: false }).eq('id', shareId);
+    toast('Share link revoked');
+    openShareModal();
+  } catch (err) {
+    toast('Failed: ' + err.message);
+  }
+}
+
+function copyShareLink() {
+  const input = document.getElementById('shareLinkInput');
+  if (!input) return;
+  input.select();
+  input.setSelectionRange(0, 99999);
+  navigator.clipboard.writeText(input.value).then(() => {
+    toast('Link copied to clipboard');
+  }).catch(() => {
+    document.execCommand('copy');
+    toast('Link copied');
+  });
+}
+
+// ─── Public Share Page Renderer ───
+async function renderPublicShare(token) {
+  const container = document.getElementById('shareContent');
+  if (!container) return;
+  container.innerHTML = '<div style="padding: 80px 20px; text-align: center; color: var(--text-dim);">Loading plan...</div>';
+
+  try {
+    // Look up the share by token
+    const { data: share, error: shareErr } = await sb.from('shared_plans')
+      .select('*')
+      .eq('share_token', token)
+      .eq('active', true)
+      .maybeSingle();
+
+    if (shareErr || !share) {
+      container.innerHTML = `
+        <div style="padding: 80px 20px; text-align: center; max-width: 480px; margin: 0 auto;">
+          <div style="font-size: 48px; margin-bottom: 16px;">🔒</div>
+          <h2 style="font-size: 24px; margin-bottom: 12px;">Link expired or invalid</h2>
+          <p style="color: var(--text-dim); margin-bottom: 24px;">This share link is no longer active or never existed.</p>
+          <a href="/" class="btn">Go to Stryxs →</a>
+        </div>
+      `;
+      return;
+    }
+
+    const userId = share.user_id;
+    const showProfile = share.show_profile;
+    const weeksToShare = share.weeks_to_share || [];
+
+    // Fetch profile + intake (only if show_profile is true)
+    let profile = null, intake = null;
+    if (showProfile) {
+      const { data: p } = await sb.from('profiles').select('*').eq('id', userId).maybeSingle();
+      const { data: i } = await sb.from('athlete_intake').select('*').eq('user_id', userId).maybeSingle();
+      profile = p;
+      intake = i;
+    }
+
+    // Calculate date ranges from selected weeks
+    const dateRanges = weeksToShare.map(weekStart => {
+      const start = new Date(weekStart + 'T12:00:00');
+      const end = new Date(start);
+      end.setDate(start.getDate() + 6);
+      return { start: weekStart, end: end.toISOString().split('T')[0] };
+    });
+
+    // Fetch planned workouts within those date ranges
+    let allWorkouts = [];
+    for (const range of dateRanges) {
+      const { data: ws } = await sb.from('planned_workouts')
+        .select('*')
+        .eq('user_id', userId)
+        .gte('scheduled_date', range.start)
+        .lte('scheduled_date', range.end)
+        .order('scheduled_date', { ascending: true });
+      if (ws) allWorkouts = allWorkouts.concat(ws);
+    }
+
+    // Group by week
+    const weekMap = {};
+    for (const w of allWorkouts) {
+      const d = new Date(w.scheduled_date + 'T12:00:00');
+      const day = d.getDay();
+      const mondayOffset = day === 0 ? -6 : 1 - day;
+      const monday = new Date(d);
+      monday.setDate(d.getDate() + mondayOffset);
+      const weekKey = monday.toISOString().split('T')[0];
+      if (!weekMap[weekKey]) weekMap[weekKey] = [];
+      weekMap[weekKey].push(w);
+    }
+
+    const sportEmoji = { run: '🏃', bike: '🚴', swim: '🏊', strength: '💪', rest: '😴' };
+
+    // Build header section
+    const goalLabels = {
+      ironman: 'Ironman', '70_3': 'Ironman 70.3', marathon: 'Marathon',
+      half_marathon: 'Half Marathon', '10k': '10K', '5k': '5K',
+      olympic: 'Olympic Triathlon', sprint: 'Sprint Triathlon', general: 'General Fitness',
+    };
+    const goalText = intake?.goal_event ? (goalLabels[intake.goal_event] || intake.goal_event) : '';
+    const raceDate = intake?.race_date ? new Date(intake.race_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : '';
+
+    let headerHTML = '';
+    if (showProfile && profile) {
+      const name = profile.display_name || profile.name || 'Athlete';
+      headerHTML = `
+        <div style="text-align: center; margin-bottom: 32px;">
+          ${profile.avatar_url ? `<img src="${profile.avatar_url}" style="width: 72px; height: 72px; border-radius: 50%; object-fit: cover; margin: 0 auto 14px; border: 2px solid var(--border);">` : ''}
+          <h1 style="font-size: 28px; font-weight: 700; margin-bottom: 6px; font-family: 'Instrument Serif', serif;">${name}'s Training Plan</h1>
+          ${goalText ? `<div style="color: var(--text-dim); font-size: 15px;">Training for <strong style="color: var(--accent);">${goalText}</strong>${raceDate ? ` · ${raceDate}` : ''}</div>` : ''}
+          ${intake?.experience_level ? `<div style="color: var(--text-dim); font-size: 13px; margin-top: 6px;">${intake.experience_level} athlete${profile.run_lthr ? ` · Run LTHR ${profile.run_lthr}` : ''}${profile.bike_lthr ? ` · Bike LTHR ${profile.bike_lthr}` : ''}</div>` : ''}
+        </div>
+      `;
+    } else {
+      headerHTML = `
+        <div style="text-align: center; margin-bottom: 32px;">
+          <h1 style="font-size: 28px; font-weight: 700; margin-bottom: 6px; font-family: 'Instrument Serif', serif;">Training Plan</h1>
+          <div style="color: var(--text-dim); font-size: 14px;">A coaching plan built with Stryxs AI</div>
+        </div>
+      `;
+    }
+
+    // Build week sections
+    let weeksHTML = '';
+    const sortedWeeks = Object.keys(weekMap).sort();
+    if (sortedWeeks.length === 0) {
+      weeksHTML = '<div style="text-align: center; padding: 40px 20px; color: var(--text-dim);">No workouts in the selected weeks.</div>';
+    } else {
+      for (const weekKey of sortedWeeks) {
+        const weekWorkouts = weekMap[weekKey];
+        const weekStart = new Date(weekKey + 'T12:00:00');
+        const weekEnd = new Date(weekStart);
+        weekEnd.setDate(weekStart.getDate() + 6);
+        const weekLabel = `${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+
+        const totalMin = weekWorkouts.reduce((s, w) => s + (w.duration_minutes || 0), 0);
+        const totalKm = weekWorkouts.reduce((s, w) => s + (parseFloat(w.distance_km) || 0), 0);
+
+        weeksHTML += `
+          <div style="margin-bottom: 28px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 14px; overflow: hidden;">
+            <div style="padding: 16px 20px; border-bottom: 1px solid var(--border); background: var(--bg-3);">
+              <div style="font-weight: 700; font-size: 15px;">Week of ${weekLabel}</div>
+              <div style="font-size: 12px; color: var(--text-dim); margin-top: 4px;">${weekWorkouts.length} sessions · ${(totalMin / 60).toFixed(1)}h · ${totalKm.toFixed(1)} km</div>
+            </div>
+            <div style="padding: 8px 0;">
+              ${weekWorkouts.map(w => {
+                const d = new Date(w.scheduled_date + 'T12:00:00');
+                const dayLabel = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                const isRest = w.sport === 'rest' || (w.duration_minutes === 0 && (!w.distance_km || w.distance_km === 0));
+                return `
+                  <div style="padding: 12px 20px; border-bottom: 1px solid var(--border); display: flex; gap: 14px; align-items: flex-start;">
+                    <div style="font-size: 22px; flex-shrink: 0; width: 32px; text-align: center;">${sportEmoji[w.sport] || '🏃'}</div>
+                    <div style="flex: 1; min-width: 0;">
+                      <div style="display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; margin-bottom: 4px;">
+                        <span style="font-weight: 600; font-size: 14px;">${dayLabel}</span>
+                        <span style="font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px;">${w.workout_type || w.sport}</span>
+                        ${!isRest ? `<span style="font-size: 12px; color: var(--text-dim);">· ${w.duration_minutes || 0} min${w.distance_km ? ` · ${parseFloat(w.distance_km).toFixed(1)} km` : ''}</span>` : ''}
+                      </div>
+                      <div style="font-size: 13px; color: var(--text-dim); line-height: 1.5;">${w.description || ''}</div>
+                      ${w.intensity_target ? `<div style="font-size: 11px; color: var(--accent); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px;">${w.intensity_target}</div>` : ''}
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        `;
+      }
+    }
+
+    container.innerHTML = `
+      <div style="max-width: 720px; margin: 0 auto; padding: 32px 20px 60px;">
+        <div style="display: flex; justify-content: center; margin-bottom: 28px;">
+          <a href="/" style="display: flex; align-items: center; gap: 8px; text-decoration: none; color: var(--text); font-weight: 700; font-family: 'Instrument Serif', serif; font-size: 22px;">
+            Stryx<em style="color: var(--accent); font-style: italic;">s</em>
+          </a>
+        </div>
+        ${headerHTML}
+        ${weeksHTML}
+        <div style="text-align: center; margin-top: 40px; padding: 24px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 14px;">
+          <div style="font-size: 14px; color: var(--text); margin-bottom: 14px;">Want your own AI training plan?</div>
+          <a href="/" class="btn" style="display: inline-block; text-decoration: none;">Get started with Stryxs →</a>
+        </div>
+        <div style="text-align: center; margin-top: 24px; font-size: 12px; color: var(--text-dim);">Built with Stryxs · stryxs.com</div>
+      </div>
+    `;
+  } catch (err) {
+    console.error('Public share render error:', err);
+    container.innerHTML = `
+      <div style="padding: 80px 20px; text-align: center; max-width: 480px; margin: 0 auto;">
+        <h2 style="font-size: 22px; margin-bottom: 12px;">Couldn't load plan</h2>
+        <p style="color: var(--text-dim); margin-bottom: 24px;">${err.message || 'Try again later.'}</p>
+        <a href="/" class="btn">Go to Stryxs →</a>
+      </div>
+    `;
+  }
+}
+
 async function submitImport() {
   const text = document.getElementById('importText').value.trim();
   if (!text || text.length < 30) {
@@ -6127,6 +6509,17 @@ async function renderPlan() {
           </div>
         </div>
         <button class="btn" id="generateNextWeekBtn" onclick="generateNextWeek()" style="width: 100%;">Generate next week →</button>
+      </div>
+
+      <div style="margin-top: 14px; padding: 20px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 14px;">
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+          <div style="font-size: 20px;">🔗</div>
+          <div>
+            <div style="font-weight: 700; font-size: 15px;">Share your plan</div>
+            <div style="font-size: 13px; color: var(--text-dim);">Send a public read-only link to your coach, friends, or training partners.</div>
+          </div>
+        </div>
+        <button class="btn ghost" onclick="openShareModal()" style="width: 100%;">Share plan →</button>
       </div>
     ` : ''}
   `;
@@ -6878,10 +7271,26 @@ function animateShowcase() {
 (async function init() {
   initUpload();
   initReveals();
+
+  // Check if this is a public share URL — /share/{token}
+  const path = window.location.pathname;
+  const shareMatch = path.match(/^\/share\/([a-zA-Z0-9]+)/);
+  if (shareMatch) {
+    const token = shareMatch[1];
+    // Show only the share page, no login required
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    const sharePage = document.getElementById('page-share');
+    if (sharePage) sharePage.classList.add('active');
+    // Hide nav, show clean public layout
+    document.body.classList.add('share-public');
+    await renderPublicShare(token);
+    document.body.classList.remove('app-loading');
+    return;
+  }
+
   const loggedIn = await checkSession();
   if (loggedIn) { showApp(); navigate('dashboard'); }
   else { showLanding(); navigate('landing'); }
-  // Reveal app after session check
   document.body.classList.remove('app-loading');
 })();
 </script>
