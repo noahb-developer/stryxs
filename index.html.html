@@ -228,7 +228,7 @@ body.on-landing #landingNav { display: none !important; }
   padding: 0;
 }
 .hamburger:hover { border-color: var(--accent-border); }
-.hamburger span {
+.hamburger span:not(.hamburger-badge) {
   display: block; width: 16px; height: 2px;
   background: var(--text); border-radius: 2px;
   transition: all 0.25s;
@@ -864,15 +864,17 @@ h1.hero-h .grad {
   animation: badgePulse 2s ease-in-out infinite;
 }
 .hamburger-badge {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #ef4444;
+  position: absolute !important;
+  top: 4px !important;
+  right: 4px !important;
+  width: 8px !important;
+  height: 8px !important;
+  border-radius: 50% !important;
+  background: #ef4444 !important;
   box-shadow: 0 0 0 2px var(--bg), 0 0 12px rgba(239, 68, 68, 0.7);
   animation: badgePulse 2s ease-in-out infinite;
+  transform-origin: center;
+  display: block;
 }
 @keyframes badgePulse {
   0%, 100% { opacity: 1; transform: scale(1); }
@@ -7026,24 +7028,57 @@ async function renderCoachInsights() {
 let _projectionsCache = null;
 let _projectionsCacheTime = 0;
 let _projectionsRenderToken = 0;
-const PROJECTIONS_CACHE_TTL = 60 * 1000; // 1 minute — projections don't change that fast
+let _projectionsInflight = false;
+const PROJECTIONS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes — projections don't change that fast
+
+// Try to restore cache from sessionStorage on page load
+try {
+  const stored = sessionStorage.getItem('stryxs_projections_cache');
+  if (stored) {
+    const parsed = JSON.parse(stored);
+    if (parsed && parsed.time && (Date.now() - parsed.time < PROJECTIONS_CACHE_TTL)) {
+      _projectionsCache = parsed.data;
+      _projectionsCacheTime = parsed.time;
+    }
+  }
+} catch (e) {}
+
+function persistProjectionsCache() {
+  try {
+    sessionStorage.setItem('stryxs_projections_cache', JSON.stringify({
+      data: _projectionsCache,
+      time: _projectionsCacheTime,
+    }));
+  } catch (e) {}
+}
 
 async function renderProjections(forceRefresh = false) {
   if (!state.user) return;
   const container = document.getElementById('projectionsContainer');
   if (!container) return;
 
-  // Token-based race condition guard
-  const myToken = ++_projectionsRenderToken;
-
-  // Use cache if fresh — avoids loading state flicker on tab switch
+  // If cache exists and is fresh, render from cache and DON'T touch network
   const now = Date.now();
-  if (!forceRefresh && _projectionsCache && (now - _projectionsCacheTime < PROJECTIONS_CACHE_TTL)) {
+  const cacheValid = _projectionsCache && (now - _projectionsCacheTime < PROJECTIONS_CACHE_TTL);
+
+  if (!forceRefresh && cacheValid) {
     renderProjectionsFromData(container, _projectionsCache.intake, _projectionsCache.recentWorkouts, _projectionsCache.proj);
     return;
   }
 
-  // Only show loading state if we don't have ANY cached data
+  // If already fetching, just render whatever we have (cache or empty) — don't double-fetch
+  if (_projectionsInflight) {
+    if (_projectionsCache) {
+      renderProjectionsFromData(container, _projectionsCache.intake, _projectionsCache.recentWorkouts, _projectionsCache.proj);
+    }
+    return;
+  }
+
+  // Token-based race condition guard
+  const myToken = ++_projectionsRenderToken;
+  _projectionsInflight = true;
+
+  // ONLY show loading state if we have NO cached data — otherwise keep showing what we have
   if (!_projectionsCache) {
     container.innerHTML = `
       <div class="panel" style="margin-bottom: 20px; opacity: 0.6;">
@@ -7056,15 +7091,20 @@ async function renderProjections(forceRefresh = false) {
       </div>
     `;
   }
+  // If we have cache but it's stale, keep rendering the stale data while we fetch
+  else {
+    renderProjectionsFromData(container, _projectionsCache.intake, _projectionsCache.recentWorkouts, _projectionsCache.proj);
+  }
 
   try {
     // Get intake
     const { data: intake } = await sb.from('athlete_intake')
       .select('*').eq('user_id', state.user.id).single();
-    if (myToken !== _projectionsRenderToken) return; // outdated render
+    if (myToken !== _projectionsRenderToken) { _projectionsInflight = false; return; }
 
     if (!intake || !intake.completed) {
       container.innerHTML = '';
+      _projectionsInflight = false;
       return;
     }
 
@@ -7074,6 +7114,8 @@ async function renderProjections(forceRefresh = false) {
       .eq('user_id', state.user.id)
       .order('created_at', { ascending: false })
       .limit(14);
+
+    if (myToken !== _projectionsRenderToken) { _projectionsInflight = false; return; }
 
     const recentWorkouts = (recentRaw || []).map(w => {
       const wd = w.workout_data || {};
@@ -7089,18 +7131,22 @@ async function renderProjections(forceRefresh = false) {
 
     // Call Coach for projections
     const proj = await callCoach('race_projections', { intake, recentWorkouts });
-    if (myToken !== _projectionsRenderToken) return; // outdated render
+    if (myToken !== _projectionsRenderToken) { _projectionsInflight = false; return; }
 
     // Cache the result
     _projectionsCache = { intake, recentWorkouts, proj };
     _projectionsCacheTime = Date.now();
+    persistProjectionsCache();
 
     renderProjectionsFromData(container, intake, recentWorkouts, proj);
   } catch (err) {
     console.error('Projections render failed:', err);
+    // If we have a cache, keep showing it. Don't blank out.
     if (myToken === _projectionsRenderToken && !_projectionsCache) {
       container.innerHTML = '';
     }
+  } finally {
+    _projectionsInflight = false;
   }
 }
 
