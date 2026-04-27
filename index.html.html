@@ -865,18 +865,24 @@ h1.hero-h .grad {
 }
 .hamburger-badge {
   position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 8px;
-  height: 8px;
+  top: -6px;
+  right: -8px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
-  background: #ef4444;
-  box-shadow: 0 0 0 2px var(--bg), 0 0 12px rgba(239, 68, 68, 0.7);
+  background: var(--accent);
+  border: 2px solid var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  line-height: 1;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.3), 0 2px 8px rgba(0, 255, 163, 0.4);
   animation: badgePulse 2s ease-in-out infinite;
 }
 @keyframes badgePulse {
   0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.7; transform: scale(0.85); }
+  50% { opacity: 0.85; transform: scale(0.92); }
 }
 
 /* Style ALL select elements to match dark theme + custom chevron */
@@ -1001,6 +1007,8 @@ select option {
   top: calc(100% + 6px);
   right: 0;
   min-width: 130px;
+  max-height: min(280px, 50vh);
+  overflow-y: auto;
   background: var(--bg-2);
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -1031,6 +1039,72 @@ select option {
   font-weight: 600;
 }
 .stat-picker-option.selected::after {
+  content: '✓';
+  margin-left: auto;
+  font-size: 12px;
+}
+
+/* Full-width custom select component for Settings (replaces native select to avoid OS-rendered brown dropdowns) */
+.custom-select {
+  position: relative;
+  width: 100%;
+}
+.custom-select-btn {
+  width: 100%;
+  padding: 13px 40px 13px 14px;
+  background-color: var(--bg-3);
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'%3E%3Cpath d='M1 1L6 6L11 1' stroke='%2378819b' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 15px;
+  font-family: inherit;
+  outline: none;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s;
+}
+.custom-select-btn:hover { border-color: var(--border-light); }
+.custom-select-btn.open {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.custom-select-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  max-height: min(280px, 50vh);
+  overflow-y: auto;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 6px;
+  z-index: 80;
+  display: none;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5), 0 0 0 0.5px rgba(0, 255, 163, 0.08);
+}
+.custom-select-menu.open { display: block; }
+.custom-select-option {
+  padding: 10px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text);
+  transition: background 0.12s;
+  display: flex;
+  align-items: center;
+  user-select: none;
+}
+.custom-select-option:hover { background: rgba(255,255,255,0.05); }
+.custom-select-option.selected {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+.custom-select-option.selected::after {
   content: '✓';
   margin-left: auto;
   font-size: 12px;
@@ -3113,7 +3187,7 @@ body.on-auth .container {
   <div class="nav-inner">
     <button class="hamburger" onclick="toggleNavMenu()" aria-label="Open menu" style="position: relative;">
       <span></span><span></span><span></span>
-      <span class="hamburger-badge" id="hamburgerCoachBadge" style="display: none;"></span>
+      <span class="hamburger-badge" id="hamburgerCoachBadge" style="display: none;">🧠</span>
     </button>
     <div class="logo" onclick="navigate('dashboard')">
       <div class="logo-mark"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M17 4L7 13H12L7 20L17 11H12L17 4Z" fill="#070b14" stroke="#070b14" stroke-width="0.5" stroke-linejoin="round"/></svg></div>
@@ -3977,7 +4051,7 @@ function setCoachUnread(hasUnread) {
   const menuBadge = document.getElementById('coachUnreadBadge');
   const hamBadge = document.getElementById('hamburgerCoachBadge');
   if (menuBadge) menuBadge.style.display = hasUnread ? 'block' : 'none';
-  if (hamBadge) hamBadge.style.display = hasUnread ? 'block' : 'none';
+  if (hamBadge) hamBadge.style.display = hasUnread ? 'flex' : 'none';
   try {
     if (hasUnread) localStorage.setItem('stryxs_coach_unread', '1');
     else localStorage.removeItem('stryxs_coach_unread');
@@ -4271,6 +4345,20 @@ function paceToMin(p) {
   return parseInt(parts[0]) + parseFloat(parts[1]) / 60;
 }
 
+// Parse time strings like "00:45:30", "45:30", "1:23:45.6" into seconds
+function parseTimeToSeconds(timeStr) {
+  if (!timeStr || timeStr === 'N/A' || timeStr === '--') return 0;
+  const s = String(timeStr).trim();
+  // Already a number? Assume seconds
+  if (/^\d+(\.\d+)?$/.test(s)) return parseFloat(s);
+  // Split by colons: H:M:S, M:S, or S
+  const parts = s.split(':').map(p => parseFloat(p) || 0);
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  if (parts.length === 2) return parts[0] * 60 + parts[1];
+  if (parts.length === 1) return parts[0];
+  return 0;
+}
+
 function findCol(header, matchers) {
   for (let i = 0; i < header.length; i++) {
     const h = header[i].toLowerCase().replace(/\n/g, ' ');
@@ -4353,6 +4441,7 @@ function parseSwimCSV(text) {
   const swolfIdx = findCol(h, ['swolf']);
   const strokeIdx = findCol(h, ['swim stroke']);
   const distIdx = findCol(h, ['distance']);
+  const timeIdx = findCol(h, ['cumulative time', 'duration', 'total time', 'time']);
   if (hrIdx === -1) return null;
 
   const sets = [];
@@ -4362,9 +4451,10 @@ function parseSwimCSV(text) {
   for (let i = 1; i < rows.length; i++) {
     const r = rows[i]; const label = r[1] || '';
 
-    // Summary row: pull total distance + avgHr
+    // Summary row: pull total distance + avgHr + time
     if (label.toLowerCase() === 'summary') {
       summary = { avgHr: parseInt(r[hrIdx]) || 0 };
+      if (timeIdx >= 0 && r[timeIdx]) summary.time = r[timeIdx];
       // Parse summary distance — format like "1,775" or "1775"
       if (distIdx >= 0) {
         const distStr = (r[distIdx] || '').toString().replace(/,/g, '').trim();
@@ -4498,6 +4588,7 @@ function analyzeRun(data, lthr) {
   return {
     sport: 'run', name: 'Run Analysis', icon: '🏃',
     distance: summary?.distance || 0, time: summary?.time || 'N/A',
+    duration: parseTimeToSeconds(summary?.time || ''),
     avgHr, pct, lthr, type, typeClass: cls,
     zd, drift, first, second, dv, dc,
     cadence: summary?.avgCad || 0,
@@ -4547,6 +4638,7 @@ function analyzeBike(data, lthr) {
   return {
     sport: 'bike', name: 'Bike Analysis', icon: '🚴',
     distance: summary?.distance || 0, time: summary?.time || 'N/A',
+    duration: parseTimeToSeconds(summary?.time || ''),
     avgHr, avgSpeed, pct, lthr, type, typeClass: cls,
     zd, drift, first, second, dv, dc, projection, coach, insights,
     date: new Date().toISOString(),
@@ -4583,6 +4675,8 @@ function analyzeSwim(data) {
     sport: 'swim', name: 'Swim Analysis', icon: '🏊',
     sets, avgHr, drift, dv, dc, swolfInfo, coach, insights,
     distance: data.totalMeters ? data.totalMeters / 1000 : 0,
+    time: data.summary?.time || 'N/A',
+    duration: parseTimeToSeconds(data.summary?.time || ''),
     date: new Date().toISOString(),
   };
 }
@@ -4978,7 +5072,15 @@ async function renderDashboard() {
       if (!sportGroups[key]) sportGroups[key] = { count: 0, distance: 0, hours: 0 };
       sportGroups[key].count++;
       sportGroups[key].distance += parseFloat(w.distance) || 0;
-      sportGroups[key].hours += (parseFloat(w.duration) || 0) / 3600;
+      // Compute hours: try duration (sec) first, fall back to time string
+      let secs = 0;
+      if (w.duration) {
+        const d = parseFloat(w.duration) || 0;
+        secs = d > 600 ? d : d * 60; // if duration is small, it's already in minutes
+      } else if (w.time && w.time !== 'N/A') {
+        secs = parseTimeToSeconds(w.time);
+      }
+      sportGroups[key].hours += secs / 3600;
     });
 
     const order = ['run', 'bike', 'swim', 'strength', 'other'];
@@ -5007,6 +5109,80 @@ async function renderDashboard() {
     document.getElementById('recentCount').textContent = `${state.workouts.length} total`;
   }
 }
+
+// Custom full-width select component (avoids native OS-rendered dropdowns)
+// Usage in template: ${renderCustomSelect('settingsUnits', currentValue, [{value: 'metric', label: 'Metric'}, ...])}
+function renderCustomSelect(id, current, options) {
+  const sel = options.find(o => o.value === current) || options[0];
+  return `
+    <div class="custom-select" data-select-id="${id}">
+      <input type="hidden" id="${id}" value="${current || ''}">
+      <button type="button" class="custom-select-btn" onclick="toggleCustomSelect(event, '${id}')">
+        ${sel ? sel.label : '— Select —'}
+      </button>
+      <div class="custom-select-menu" id="cs-menu-${id}">
+        ${options.map(opt => `
+          <div class="custom-select-option ${opt.value === current ? 'selected' : ''}" data-value="${String(opt.value).replace(/"/g, '&quot;')}" onclick="pickCustomSelect('${id}', this)">
+            ${opt.label}
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function toggleCustomSelect(event, id) {
+  event.stopPropagation();
+  const menu = document.getElementById('cs-menu-' + id);
+  const btn = event.currentTarget;
+  if (!menu) return;
+  const wasOpen = menu.classList.contains('open');
+  closeAllCustomSelects();
+  if (!wasOpen) {
+    menu.classList.add('open');
+    btn.classList.add('open');
+
+    // Smart positioning — flip up if not enough room below
+    requestAnimationFrame(() => {
+      const btnRect = btn.getBoundingClientRect();
+      const menuRect = menu.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - btnRect.bottom;
+      if (spaceBelow < menuRect.height + 12 && btnRect.top > menuRect.height + 12) {
+        menu.style.top = 'auto';
+        menu.style.bottom = 'calc(100% + 6px)';
+      }
+    });
+  }
+}
+
+function pickCustomSelect(id, optionEl) {
+  const hidden = document.getElementById(id);
+  const wrap = document.querySelector(`[data-select-id="${id}"]`);
+  if (!wrap || !hidden) return;
+  const value = optionEl.dataset.value;
+  const label = optionEl.textContent.trim();
+  hidden.value = value;
+  wrap.querySelector('.custom-select-btn').textContent = label;
+  wrap.querySelectorAll('.custom-select-option').forEach(o => o.classList.remove('selected'));
+  optionEl.classList.add('selected');
+  closeAllCustomSelects();
+  // Fire a change event so existing listeners (like units toggle) still work
+  hidden.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+function closeAllCustomSelects() {
+  document.querySelectorAll('.custom-select-menu.open').forEach(m => {
+    m.classList.remove('open');
+    m.style.top = '';
+    m.style.bottom = '';
+  });
+  document.querySelectorAll('.custom-select-btn.open').forEach(b => b.classList.remove('open'));
+}
+
+// Close custom selects when clicking outside
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.custom-select')) closeAllCustomSelects();
+});
 
 // Reusable mini-dropdown picker for stat cards
 // Usage: renderStatPicker('uniqueId', currentValue, options, onChangeFnName)
@@ -5056,11 +5232,43 @@ function toggleStatPicker(event, id) {
   if (!wasOpen) {
     menu.classList.add('open');
     btn.classList.add('open');
+
+    // Smart positioning — flip upward if not enough room below
+    requestAnimationFrame(() => {
+      const btnRect = btn.getBoundingClientRect();
+      const menuRect = menu.getBoundingClientRect();
+      const viewportHeight = window.innerHeight;
+      const spaceBelow = viewportHeight - btnRect.bottom;
+      const spaceAbove = btnRect.top;
+
+      if (spaceBelow < menuRect.height + 12 && spaceAbove > menuRect.height + 12) {
+        // Flip upward
+        menu.style.top = 'auto';
+        menu.style.bottom = 'calc(100% + 6px)';
+      } else {
+        menu.style.top = 'calc(100% + 6px)';
+        menu.style.bottom = 'auto';
+      }
+
+      // Make sure it's not cut off horizontally — check right edge
+      const menuRightEdge = btnRect.right;
+      if (menuRightEdge > window.innerWidth - 12) {
+        menu.style.right = '0';
+        menu.style.left = 'auto';
+      }
+    });
   }
 }
 
 function closeStatPickers() {
-  document.querySelectorAll('.stat-picker-menu.open').forEach(m => m.classList.remove('open'));
+  document.querySelectorAll('.stat-picker-menu.open').forEach(m => {
+    m.classList.remove('open');
+    // Reset positioning so next open recalculates
+    m.style.top = '';
+    m.style.bottom = '';
+    m.style.left = '';
+    m.style.right = '';
+  });
   document.querySelectorAll('.stat-picker-btn.open').forEach(b => b.classList.remove('open'));
 }
 
@@ -5226,27 +5434,38 @@ function renderTrends() {
 
   el.innerHTML = `
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px;" class="trends-row">
-      <div class="panel" style="padding: 16px;">
-        <div class="panel-header" style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: flex-start;">
+      <div class="panel" style="padding: 18px;">
+        <div class="panel-header" style="margin-bottom: 14px;">
           <div style="flex: 1; min-width: 0;">
             <div class="panel-title" style="font-size: 14px;">Training Mix</div>
             <div class="panel-sub" style="font-size: 11px;">Last ${recent.length} workouts</div>
           </div>
         </div>
-        <div style="display: flex; flex-direction: column; align-items: center; gap: 12px;">
+        <div style="display: flex; align-items: center; gap: 16px;">
           ${renderSportDonut(sportCounts, totalS)}
-          <div class="donut-legend" style="width: 100%;">
-            ${sportCounts.run > 0 ? `<div class="legend-row" style="padding: 4px 0;"><div class="legend-label" style="font-size: 12px;"><div class="legend-dot" style="background:#3b82f6;"></div>Run</div><div class="legend-value" style="font-size: 13px;">${sportCounts.run}</div></div>` : ''}
-            ${sportCounts.bike > 0 ? `<div class="legend-row" style="padding: 4px 0;"><div class="legend-label" style="font-size: 12px;"><div class="legend-dot" style="background:#f97316;"></div>Bike</div><div class="legend-value" style="font-size: 13px;">${sportCounts.bike}</div></div>` : ''}
-            ${sportCounts.swim > 0 ? `<div class="legend-row" style="padding: 4px 0;"><div class="legend-label" style="font-size: 12px;"><div class="legend-dot" style="background:#22c55e;"></div>Swim</div><div class="legend-value" style="font-size: 13px;">${sportCounts.swim}</div></div>` : ''}
-            ${sportCounts.strength > 0 ? `<div class="legend-row" style="padding: 4px 0;"><div class="legend-label" style="font-size: 12px;"><div class="legend-dot" style="background:#a78bfa;"></div>Gym</div><div class="legend-value" style="font-size: 13px;">${sportCounts.strength}</div></div>` : ''}
-            ${sportCounts.other > 0 ? `<div class="legend-row" style="padding: 4px 0;"><div class="legend-label" style="font-size: 12px;"><div class="legend-dot" style="background:#94a3b8;"></div>Other</div><div class="legend-value" style="font-size: 13px;">${sportCounts.other}</div></div>` : ''}
+          <div class="donut-legend" style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px;">
+            ${sportCounts.run > 0 ? `<div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-dim);"><div style="width: 10px; height: 10px; border-radius: 3px; background:#3b82f6; flex-shrink: 0;"></div><span>Run</span><span style="margin-left: auto; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums;">${sportCounts.run}</span></div>` : ''}
+            ${sportCounts.bike > 0 ? `<div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-dim);"><div style="width: 10px; height: 10px; border-radius: 3px; background:#f97316; flex-shrink: 0;"></div><span>Bike</span><span style="margin-left: auto; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums;">${sportCounts.bike}</span></div>` : ''}
+            ${sportCounts.swim > 0 ? `<div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-dim);"><div style="width: 10px; height: 10px; border-radius: 3px; background:#22c55e; flex-shrink: 0;"></div><span>Swim</span><span style="margin-left: auto; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums;">${sportCounts.swim}</span></div>` : ''}
+            ${sportCounts.strength > 0 ? `<div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-dim);"><div style="width: 10px; height: 10px; border-radius: 3px; background:#a78bfa; flex-shrink: 0;"></div><span>Gym</span><span style="margin-left: auto; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums;">${sportCounts.strength}</span></div>` : ''}
+            ${sportCounts.other > 0 ? `<div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-dim);"><div style="width: 10px; height: 10px; border-radius: 3px; background:#94a3b8; flex-shrink: 0;"></div><span>Other</span><span style="margin-left: auto; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums;">${sportCounts.other}</span></div>` : ''}
           </div>
         </div>
+        ${(() => {
+          // Add a small caption below showing dominant sport
+          if (totalS === 0) return '';
+          const sortedSports = ['run', 'bike', 'swim', 'strength', 'other']
+            .filter(s => sportCounts[s] > 0)
+            .sort((a, b) => sportCounts[b] - sportCounts[a]);
+          const top = sortedSports[0];
+          const topPct = Math.round((sportCounts[top] / totalS) * 100);
+          const sportLabels = { run: 'running', bike: 'cycling', swim: 'swimming', strength: 'gym', other: 'other' };
+          return `<div style="margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); font-size: 11px; color: var(--text-mute);">${topPct}% of recent training is ${sportLabels[top]}</div>`;
+        })()}
       </div>
 
-      <div class="panel" style="padding: 16px;">
-        <div class="panel-header" style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: flex-start; gap: 6px;">
+      <div class="panel" style="padding: 18px;">
+        <div class="panel-header" style="margin-bottom: 14px; gap: 6px;">
           <div style="flex: 1; min-width: 0;">
             <div class="panel-title" style="font-size: 14px;">Cardiac Drift</div>
             <div class="panel-sub" style="font-size: 11px;">Aerobic fitness</div>
@@ -5254,22 +5473,39 @@ function renderTrends() {
           ${renderStatPicker('trendsDrift', state.trendsDriftSport, ['overall', 'run', 'bike', 'swim'], 'setTrendsDriftSport')}
         </div>
         ${avgDrift !== null ? `
-          <div style="display: flex; flex-direction: column; align-items: flex-start; padding-top: 14px;">
-            <div style="font-size: 36px; font-weight: 800; letter-spacing: -1.2px; font-family: 'JetBrains Mono', monospace; line-height: 1;">${avgDrift.toFixed(1)}%</div>
-            <div class="verdict ${avgDrift < 5 ? 'good' : avgDrift < 8 ? 'ok' : 'bad'}" style="display: inline-flex; margin-top: 12px; font-size: 11px;">
-              <span class="verdict-icon">${avgDrift < 5 ? '✓' : avgDrift < 8 ? '!' : '✕'}</span>
-              ${avgDrift < 5 ? 'Strong aerobic' : avgDrift < 8 ? 'Building' : 'Needs work'}
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            <div style="display: flex; align-items: baseline; gap: 8px;">
+              <div style="font-size: 38px; font-weight: 800; letter-spacing: -1.2px; font-family: 'JetBrains Mono', monospace; line-height: 1;">${avgDrift.toFixed(1)}<span style="font-size: 18px; color: var(--text-dim);">%</span></div>
             </div>
-            <div style="font-size: 11px; color: var(--text-mute); margin-top: 10px;">${driftSet.length} workout${driftSet.length === 1 ? '' : 's'}</div>
+            <div class="verdict ${avgDrift < 5 ? 'good' : avgDrift < 8 ? 'ok' : 'bad'}" style="display: inline-flex; align-self: flex-start; font-size: 11px;">
+              <span class="verdict-icon">${avgDrift < 5 ? '✓' : avgDrift < 8 ? '!' : '✕'}</span>
+              ${avgDrift < 5 ? 'Strong aerobic base' : avgDrift < 8 ? 'Building aerobic' : 'Needs work'}
+            </div>
+            ${(() => {
+              // Mini visual scale showing drift on a bar
+              const driftPct = Math.min(100, Math.max(0, (avgDrift / 12) * 100));
+              return `
+                <div style="margin-top: 4px;">
+                  <div style="position: relative; height: 6px; border-radius: 3px; overflow: hidden; background: var(--bg); margin-bottom: 6px;">
+                    <div style="position: absolute; inset: 0; width: ${driftPct}%; background: linear-gradient(90deg, #4ade80 0%, #facc15 50%, #ef4444 100%); border-radius: 3px;"></div>
+                    <div style="position: absolute; left: ${driftPct}%; top: -3px; width: 2px; height: 12px; background: var(--text); border-radius: 1px;"></div>
+                  </div>
+                  <div style="display: flex; justify-content: space-between; font-size: 10px; color: var(--text-mute); font-weight: 600;">
+                    <span>Strong</span><span>OK</span><span>Poor</span>
+                  </div>
+                </div>
+              `;
+            })()}
+            <div style="font-size: 11px; color: var(--text-mute); padding-top: 10px; border-top: 1px solid var(--border);">Based on ${driftSet.length} ${state.trendsDriftSport === 'overall' ? '' : state.trendsDriftSport + ' '}workout${driftSet.length === 1 ? '' : 's'}</div>
           </div>
         ` : `
-          <div style="font-size: 12px; color: var(--text-dim); padding: 14px 0;">No drift data yet.</div>
+          <div style="font-size: 12px; color: var(--text-dim); padding: 14px 0;">No drift data for ${state.trendsDriftSport === 'overall' ? 'any sport yet' : state.trendsDriftSport} yet.</div>
         `}
       </div>
     </div>
 
-    <div class="panel" style="padding: 16px;">
-      <div class="panel-header" style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: flex-start;">
+    <div class="panel" style="padding: 18px;">
+      <div class="panel-header" style="margin-bottom: 14px;">
         <div style="flex: 1; min-width: 0;">
           <div class="panel-title" style="font-size: 14px;">Intensity Distribution</div>
           <div class="panel-sub" style="font-size: 11px;">Elite athletes train ~80% easy</div>
@@ -6743,27 +6979,47 @@ async function renderCoachInsights() {
 }
 
 // ─── Race Projections Panel ───
-async function renderProjections() {
+// Cache for Race Projections to prevent flickering between dashboard renders
+let _projectionsCache = null;
+let _projectionsCacheTime = 0;
+let _projectionsRenderToken = 0;
+const PROJECTIONS_CACHE_TTL = 60 * 1000; // 1 minute — projections don't change that fast
+
+async function renderProjections(forceRefresh = false) {
   if (!state.user) return;
   const container = document.getElementById('projectionsContainer');
   if (!container) return;
 
-  // Show loading state
-  container.innerHTML = `
-    <div class="panel" style="margin-bottom: 20px; opacity: 0.6;">
-      <div class="panel-header">
-        <div>
-          <div class="panel-title">🎯 Race Projections</div>
-          <div class="panel-sub">Calculating predicted times from your training...</div>
+  // Token-based race condition guard
+  const myToken = ++_projectionsRenderToken;
+
+  // Use cache if fresh — avoids loading state flicker on tab switch
+  const now = Date.now();
+  if (!forceRefresh && _projectionsCache && (now - _projectionsCacheTime < PROJECTIONS_CACHE_TTL)) {
+    renderProjectionsFromData(container, _projectionsCache.intake, _projectionsCache.recentWorkouts, _projectionsCache.proj);
+    return;
+  }
+
+  // Only show loading state if we don't have ANY cached data
+  if (!_projectionsCache) {
+    container.innerHTML = `
+      <div class="panel" style="margin-bottom: 20px; opacity: 0.6;">
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">🎯 Race Projections</div>
+            <div class="panel-sub">Calculating predicted times from your training...</div>
+          </div>
         </div>
       </div>
-    </div>
-  `;
+    `;
+  }
 
   try {
     // Get intake
     const { data: intake } = await sb.from('athlete_intake')
       .select('*').eq('user_id', state.user.id).single();
+    if (myToken !== _projectionsRenderToken) return; // outdated render
+
     if (!intake || !intake.completed) {
       container.innerHTML = '';
       return;
@@ -6790,99 +7046,111 @@ async function renderProjections() {
 
     // Call Coach for projections
     const proj = await callCoach('race_projections', { intake, recentWorkouts });
-    if (!proj) {
+    if (myToken !== _projectionsRenderToken) return; // outdated render
+
+    // Cache the result
+    _projectionsCache = { intake, recentWorkouts, proj };
+    _projectionsCacheTime = Date.now();
+
+    renderProjectionsFromData(container, intake, recentWorkouts, proj);
+  } catch (err) {
+    console.error('Projections render failed:', err);
+    if (myToken === _projectionsRenderToken && !_projectionsCache) {
       container.innerHTML = '';
-      return;
     }
+  }
+}
 
-    if (proj.data_sufficiency === 'low' || !proj.primary_projection) {
-      const TARGET_WORKOUTS = 8;
-      const haveWorkouts = recentWorkouts.length;
-      const needed = Math.max(0, TARGET_WORKOUTS - haveWorkouts);
-      const hasPb = !!(intake.pb_5k || intake.pb_10k || intake.pb_half || intake.pb_marathon || intake.last_race);
+function renderProjectionsFromData(container, intake, recentWorkouts, proj) {
+  if (!proj) {
+    container.innerHTML = '';
+    return;
+  }
 
-      container.innerHTML = `
-        <div class="panel" style="margin-bottom: 20px; border-color: rgba(255, 209, 102, 0.2); background: rgba(255, 209, 102, 0.04);">
-          <div class="panel-header">
-            <div>
-              <div class="panel-title">🎯 Race Projections</div>
-              <div class="panel-sub">Available after ${needed > 0 ? needed : 'a few more'} more ${needed === 1 ? 'workout' : 'workouts'} of consistent training</div>
-            </div>
-          </div>
-          <div style="display: flex; flex-direction: column; gap: 10px; font-size: 13px; color: var(--text-dim); line-height: 1.55;">
-            <div style="display: flex; align-items: center; gap: 10px;">
-              <span style="font-size: 16px;">${haveWorkouts >= TARGET_WORKOUTS ? '✓' : '⏳'}</span>
-              <span>${haveWorkouts}/${TARGET_WORKOUTS} workouts uploaded ${haveWorkouts >= TARGET_WORKOUTS ? '' : `<span style="color: var(--text-mute);">(${needed} more needed)</span>`}</span>
-            </div>
-            <div style="display: flex; align-items: center; gap: 10px;">
-              <span style="font-size: 16px;">${hasPb ? '✓' : '○'}</span>
-              <span>${hasPb ? 'PB/race result on file' : 'Add a recent PB or race time'} ${!hasPb ? '<a style="color: var(--accent); cursor: pointer; text-decoration: underline; margin-left: 6px;" onclick="navigate(\'settings\')">in Settings</a>' : ''}</span>
-            </div>
-          </div>
-        </div>
-      `;
-      return;
-    }
-
-    const primary = proj.primary_projection;
-    const secondaries = proj.secondary_projections || [];
-    const paces = proj.training_paces || {};
-
-    const confColor = { low: '#fb923c', medium: '#facc15', high: '#4ade80' }[primary.confidence] || '#facc15';
+  if (proj.data_sufficiency === 'low' || !proj.primary_projection) {
+    const TARGET_WORKOUTS = 8;
+    const haveWorkouts = recentWorkouts.length;
+    const needed = Math.max(0, TARGET_WORKOUTS - haveWorkouts);
+    const hasPb = !!(intake.pb_5k || intake.pb_10k || intake.pb_half || intake.pb_marathon || intake.last_race);
 
     container.innerHTML = `
-      <div class="panel" style="margin-bottom: 20px;">
+      <div class="panel" style="margin-bottom: 20px; border-color: rgba(255, 209, 102, 0.2); background: rgba(255, 209, 102, 0.04);">
         <div class="panel-header">
           <div>
             <div class="panel-title">🎯 Race Projections</div>
-            <div class="panel-sub">Predicted times based on your training</div>
+            <div class="panel-sub">Available after ${needed > 0 ? needed : 'a few more'} more ${needed === 1 ? 'workout' : 'workouts'} of consistent training</div>
           </div>
         </div>
-
-        <div style="background: linear-gradient(135deg, rgba(0, 255, 163, 0.1), rgba(80, 130, 255, 0.05)); border: 1px solid rgba(0, 255, 163, 0.25); border-radius: 14px; padding: 22px; margin-bottom: 18px; position: relative;">
-          <div style="font-size: 11px; color: var(--accent); text-transform: uppercase; letter-spacing: 2px; font-weight: 600; margin-bottom: 8px;">Primary projection</div>
-          <div style="font-size: 14px; color: var(--text-dim); margin-bottom: 8px;">${primary.event}</div>
-          <div style="font-size: 36px; font-weight: 800; color: var(--text); font-family: 'JetBrains Mono', monospace; line-height: 1; margin-bottom: 12px; letter-spacing: -1px;">${primary.predicted_time}</div>
-          <div style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: ${confColor}22; border: 1px solid ${confColor}55; border-radius: 6px; font-size: 11px; color: ${confColor}; text-transform: uppercase; letter-spacing: 1px; font-weight: 600;">
-            <span style="width: 6px; height: 6px; border-radius: 50%; background: ${confColor};"></span>
-            ${primary.confidence} confidence
+        <div style="display: flex; flex-direction: column; gap: 10px; font-size: 13px; color: var(--text-dim); line-height: 1.55;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 16px;">${haveWorkouts >= TARGET_WORKOUTS ? '✓' : '⏳'}</span>
+            <span>${haveWorkouts}/${TARGET_WORKOUTS} workouts uploaded ${haveWorkouts >= TARGET_WORKOUTS ? '' : `<span style="color: var(--text-mute);">(${needed} more needed)</span>`}</span>
           </div>
-          ${primary.reasoning ? `<div style="font-size: 13px; color: var(--text-dim); line-height: 1.55; margin-top: 14px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.06);">${primary.reasoning}</div>` : ''}
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 16px;">${hasPb ? '✓' : '○'}</span>
+            <span>${hasPb ? 'PB/race result on file' : 'Add a recent PB or race time'} ${!hasPb ? '<a style="color: var(--accent); cursor: pointer; text-decoration: underline; margin-left: 6px;" onclick="navigate(\'settings\')">in Settings</a>' : ''}</span>
+          </div>
         </div>
-
-        ${secondaries.length > 0 ? `
-          <div style="margin-bottom: 18px;">
-            <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; margin-bottom: 10px;">Other distances</div>
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px;">
-              ${secondaries.map(s => `
-                <div style="background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; padding: 12px;">
-                  <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 4px;">${s.distance}</div>
-                  <div style="font-size: 18px; font-weight: 700; color: var(--text); font-family: 'JetBrains Mono', monospace;">${s.time}</div>
-                </div>
-              `).join('')}
-            </div>
-          </div>
-        ` : ''}
-
-        ${paces && Object.keys(paces).length > 0 ? `
-          <div>
-            <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; margin-bottom: 10px;">Training paces</div>
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; font-size: 13px;">
-              ${Object.entries(paces).map(([key, val]) => val ? `
-                <div style="display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; background: var(--bg-3); border-radius: 8px;">
-                  <span style="font-size: 11px; color: var(--text-dim); text-transform: capitalize;">${key.replace(/_/g, ' ')}</span>
-                  <strong style="font-family: 'JetBrains Mono', monospace; color: var(--text);">${val}</strong>
-                </div>
-              ` : '').join('')}
-            </div>
-          </div>
-        ` : ''}
       </div>
     `;
-  } catch (err) {
-    console.error('Projections render failed:', err);
-    container.innerHTML = '';
+    return;
   }
+
+  const primary = proj.primary_projection;
+  const secondaries = proj.secondary_projections || [];
+  const paces = proj.training_paces || {};
+
+  const confColor = { low: '#fb923c', medium: '#facc15', high: '#4ade80' }[primary.confidence] || '#facc15';
+
+  container.innerHTML = `
+    <div class="panel" style="margin-bottom: 20px;">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">🎯 Race Projections</div>
+          <div class="panel-sub">Predicted times based on your training</div>
+        </div>
+      </div>
+
+      <div style="background: linear-gradient(135deg, rgba(0, 255, 163, 0.1), rgba(80, 130, 255, 0.05)); border: 1px solid rgba(0, 255, 163, 0.25); border-radius: 14px; padding: 22px; margin-bottom: 18px; position: relative;">
+        <div style="font-size: 11px; color: var(--accent); text-transform: uppercase; letter-spacing: 2px; font-weight: 600; margin-bottom: 8px;">Primary projection</div>
+        <div style="font-size: 14px; color: var(--text-dim); margin-bottom: 8px;">${primary.event}</div>
+        <div style="font-size: 36px; font-weight: 800; color: var(--text); font-family: 'JetBrains Mono', monospace; line-height: 1; margin-bottom: 12px; letter-spacing: -1px;">${primary.predicted_time}</div>
+        <div style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: ${confColor}22; border: 1px solid ${confColor}55; border-radius: 6px; font-size: 11px; color: ${confColor}; text-transform: uppercase; letter-spacing: 1px; font-weight: 600;">
+          <span style="width: 6px; height: 6px; border-radius: 50%; background: ${confColor};"></span>
+          ${primary.confidence} confidence
+        </div>
+        ${primary.reasoning ? `<div style="font-size: 13px; color: var(--text-dim); line-height: 1.55; margin-top: 14px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.06);">${primary.reasoning}</div>` : ''}
+      </div>
+
+      ${secondaries.length > 0 ? `
+        <div style="margin-bottom: 18px;">
+          <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; margin-bottom: 10px;">Other distances</div>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px;">
+            ${secondaries.map(s => `
+              <div style="background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; padding: 12px;">
+                <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 4px;">${s.distance}</div>
+                <div style="font-size: 18px; font-weight: 700; color: var(--text); font-family: 'JetBrains Mono', monospace;">${s.time}</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      ` : ''}
+
+      ${paces && Object.keys(paces).length > 0 ? `
+        <div>
+          <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; margin-bottom: 10px;">Training paces</div>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; font-size: 13px;">
+            ${Object.entries(paces).map(([key, val]) => val ? `
+              <div style="display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; background: var(--bg-3); border-radius: 8px;">
+                <span style="font-size: 11px; color: var(--text-dim); text-transform: capitalize;">${key.replace(/_/g, ' ')}</span>
+                <strong style="font-family: 'JetBrains Mono', monospace; color: var(--text);">${val}</strong>
+              </div>
+            ` : '').join('')}
+          </div>
+        </div>
+      ` : ''}
+    </div>
+  `;
 }
 
 // ─── Streaks + Progress Tracking ───
@@ -6915,17 +7183,23 @@ async function renderProgress() {
   // Helper to extract duration in MINUTES from workout_data (handles seconds, minutes, or string formats)
   const extractMinutes = (wd) => {
     if (!wd) return 0;
-    // Try duration_minutes first
+    // Try duration_minutes first (already in minutes)
     if (wd.duration_minutes) return parseFloat(wd.duration_minutes) || 0;
-    // Then try duration (could be seconds or minutes depending on source)
+    // duration field — could be seconds (from analyze functions) or minutes (older format)
     if (wd.duration) {
       const d = parseFloat(wd.duration) || 0;
-      // If duration is > 600 it's almost certainly in seconds (>10hr would be unusual in minutes)
+      // If duration is > 600 it's almost certainly in seconds
       if (d > 600) return d / 60;
       return d;
     }
+    // Try the human-readable time string (e.g. "00:45:30")
+    if (wd.time && wd.time !== 'N/A' && wd.time !== '--') {
+      const secs = parseTimeToSeconds(wd.time);
+      if (secs > 0) return secs / 60;
+    }
     if (wd.totalTimerTime) return parseFloat(wd.totalTimerTime) / 60; // Garmin seconds
     if (wd.elapsed_time) return parseFloat(wd.elapsed_time) / 60;
+    if (wd.moving_time) return parseFloat(wd.moving_time) / 60;
     return 0;
   };
 
@@ -8060,19 +8334,18 @@ async function renderSettings() {
         <div class="settings-section-inner">
       <div class="field">
         <label>Units</label>
-        <select id="settingsUnits">
-          <option value="metric" ${!isImperial ? 'selected' : ''}>Metric (kg, cm, km)</option>
-          <option value="imperial" ${isImperial ? 'selected' : ''}>Imperial (lbs, ft/in, mi)</option>
-        </select>
+        ${renderCustomSelect('settingsUnits', isImperial ? 'imperial' : 'metric', [
+          { value: 'metric', label: 'Metric (kg, cm, km)' },
+          { value: 'imperial', label: 'Imperial (lbs, ft/in, mi)' },
+        ])}
       </div>
       <div class="field">
         <label>Sex</label>
-        <select id="settingsSex">
-          <option value="" ${!intake?.sex ? 'selected' : ''}>Prefer not to say</option>
-          <option value="male" ${intake?.sex === 'male' ? 'selected' : ''}>Male</option>
-          <option value="female" ${intake?.sex === 'female' ? 'selected' : ''}>Female</option>
-          <option value="prefer_not" ${intake?.sex === 'prefer_not' ? 'selected' : ''}>Prefer not to say</option>
-        </select>
+        ${renderCustomSelect('settingsSex', intake?.sex || '', [
+          { value: '', label: 'Prefer not to say' },
+          { value: 'male', label: 'Male' },
+          { value: 'female', label: 'Female' },
+        ])}
       </div>
       <div class="field">
         <label>Age</label>
@@ -8119,16 +8392,16 @@ async function renderSettings() {
         <div class="settings-section-inner">
       <div class="field">
         <label>Primary goal</label>
-        <select id="settingsGoal">
-          <option value="general" ${intake?.goal_event === 'general' ? 'selected' : ''}>General Fitness</option>
-          <option value="5k" ${intake?.goal_event === '5k' ? 'selected' : ''}>5K</option>
-          <option value="10k" ${intake?.goal_event === '10k' ? 'selected' : ''}>10K</option>
-          <option value="half_marathon" ${intake?.goal_event === 'half_marathon' ? 'selected' : ''}>Half Marathon</option>
-          <option value="marathon" ${intake?.goal_event === 'marathon' ? 'selected' : ''}>Marathon</option>
-          <option value="olympic_tri" ${intake?.goal_event === 'olympic_tri' ? 'selected' : ''}>Olympic Triathlon</option>
-          <option value="70_3" ${intake?.goal_event === '70_3' ? 'selected' : ''}>70.3 / Half Ironman</option>
-          <option value="ironman" ${intake?.goal_event === 'ironman' ? 'selected' : ''}>Ironman</option>
-        </select>
+        ${renderCustomSelect('settingsGoal', intake?.goal_event || 'general', [
+          { value: 'general', label: 'General Fitness' },
+          { value: '5k', label: '5K' },
+          { value: '10k', label: '10K' },
+          { value: 'half_marathon', label: 'Half Marathon' },
+          { value: 'marathon', label: 'Marathon' },
+          { value: 'olympic_tri', label: 'Olympic Triathlon' },
+          { value: '70_3', label: '70.3 / Half Ironman' },
+          { value: 'ironman', label: 'Ironman' },
+        ])}
       </div>
       <div class="field">
         <label>Race date</label>
@@ -8136,11 +8409,11 @@ async function renderSettings() {
       </div>
       <div class="field">
         <label>Experience level</label>
-        <select id="settingsExperience">
-          <option value="beginner" ${intake?.experience_level === 'beginner' ? 'selected' : ''}>Beginner (under 1 year)</option>
-          <option value="intermediate" ${intake?.experience_level === 'intermediate' ? 'selected' : ''}>Intermediate (1-3 years)</option>
-          <option value="advanced" ${intake?.experience_level === 'advanced' ? 'selected' : ''}>Advanced (3+ years)</option>
-        </select>
+        ${renderCustomSelect('settingsExperience', intake?.experience_level || 'intermediate', [
+          { value: 'beginner', label: 'Beginner (under 1 year)' },
+          { value: 'intermediate', label: 'Intermediate (1-3 years)' },
+          { value: 'advanced', label: 'Advanced (3+ years)' },
+        ])}
       </div>
       <div class="field">
         <label>Weekly hours available</label>
