@@ -7262,9 +7262,21 @@ async function renderProjections(forceRefresh = false) {
     renderProjectionsFromData(container, intake, recentWorkouts, proj);
   } catch (err) {
     console.error('Projections render failed:', err);
-    // If we have a cache, keep showing it. Don't blank out.
     if (myToken === _projectionsRenderToken && !_projectionsCache) {
-      container.innerHTML = '';
+      // Show error state with retry instead of blanking out
+      container.innerHTML = `
+        <div class="panel" style="margin-bottom: 20px; border-color: rgba(239, 68, 68, 0.2); background: rgba(239, 68, 68, 0.04);">
+          <div class="panel-header">
+            <div>
+              <div class="panel-title">🎯 Race Projections</div>
+              <div class="panel-sub">Couldn't generate projections right now</div>
+            </div>
+          </div>
+          <div style="font-size: 13px; color: var(--text-dim); line-height: 1.55;">
+            ${err.message || 'Coach unavailable.'} <a style="color: var(--accent); cursor: pointer; text-decoration: underline; margin-left: 6px;" onclick="forceRefreshProjections()">Try again →</a>
+          </div>
+        </div>
+      `;
     }
   } finally {
     _projectionsInflight = false;
@@ -7272,9 +7284,9 @@ async function renderProjections(forceRefresh = false) {
 }
 
 function renderProjectionsFromData(container, intake, recentWorkouts, proj) {
+  // If no proj at all, render the low-data state with clear messaging
   if (!proj) {
-    container.innerHTML = '';
-    return;
+    proj = { data_sufficiency: 'low', primary_projection: null };
   }
 
   if (proj.data_sufficiency === 'low' || !proj.primary_projection) {
