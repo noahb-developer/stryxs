@@ -852,6 +852,135 @@ h1.hero-h .grad {
 .field input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .field input::placeholder { color: var(--text-mute); }
 
+/* Onboarding welcome modal */
+.onb-overlay {
+  position: fixed; inset: 0;
+  background: rgba(7, 11, 20, 0.85);
+  backdrop-filter: blur(12px);
+  z-index: 9998;
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+  animation: onbFadeIn 0.3s ease;
+}
+@keyframes onbFadeIn { from { opacity: 0; } to { opacity: 1; } }
+.onb-modal {
+  background: var(--bg-2);
+  border: 1px solid var(--border-light);
+  border-radius: 18px;
+  max-width: 520px;
+  width: 100%;
+  padding: 32px;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(0, 255, 163, 0.06);
+  position: relative;
+  animation: onbScaleIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes onbScaleIn {
+  from { opacity: 0; transform: scale(0.92) translateY(8px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+.onb-emoji {
+  font-size: 48px; margin-bottom: 16px;
+  filter: drop-shadow(0 4px 16px rgba(0, 255, 163, 0.25));
+}
+.onb-title {
+  font-size: 26px; font-weight: 800;
+  letter-spacing: -0.6px;
+  line-height: 1.15;
+  margin-bottom: 10px;
+}
+.onb-sub {
+  font-size: 14px; color: var(--text-dim);
+  line-height: 1.6;
+  margin-bottom: 24px;
+}
+.onb-checklist {
+  display: flex; flex-direction: column;
+  gap: 10px; margin-bottom: 24px;
+}
+.onb-step {
+  display: flex; align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  transition: all 0.2s;
+}
+.onb-step.complete {
+  background: rgba(0, 255, 163, 0.04);
+  border-color: rgba(0, 255, 163, 0.2);
+}
+.onb-step-num {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700; color: var(--text-dim);
+  flex-shrink: 0;
+}
+.onb-step.complete .onb-step-num {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+}
+.onb-step-content { flex: 1; min-width: 0; }
+.onb-step-title { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 2px; }
+.onb-step-desc { font-size: 12px; color: var(--text-dim); line-height: 1.5; }
+.onb-step.complete .onb-step-title { color: var(--accent); }
+.onb-actions {
+  display: flex; gap: 10px; flex-wrap: wrap;
+}
+.onb-actions .btn { flex: 1; min-width: 140px; }
+.onb-skip {
+  text-align: center;
+  margin-top: 14px;
+  font-size: 12px;
+  color: var(--text-mute);
+  cursor: pointer;
+  transition: color 0.15s;
+}
+.onb-skip:hover { color: var(--text-dim); }
+
+/* Onboarding spotlight (highlights an element + arrow + tooltip) */
+.onb-spot-overlay {
+  position: fixed; inset: 0;
+  background: rgba(7, 11, 20, 0.7);
+  backdrop-filter: blur(2px);
+  z-index: 9990;
+  pointer-events: auto;
+  animation: onbFadeIn 0.25s ease;
+}
+.onb-spot-cutout {
+  position: fixed;
+  border: 2px solid var(--accent);
+  border-radius: 12px;
+  box-shadow: 0 0 0 9999px rgba(7, 11, 20, 0.7), 0 0 30px rgba(0, 255, 163, 0.4);
+  z-index: 9991;
+  pointer-events: none;
+  transition: all 0.3s ease;
+  animation: spotPulse 2s ease-in-out infinite;
+}
+@keyframes spotPulse {
+  0%, 100% { box-shadow: 0 0 0 9999px rgba(7, 11, 20, 0.7), 0 0 30px rgba(0, 255, 163, 0.4); }
+  50% { box-shadow: 0 0 0 9999px rgba(7, 11, 20, 0.7), 0 0 50px rgba(0, 255, 163, 0.7); }
+}
+.onb-spot-tooltip {
+  position: fixed;
+  background: var(--bg-2);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  padding: 18px 20px;
+  max-width: 320px;
+  z-index: 9993;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(0, 255, 163, 0.1);
+  animation: onbScaleIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.onb-spot-tooltip-title { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+.onb-spot-tooltip-desc { font-size: 13px; color: var(--text-dim); line-height: 1.55; margin-bottom: 14px; }
+.onb-spot-tooltip-actions { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
+.onb-spot-tooltip-progress { font-size: 11px; color: var(--text-mute); }
+
 /* Coach unread badges */
 .nav-menu-badge {
   width: 8px;
@@ -3575,7 +3704,10 @@ body.on-auth .container {
         <div class="panel-title">Recent Workouts</div>
         <div class="panel-sub" id="recentCount">No workouts yet</div>
       </div>
-      <button class="btn ghost" style="padding: 6px 12px; font-size: 12px;" onclick="navigate('history')">View all →</button>
+      <div style="display: flex; gap: 8px; align-items: center;">
+        <div id="recentRangePicker"></div>
+        <button class="btn ghost" style="padding: 6px 12px; font-size: 12px;" onclick="navigate('history')">View all →</button>
+      </div>
     </div>
     <div id="dashRecent"></div>
   </div>
@@ -4043,6 +4175,8 @@ function showApp() {
   }
   // Check for unread Coach messages on every app show
   checkCoachUnreadOnLoad();
+  // Check if user needs onboarding (only fires for first-time users)
+  setTimeout(() => checkAndShowOnboarding().catch(err => console.error('Onboarding check failed:', err)), 800);
 }
 
 function showLanding() {
@@ -4050,6 +4184,122 @@ function showLanding() {
   // Hide the old landingNav too — landing v2 has its own embedded nav
   document.getElementById('landingNav').style.display = 'none';
   document.body.classList.add('on-landing');
+}
+
+// ═══════════════════════════════════════════════════════════
+// ONBOARDING — first-time user welcome flow
+// ═══════════════════════════════════════════════════════════
+const ONBOARDING_KEY = 'stryxs_onboarding_seen_v1';
+
+async function checkAndShowOnboarding() {
+  if (!state.user) return;
+  // Skip if user has already seen onboarding
+  try {
+    if (localStorage.getItem(ONBOARDING_KEY) === '1') return;
+  } catch(e) {}
+
+  // Determine which steps are already complete
+  const intake = await sb.from('athlete_intake').select('completed, run_lthr, bike_lthr').eq('user_id', state.user.id).maybeSingle();
+  const intakeData = intake?.data;
+
+  const stravaStatus = await callStrava('get_status').catch(() => ({ connected: false }));
+
+  const steps = [
+    {
+      id: 'intake',
+      title: 'Tell Coach about you',
+      desc: 'Quick intake so Coach can build your plan',
+      complete: !!intakeData?.completed,
+      action: () => { dismissOnboarding(); navigate('coach'); },
+    },
+    {
+      id: 'strava',
+      title: 'Connect Strava (optional)',
+      desc: 'Auto-sync workouts from any watch — much easier than uploading files',
+      complete: stravaStatus.connected,
+      action: () => { dismissOnboarding(); navigate('settings'); setTimeout(() => toggleSettingsSection('connections'), 200); },
+    },
+    {
+      id: 'workout',
+      title: 'See your first analysis',
+      desc: state.workouts?.length > 0 ? 'You have workouts already' : 'Upload a workout file or wait for Strava to sync',
+      complete: (state.workouts?.length || 0) > 0,
+      action: () => { dismissOnboarding(); navigate('upload'); },
+    },
+  ];
+
+  // If everything is done, mark complete and skip
+  if (steps.every(s => s.complete)) {
+    try { localStorage.setItem(ONBOARDING_KEY, '1'); } catch(e) {}
+    return;
+  }
+
+  showOnboardingModal(steps);
+}
+
+function showOnboardingModal(steps) {
+  // Remove any existing modal
+  const existing = document.getElementById('onboardingModal');
+  if (existing) existing.remove();
+
+  const completedCount = steps.filter(s => s.complete).length;
+  const total = steps.length;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'onboardingModal';
+  overlay.className = 'onb-overlay';
+  overlay.innerHTML = `
+    <div class="onb-modal">
+      <div class="onb-emoji">⚡</div>
+      <div class="onb-title">Welcome to Stryxs, ${state.user?.name?.split(' ')[0] || 'athlete'}.</div>
+      <div class="onb-sub">Stryxs is your AI coach for endurance training. Three quick steps and you're set.</div>
+      <div class="onb-checklist">
+        ${steps.map((s, i) => `
+          <div class="onb-step ${s.complete ? 'complete' : ''}" onclick="onboardingActions[${i}]()" style="cursor: ${s.complete ? 'default' : 'pointer'};">
+            <div class="onb-step-num">${s.complete ? '✓' : (i + 1)}</div>
+            <div class="onb-step-content">
+              <div class="onb-step-title">${s.title}</div>
+              <div class="onb-step-desc">${s.desc}</div>
+            </div>
+            ${!s.complete ? '<div style="color: var(--text-mute); font-size: 16px;">→</div>' : ''}
+          </div>
+        `).join('')}
+      </div>
+      <div class="onb-actions">
+        ${completedCount < total ? `
+          <button class="btn" onclick="onboardingNext()">Get started</button>
+        ` : `
+          <button class="btn" onclick="dismissOnboarding()">Continue to dashboard</button>
+        `}
+      </div>
+      <div class="onb-skip" onclick="dismissOnboarding()">Skip for now</div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  // Store actions globally for inline onclick
+  window.onboardingActions = steps.map(s => s.action);
+  window._onbSteps = steps;
+}
+
+function onboardingNext() {
+  // Find first incomplete step and trigger its action
+  const steps = window._onbSteps || [];
+  const next = steps.find(s => !s.complete);
+  if (next && next.action) next.action();
+  else dismissOnboarding();
+}
+
+function dismissOnboarding() {
+  try { localStorage.setItem(ONBOARDING_KEY, '1'); } catch(e) {}
+  const modal = document.getElementById('onboardingModal');
+  if (modal) modal.remove();
+}
+
+// Force-show onboarding (for testing or manual trigger)
+function showOnboardingAgain() {
+  try { localStorage.removeItem(ONBOARDING_KEY); } catch(e) {}
+  checkAndShowOnboarding();
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -5182,12 +5432,38 @@ async function renderDashboard() {
     </div>
   `;
 
-  // Recent workouts — compact list grouped by sport
+  // Recent workouts — compact list grouped by sport, filtered by time range
+  if (!state.dashRecentRange) state.dashRecentRange = 'week';
+
+  // Render the time range picker
+  const rangePicker = document.getElementById('recentRangePicker');
+  if (rangePicker) {
+    rangePicker.innerHTML = renderStatPicker('dashRecentRange', state.dashRecentRange, ['week', 'month', 'all'], 'setDashRecentRange');
+  }
+
+  // Filter workouts by selected range
+  const now = new Date();
+  let cutoff = null;
+  if (state.dashRecentRange === 'week') {
+    cutoff = new Date(now);
+    cutoff.setDate(cutoff.getDate() - 7);
+  } else if (state.dashRecentRange === 'month') {
+    cutoff = new Date(now);
+    cutoff.setDate(cutoff.getDate() - 30);
+  }
+
   const rec = document.getElementById('dashRecent');
-  const recentList = state.workouts.slice(-30).reverse();
+  const allWorkouts = [...state.workouts].reverse();
+  const recentList = cutoff ? allWorkouts.filter(w => {
+    const wDate = new Date(w.date || w.created_at || 0);
+    return wDate >= cutoff;
+  }) : allWorkouts;
+
+  const rangeLabel = state.dashRecentRange === 'week' ? 'this week' : state.dashRecentRange === 'month' ? 'this month' : 'all time';
+
   if (recentList.length === 0) {
-    rec.innerHTML = `<div class="empty"><div class="empty-icon">📊</div><div class="empty-title">No workouts yet</div><div class="empty-desc">Upload your first workout to see analysis here</div></div>`;
-    document.getElementById('recentCount').textContent = 'Upload your first workout';
+    rec.innerHTML = `<div class="empty"><div class="empty-icon">📊</div><div class="empty-title">No workouts ${rangeLabel}</div><div class="empty-desc">${state.workouts.length > 0 ? 'Try a longer time range' : 'Upload your first workout to see analysis here'}</div></div>`;
+    document.getElementById('recentCount').textContent = state.workouts.length === 0 ? 'Upload your first workout' : `0 workouts ${rangeLabel}`;
   } else {
     // Group by sport
     const sportGroups = {};
@@ -5226,13 +5502,13 @@ async function renderDashboard() {
                   ${g.count} workout${g.count > 1 ? 's' : ''}${showDistance ? ` · ${g.distance.toFixed(1)} km` : ''}${g.hours > 0 ? ` · ${g.hours.toFixed(1)} hrs` : ''}
                 </div>
               </div>
-              <div style="font-size: 18px; color: var(--text-mute);">›</div>
+              <div style="color: var(--text-mute); font-size: 16px;">→</div>
             </div>
           `;
         }).join('')}
       </div>
     `;
-    document.getElementById('recentCount').textContent = `${state.workouts.length} total`;
+    document.getElementById('recentCount').textContent = `${recentList.length} workout${recentList.length === 1 ? '' : 's'} ${rangeLabel}`;
   }
 }
 
@@ -5320,6 +5596,9 @@ function renderStatPicker(id, current, options, changeFn) {
     swim: 'Swim',
     hours: 'By hours',
     distance: 'By distance',
+    week: 'This week',
+    month: 'This month',
+    all: 'All time',
   };
   const emojis = {
     overall: '🌐',
@@ -5328,6 +5607,9 @@ function renderStatPicker(id, current, options, changeFn) {
     swim: '🏊',
     hours: '⏱',
     distance: '📏',
+    week: '📅',
+    month: '🗓',
+    all: '∞',
   };
   const currentLabel = labels[current] || current;
   const currentEmoji = emojis[current] || '';
@@ -5424,6 +5706,11 @@ function setDashDriftSport(sport) {
 
 function setDashLthrSport(sport) {
   state.dashLthrSport = sport;
+  renderDashboard();
+}
+
+function setDashRecentRange(range) {
+  state.dashRecentRange = range;
   renderDashboard();
 }
 
@@ -6393,23 +6680,6 @@ async function renderCoachChat(el, intake) {
       </div>
     </div>
 
-    <div class="panel" style="margin-top: 16px;">
-      <div class="panel-header"><div><div class="panel-title">Your Athlete Profile</div><div class="panel-sub">Edit anytime in Settings</div></div></div>
-      <div style="display:flex;flex-direction:column;gap:10px;font-size:14px;">
-        ${intake.goal_event ? `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);"><span style="color:var(--text-dim);">Goal</span><strong>${formatGoal(intake.goal_event)}</strong></div>` : ''}
-        ${intake.race_date ? `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);"><span style="color:var(--text-dim);">Race date</span><strong>${new Date(intake.race_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</strong></div>` : ''}
-        ${intake.experience_level ? `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);"><span style="color:var(--text-dim);">Experience</span><strong style="text-transform:capitalize;">${intake.experience_level}</strong></div>` : ''}
-        ${intake.age ? `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);"><span style="color:var(--text-dim);">Age</span><strong>${intake.age}</strong></div>` : ''}
-        ${intake.sex && intake.sex !== 'prefer_not' ? `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);"><span style="color:var(--text-dim);">Sex</span><strong style="text-transform:capitalize;">${intake.sex}</strong></div>` : ''}
-        ${intake.weight_kg ? `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);"><span style="color:var(--text-dim);">Weight</span><strong>${formatWeight(intake.weight_kg, intake.unit_preference)}</strong></div>` : ''}
-        ${intake.height_cm ? `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);"><span style="color:var(--text-dim);">Height</span><strong>${formatHeight(intake.height_cm, intake.unit_preference)}</strong></div>` : ''}
-        ${intake.current_weekly_hours ? `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);"><span style="color:var(--text-dim);">Weekly hours</span><strong>${intake.current_weekly_hours} hours</strong></div>` : ''}
-        ${intake.available_days ? `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);"><span style="color:var(--text-dim);">Training days</span><strong>${intake.available_days.length} days/week</strong></div>` : ''}
-        ${intake.injuries && intake.injuries !== 'none' ? `<div style="display:flex;justify-content:space-between;padding:8px 0;"><span style="color:var(--text-dim);">Injuries noted</span><strong style="text-align:right;max-width:60%;">${intake.injuries}</strong></div>` : ''}
-      </div>
-      <button class="btn ghost" style="margin-top:16px; width: 100%;" onclick="navigate('settings')">Edit profile & zones →</button>
-    </div>
-
     <div class="panel" style="margin-top: 16px; border-color: rgba(239, 68, 68, 0.15);">
       <div class="panel-header" style="position: relative;">
         <div>
@@ -7141,11 +7411,11 @@ let _projectionsCache = null;
 let _projectionsCacheTime = 0;
 let _projectionsRenderToken = 0;
 let _projectionsInflight = false;
-const PROJECTIONS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes — projections don't change that fast
+const PROJECTIONS_CACHE_TTL = 7 * 24 * 60 * 60 * 1000; // 1 week — projections refresh weekly to save tokens
 
-// Try to restore cache from sessionStorage on page load
+// Try to restore cache from localStorage on page load
 try {
-  const stored = sessionStorage.getItem('stryxs_projections_cache');
+  const stored = localStorage.getItem('stryxs_projections_cache');
   if (stored) {
     const parsed = JSON.parse(stored);
     if (parsed && parsed.time && (Date.now() - parsed.time < PROJECTIONS_CACHE_TTL)) {
@@ -7157,7 +7427,7 @@ try {
 
 function persistProjectionsCache() {
   try {
-    sessionStorage.setItem('stryxs_projections_cache', JSON.stringify({
+    localStorage.setItem('stryxs_projections_cache', JSON.stringify({
       data: _projectionsCache,
       time: _projectionsCacheTime,
     }));
@@ -7168,7 +7438,7 @@ function persistProjectionsCache() {
 async function forceRefreshProjections() {
   _projectionsCache = null;
   _projectionsCacheTime = 0;
-  try { sessionStorage.removeItem('stryxs_projections_cache'); } catch(e) {}
+  try { localStorage.removeItem('stryxs_projections_cache'); } catch(e) {}
   toast('Refreshing projections...');
   await renderProjections(true);
 }
@@ -7395,6 +7665,13 @@ function renderProjectionsFromData(container, intake, recentWorkouts, proj) {
           </div>
         </div>
       ` : ''}
+
+      <div style="margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+        <div style="font-size: 11px; color: var(--text-mute); display: flex; align-items: center; gap: 6px;">
+          🔄 Refreshes automatically each week as you train
+        </div>
+        <a style="font-size: 11px; color: var(--text-dim); cursor: pointer; text-decoration: underline; text-decoration-color: var(--text-mute);" onclick="forceRefreshProjections()">Refresh now</a>
+      </div>
     </div>
   `;
 }
@@ -8808,6 +9085,10 @@ async function renderSettings() {
       <button class="btn" style="flex: 1;" onclick="saveAllSettings()">Save changes</button>
       <button class="btn ghost" style="color: #f87171; border-color: rgba(239, 68, 68, 0.25);" onclick="confirmLogout()">Log out</button>
     </div>
+
+    <div style="text-align: center; margin-top: 18px;">
+      <a onclick="showOnboardingAgain()" style="font-size: 12px; color: var(--text-mute); cursor: pointer; text-decoration: underline;">Show welcome tour again</a>
+    </div>
   `;
 
   // Wire up live zone preview updates
@@ -9236,7 +9517,7 @@ async function saveAllSettings(silent = false) {
   // Invalidate projections cache — settings might have changed PBs/goals/etc.
   _projectionsCache = null;
   _projectionsCacheTime = 0;
-  try { sessionStorage.removeItem('stryxs_projections_cache'); } catch(e) {}
+  try { localStorage.removeItem('stryxs_projections_cache'); } catch(e) {}
 
   showApp();
   if (!silent) toast('Settings saved');
