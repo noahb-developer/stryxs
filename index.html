@@ -7187,17 +7187,24 @@ async function renderProjections(forceRefresh = false) {
     return;
   }
 
-  // If already fetching, just render whatever we have (cache or empty) — don't double-fetch
-  if (_projectionsInflight) {
+  // If already fetching AND not a force refresh, just render whatever we have
+  if (_projectionsInflight && !forceRefresh) {
     if (_projectionsCache) {
       renderProjectionsFromData(container, _projectionsCache.intake, _projectionsCache.recentWorkouts, _projectionsCache.proj);
     }
     return;
   }
 
+  // For force refresh, reset inflight state to allow the new request through
+  if (forceRefresh) _projectionsInflight = false;
+
   // Token-based race condition guard
   const myToken = ++_projectionsRenderToken;
   _projectionsInflight = true;
+  // Safety: clear inflight after 30s no matter what (prevents permanent stuck state)
+  setTimeout(() => {
+    if (_projectionsRenderToken === myToken) _projectionsInflight = false;
+  }, 30000);
 
   // ONLY show loading state if we have NO cached data — otherwise keep showing what we have
   if (!_projectionsCache) {
