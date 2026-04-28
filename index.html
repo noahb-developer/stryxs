@@ -4039,18 +4039,26 @@ async function saveProfileData() {
 async function loadWorkouts() {
   if (!state.user) return;
   const { data } = await sb.from('workouts').select('*').eq('user_id', state.user.id).order('created_at', { ascending: true });
-  if (data) state.workouts = data.map(w => ({ ...w.workout_data, _dbId: w.id }));
+  if (data) state.workouts = data.map(w => ({
+    ...w.workout_data,
+    _dbId: w.id,
+    activity_classification: w.activity_classification || w.workout_data?.activity_classification || 'unclassified',
+  }));
 }
 
 async function saveWorkout(workout) {
   if (!state.user) return;
   // Default to csv_upload source if not set
   if (!workout.source) workout.source = 'csv_upload';
+  // CSV uploads are almost always intentional training — classify as plan
+  // (user wouldn't manually upload a grocery bike ride)
+  if (!workout.activity_classification) workout.activity_classification = 'plan';
   const { data, error } = await sb.from('workouts').insert({
     user_id: state.user.id,
     sport: workout.sport,
     workout_data: workout,
     source: workout.source,
+    activity_classification: workout.activity_classification,
   }).select().single();
   if (data) workout._dbId = data.id;
   else if (error) console.error('Workout save error:', error);
@@ -5741,11 +5749,24 @@ function renderHistoryItem(w, idx) {
     </span>
   ` : '';
 
+  // Classification badge — small visual indicator
+  const cls = w.activity_classification || 'unclassified';
+  let classBadge = '';
+  let itemStyle = '';
+  if (cls === 'daily_activity') {
+    classBadge = `<span style="font-size: 9px; color: var(--text-mute); margin-left: 6px; padding: 1px 6px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 4px; vertical-align: middle;">Daily activity</span>`;
+    itemStyle = 'opacity: 0.55;';
+  } else if (cls === 'extra_training') {
+    classBadge = `<span style="font-size: 9px; color: #fbbf24; margin-left: 6px; padding: 1px 6px; background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.3); border-radius: 4px; vertical-align: middle;">Extra</span>`;
+  } else if (cls === 'unclassified') {
+    classBadge = `<span style="font-size: 9px; color: var(--accent); margin-left: 6px; padding: 1px 6px; background: rgba(0, 255, 163, 0.08); border: 1px solid rgba(0, 255, 163, 0.25); border-radius: 4px; vertical-align: middle;">⚠ Tap to classify</span>`;
+  }
+
   return `
-    <div class="history-item" onclick="viewHistoryDetail(${idx})">
+    <div class="history-item" style="${itemStyle}" onclick="viewHistoryDetail(${idx})">
       <div class="history-icon">${icon}</div>
       <div class="history-info">
-        <div class="history-title">${w.type || w.name || w.sport}${stravaBadge}</div>
+        <div class="history-title">${w.type || w.name || w.sport}${stravaBadge}${classBadge}</div>
         <div class="history-meta">${sub}</div>
       </div>
       <div class="history-date">${dateStr}</div>
@@ -5767,11 +5788,77 @@ function renderHistory() {
   list.innerHTML = sorted.map((w, i) => renderHistoryItem(w, state.workouts.length - 1 - i)).join('');
 }
 
+// Update a workout's activity classification (called from history detail banner)
+async function classifyWorkout(idx, newClassification) {
+  const w = state.workouts[idx];
+  if (!w || !w._dbId) return;
+
+  try {
+    // Update both the column AND inside workout_data so it survives even if column is later removed
+    const updatedWd = { ...w, activity_classification: newClassification };
+    delete updatedWd._dbId;
+    delete updatedWd.activity_classification; // we'll set this explicitly via column
+    updatedWd.activity_classification = newClassification;
+
+    await sb.from('workouts').update({
+      activity_classification: newClassification,
+      workout_data: updatedWd,
+    }).eq('id', w._dbId);
+
+    state.workouts[idx].activity_classification = newClassification;
+    toast(newClassification === 'plan' ? 'Marked as planned training' : newClassification === 'daily_activity' ? 'Tagged as daily activity' : 'Marked as extra training');
+
+    // Re-render the detail view with updated classification
+    viewHistoryDetail(idx);
+  } catch (err) {
+    console.error('Classify failed:', err);
+    toast('Failed to update: ' + err.message);
+  }
+}
+
 async function viewHistoryDetail(idx) {
   const w = state.workouts[idx];
   navigate('upload');
   const output = document.getElementById('analysisOutput');
-  output.innerHTML = renderAnalysis(w);
+
+  // Build classification banner (shown above analysis)
+  const cls = w.activity_classification || 'unclassified';
+  let banner = '';
+  if (cls === 'unclassified') {
+    banner = `
+      <div style="background: rgba(0, 255, 163, 0.05); border: 1px solid rgba(0, 255, 163, 0.25); border-radius: 12px; padding: 16px; margin-bottom: 16px;">
+        <div style="font-size: 13px; font-weight: 600; color: var(--accent); margin-bottom: 6px;">⚠ Was this a planned training session?</div>
+        <div style="font-size: 12px; color: var(--text-dim); line-height: 1.55; margin-bottom: 12px;">
+          Coach uses this to decide whether to include this workout in your training analysis. Daily activities (commutes, walks, casual rides) are tracked but ignored for plan adjustments.
+        </div>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <button class="btn ghost" style="font-size: 12px; padding: 8px 12px;" onclick="classifyWorkout(${idx}, 'plan')">✓ Yes, this was planned</button>
+          <button class="btn ghost" style="font-size: 12px; padding: 8px 12px;" onclick="classifyWorkout(${idx}, 'extra_training')">+ Extra training (not in plan)</button>
+          <button class="btn ghost" style="font-size: 12px; padding: 8px 12px;" onclick="classifyWorkout(${idx}, 'daily_activity')">— Just a daily activity</button>
+        </div>
+      </div>
+    `;
+  } else if (cls === 'daily_activity') {
+    banner = `
+      <div style="background: var(--bg-3); border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+        <div style="font-size: 12px; color: var(--text-dim);">
+          📍 Tagged as a daily activity (not used by Coach for analysis).
+        </div>
+        <button class="btn ghost" style="font-size: 11px; padding: 6px 10px;" onclick="classifyWorkout(${idx}, 'plan')">Mark as training instead</button>
+      </div>
+    `;
+  } else if (cls === 'extra_training') {
+    banner = `
+      <div style="background: rgba(251, 191, 36, 0.05); border: 1px solid rgba(251, 191, 36, 0.2); border-radius: 12px; padding: 12px 16px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+        <div style="font-size: 12px; color: var(--text-dim);">
+          ⭐ Extra training (counted by Coach, but wasn't in your plan).
+        </div>
+        <button class="btn ghost" style="font-size: 11px; padding: 6px 10px;" onclick="classifyWorkout(${idx}, 'daily_activity')">Recategorize</button>
+      </div>
+    `;
+  }
+
+  output.innerHTML = banner + renderAnalysis(w);
 
   // Try to load saved Coach commentary for this workout
   if (state.user && w._dbId) {
@@ -6083,13 +6170,13 @@ function getNextRelevantStep(currentStep, direction = 1) {
 const intakeQuestions = [
   {
     id: 'plan_path',
-    question: "Do you already have a training plan?",
-    context: "If you've got one from another app, coach, or AI — Stryxs can pick up where you left off. Otherwise, Coach will build you one from scratch.",
+    question: "Where are you starting from?",
+    context: "If you've already got a plan from another app, coach, or AI — Stryxs can pick up where you left off. Otherwise, Coach will build you one from scratch.",
     type: 'single',
     options: [
-      { value: 'build_new', emoji: '✨', label: 'No, build me one from scratch' },
-      { value: 'import_use', emoji: '📥', label: 'Yes, I want to use it' },
-      { value: 'import_adapt', emoji: '🔧', label: 'Yes, but adapt it for my situation' },
+      { value: 'build_new', emoji: '✨', label: "I'm starting fresh — build me a plan" },
+      { value: 'import_use', emoji: '📥', label: "I have a plan I want to keep using" },
+      { value: 'import_adapt', emoji: '🔧', label: "I have a plan but want it adapted" },
     ],
   },
   {
@@ -6157,11 +6244,11 @@ const intakeQuestions = [
   },
   {
     id: 'experience_level',
-    question: (a) => `How many years training endurance sports for ${formatEventNice(a.goal_event) || 'training'}?`,
-    context: "Total time you've been training in any endurance sport — running, cycling, swimming, or triathlon. Be honest, this calibrates safety.",
+    question: "How long have you been doing endurance sports?",
+    context: "Total time you've been training in any endurance sport — running, cycling, swimming, or triathlon. Different from race experience. This calibrates safety.",
     type: 'single',
     options: [
-      { value: 'beginner', emoji: '🌱', label: 'Under 1 year' },
+      { value: 'beginner', emoji: '🌱', label: 'Less than 1 year' },
       { value: 'intermediate', emoji: '🌿', label: '1-3 years' },
       { value: 'advanced', emoji: '🌳', label: '3+ years' },
     ],
@@ -6189,8 +6276,12 @@ const intakeQuestions = [
   },
   {
     id: 'goal_time',
-    question: (a) => `Got a goal time for your ${formatEventNice(a.goal_event)}?`,
-    context: "Optional. Helps Coach project paces. Skip if you're not sure yet.",
+    question: (a) => a.race_experience === 'first_time'
+      ? `Got a target time in mind for your first ${formatEventNice(a.goal_event)}?`
+      : `Got a goal time for your ${formatEventNice(a.goal_event)}?`,
+    context: (a) => a.race_experience === 'first_time'
+      ? "Optional. As a first-timer, just finishing strong is a great goal. Skip if you're not sure."
+      : "Optional. Helps Coach project paces. Skip if you're not sure yet.",
     type: 'text',
     placeholder: (a) => goalTimePlaceholder(a.goal_event),
     optional: true,
@@ -6238,6 +6329,8 @@ const intakeQuestions = [
     type: 'text',
     placeholder: (a) => lastRacePlaceholder(a.goal_event),
     optional: true,
+    // Skip if user has never raced this distance — first_time means no last race exists
+    condition: (a) => a.race_experience !== 'first_time',
   },
   {
     id: 'available_days',
@@ -6451,7 +6544,7 @@ function renderIntakeStep() {
   body.innerHTML = `
     <div class="intake-card">
       <div class="intake-question">${questionText}${q.optional ? ' <span style="font-size: 12px; color: var(--text-mute); font-weight: 500;">(optional)</span>' : ''}</div>
-      <div class="intake-context">${q.context}</div>
+      <div class="intake-context">${typeof q.context === 'function' ? q.context(intakeAnswers) : q.context}</div>
       ${inputHtml}
       <div class="intake-actions">
         <button class="btn ghost" onclick="intakeBack()" ${isFirstStep ? 'style="visibility:hidden;"' : ''}>← Back</button>
@@ -7229,12 +7322,13 @@ async function analyzeTrainingPatterns() {
       .select('*').eq('user_id', state.user.id).single();
     if (!intake) return;
 
-    // Pull last 14 days of completed workouts
+    // Pull last 14 days of completed TRAINING workouts (exclude daily activities)
     const fourteenDaysAgo = new Date();
     fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
     const { data: recentRaw } = await sb.from('workouts')
       .select('*')
       .eq('user_id', state.user.id)
+      .neq('activity_classification', 'daily_activity')
       .gte('created_at', fourteenDaysAgo.toISOString())
       .order('created_at', { ascending: false })
       .limit(10);
@@ -7552,10 +7646,11 @@ async function renderProjections(forceRefresh = false) {
       return;
     }
 
-    // Get last 14 workouts
+    // Get last 14 training workouts (exclude daily_activity, only count plan + extra_training + unclassified)
     const { data: recentRaw } = await sb.from('workouts')
-      .select('sport, workout_data, created_at')
+      .select('sport, workout_data, created_at, activity_classification')
       .eq('user_id', state.user.id)
+      .neq('activity_classification', 'daily_activity')
       .order('created_at', { ascending: false })
       .limit(14);
 
@@ -8137,12 +8232,13 @@ async function generateNextWeek() {
     const { data: intake } = await sb.from('athlete_intake')
       .select('*').eq('user_id', state.user.id).single();
 
-    // 4. Get last 7 days of completed workouts for adaptive adjustments
+    // 4. Get last 14 days of completed TRAINING workouts for adaptive adjustments (exclude daily activities)
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 14);
     const { data: recentRaw } = await sb.from('workouts')
       .select('*')
       .eq('user_id', state.user.id)
+      .neq('activity_classification', 'daily_activity')
       .gte('created_at', sevenDaysAgo.toISOString())
       .order('created_at', { ascending: false })
       .limit(10);
