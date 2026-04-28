@@ -1,7 +1,11 @@
 {
   "rewrites": [
     {
-      "source": "/share/:path*",
+      "source": "/share/:token",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/strava-callback",
       "destination": "/index.html"
     }
   ]
