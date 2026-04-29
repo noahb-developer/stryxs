@@ -5788,6 +5788,37 @@ function renderHistory() {
   list.innerHTML = sorted.map((w, i) => renderHistoryItem(w, state.workouts.length - 1 - i)).join('');
 }
 
+// Show a confirm dialog with classification options (called from "misclick? change" link)
+function showClassificationOptions(idx) {
+  const w = state.workouts[idx];
+  const cls = w?.activity_classification;
+
+  // Pop a simple toast-style menu — using a lightweight modal
+  const existing = document.getElementById('classifyMenu');
+  if (existing) existing.remove();
+
+  const menu = document.createElement('div');
+  menu.id = 'classifyMenu';
+  menu.style.cssText = 'position: fixed; inset: 0; z-index: 9999; background: rgba(7, 11, 20, 0.85); backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center; padding: 20px;';
+  menu.innerHTML = `
+    <div style="background: var(--bg-2); border: 1px solid var(--border-light); border-radius: 14px; padding: 22px; max-width: 360px; width: 100%;">
+      <div style="font-size: 16px; font-weight: 700; margin-bottom: 6px;">Change classification</div>
+      <div style="font-size: 12px; color: var(--text-dim); margin-bottom: 16px; line-height: 1.5;">How should Coach treat this workout?</div>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <button class="btn ${cls === 'plan' ? '' : 'ghost'}" style="text-align: left;" onclick="document.getElementById('classifyMenu').remove(); classifyWorkout(${idx}, 'plan')">✓ Planned training session</button>
+        <button class="btn ${cls === 'extra_training' ? '' : 'ghost'}" style="text-align: left;" onclick="document.getElementById('classifyMenu').remove(); classifyWorkout(${idx}, 'extra_training')">+ Extra training (not in plan)</button>
+        <button class="btn ${cls === 'daily_activity' ? '' : 'ghost'}" style="text-align: left;" onclick="document.getElementById('classifyMenu').remove(); classifyWorkout(${idx}, 'daily_activity')">— Daily activity (commute, walk, etc.)</button>
+      </div>
+      <button class="btn ghost" style="width: 100%; margin-top: 14px; font-size: 12px;" onclick="document.getElementById('classifyMenu').remove();">Cancel</button>
+    </div>
+  `;
+  // Click outside to close
+  menu.addEventListener('click', (e) => {
+    if (e.target === menu) menu.remove();
+  });
+  document.body.appendChild(menu);
+}
+
 // Update a workout's activity classification (called from history detail banner)
 async function classifyWorkout(idx, newClassification) {
   const w = state.workouts[idx];
@@ -5840,20 +5871,35 @@ async function viewHistoryDetail(idx) {
     `;
   } else if (cls === 'daily_activity') {
     banner = `
-      <div style="background: var(--bg-3); border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
-        <div style="font-size: 12px; color: var(--text-dim);">
-          📍 Tagged as a daily activity (not used by Coach for analysis).
+      <div style="background: var(--bg-3); border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; margin-bottom: 16px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 10px;">
+          <div style="font-size: 12px; color: var(--text-dim);">
+            📍 Tagged as a daily activity (not used by Coach for analysis).
+          </div>
         </div>
-        <button class="btn ghost" style="font-size: 11px; padding: 6px 10px;" onclick="classifyWorkout(${idx}, 'plan')">Mark as training instead</button>
+        <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+          <button class="btn ghost" style="font-size: 11px; padding: 6px 10px;" onclick="classifyWorkout(${idx}, 'plan')">Mark as planned training</button>
+          <button class="btn ghost" style="font-size: 11px; padding: 6px 10px;" onclick="classifyWorkout(${idx}, 'extra_training')">Mark as extra training</button>
+        </div>
       </div>
     `;
   } else if (cls === 'extra_training') {
     banner = `
-      <div style="background: rgba(251, 191, 36, 0.05); border: 1px solid rgba(251, 191, 36, 0.2); border-radius: 12px; padding: 12px 16px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
-        <div style="font-size: 12px; color: var(--text-dim);">
+      <div style="background: rgba(251, 191, 36, 0.05); border: 1px solid rgba(251, 191, 36, 0.2); border-radius: 12px; padding: 12px 16px; margin-bottom: 16px;">
+        <div style="font-size: 12px; color: var(--text-dim); margin-bottom: 10px;">
           ⭐ Extra training (counted by Coach, but wasn't in your plan).
         </div>
-        <button class="btn ghost" style="font-size: 11px; padding: 6px 10px;" onclick="classifyWorkout(${idx}, 'daily_activity')">Recategorize</button>
+        <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+          <button class="btn ghost" style="font-size: 11px; padding: 6px 10px;" onclick="classifyWorkout(${idx}, 'plan')">Mark as planned</button>
+          <button class="btn ghost" style="font-size: 11px; padding: 6px 10px;" onclick="classifyWorkout(${idx}, 'daily_activity')">Daily activity</button>
+        </div>
+      </div>
+    `;
+  } else if (cls === 'plan') {
+    // Show a small unobtrusive "fix categorization" link in case of misclick
+    banner = `
+      <div style="display: flex; align-items: center; justify-content: flex-end; margin-bottom: 12px;">
+        <a style="font-size: 11px; color: var(--text-mute); cursor: pointer; text-decoration: underline;" onclick="showClassificationOptions(${idx})">Misclick? Change classification</a>
       </div>
     `;
   }
@@ -6273,6 +6319,26 @@ const intakeQuestions = [
     type: 'number',
     placeholder: 'e.g. 5',
     min: 0, max: 30,
+  },
+  {
+    id: 'lthr_run',
+    question: "Do you know your run LTHR (lactate threshold heart rate)?",
+    context: "Friel methodology builds zones from your LTHR. If you've tested before, enter it. If not, skip — Coach will build a test into Week 1 of your plan.",
+    type: 'number',
+    placeholder: 'e.g. 175 (or skip)',
+    min: 100, max: 220,
+    optional: true,
+    relevant_when: (a) => ['ironman', '70_3', 'olympic_tri', 'sprint_tri', 'general'].includes(a.goal_event),
+  },
+  {
+    id: 'lthr_bike',
+    question: "Do you know your bike LTHR?",
+    context: "Bike LTHR is usually 5-10 bpm lower than run LTHR. Skip if you haven't tested — Coach will guide you through it.",
+    type: 'number',
+    placeholder: 'e.g. 165 (or skip)',
+    min: 100, max: 220,
+    optional: true,
+    relevant_when: (a) => ['ironman', '70_3', 'olympic_tri', 'sprint_tri'].includes(a.goal_event),
   },
   {
     id: 'goal_time',
@@ -6722,6 +6788,8 @@ async function completeIntake() {
     pb_marathon: intakeAnswers.pb_marathon || null,
     last_race: intakeAnswers.last_race || null,
     goal_time: intakeAnswers.goal_time || null,
+    run_lthr: intakeAnswers.lthr_run ? parseInt(intakeAnswers.lthr_run) : null,
+    bike_lthr: intakeAnswers.lthr_bike ? parseInt(intakeAnswers.lthr_bike) : null,
     completed: true,
     updated_at: new Date().toISOString(),
   };
@@ -6732,6 +6800,10 @@ async function completeIntake() {
     console.error(error);
     return;
   }
+
+  // Also update state.profile with LTHR if provided so plan generation has access
+  if (payload.run_lthr) state.profile.runLthr = payload.run_lthr;
+  if (payload.bike_lthr) state.profile.bikeLthr = payload.bike_lthr;
 
   // BRANCH: if user chose to import a plan, show the import flow
   if (payload.plan_path === 'import_use' || payload.plan_path === 'import_adapt') {
@@ -6767,7 +6839,11 @@ async function completeIntake() {
 
     // Generate Coach's intro message explaining the plan
     try {
-      const introMsg = await callCoach('plan_intro_message', { intake: payload });
+      const introMsg = await callCoach('plan_intro_message', {
+        intake: payload,
+        isAssessmentWeek: !!plan._is_assessment_week,
+        totalWeeks: plan._total_weeks || (skeleton ? skeleton.length : null),
+      });
       if (introMsg) {
         await sb.from('coach_messages').insert({
           user_id: state.user.id,
@@ -6931,38 +7007,39 @@ async function regeneratePlanFromReactive(btn) {
     // Get current intake
     const { data: intake } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).single();
 
-    // CRITICAL: Delete from THIS WEEK'S MONDAY forward — savePlanToDb anchors plans to Monday,
-    // so anything from Monday on must be cleared to prevent duplicates.
-    const now = new Date();
-    now.setHours(12, 0, 0, 0);
-    const dow = now.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
-    const daysToMonday = dow === 0 ? -6 : 1 - dow;
-    const monday = new Date(now);
-    monday.setDate(monday.getDate() + daysToMonday);
-    const mondayStr = monday.toISOString().split('T')[0];
-
-    console.log('[Stryxs] Regenerate — deleting workouts from', mondayStr, 'forward');
-
-    const { error: delErr } = await sb.from('planned_workouts')
-      .delete()
+    // Pull the existing skeleton from the active plan (so periodization arc is preserved)
+    const { data: existingPlan } = await sb.from('training_plans')
+      .select('plan_data')
       .eq('user_id', state.user.id)
-      .gte('scheduled_date', mondayStr);
-    if (delErr) {
-      console.error('[Stryxs] Delete failed:', delErr);
-      throw new Error('Failed to clear old workouts: ' + delErr.message);
+      .eq('active', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    let skeleton = existingPlan?.plan_data?.skeleton || null;
+
+    // If no skeleton, regenerate one
+    if (!skeleton) {
+      try { skeleton = await callCoach('generate_skeleton', { intake }); } catch(e) { console.warn('skeleton regen failed:', e); }
     }
 
-    // Generate new plan (will save anchored to this week's Monday — matches the deletion above)
-    const plan = await callCoach('generate_plan', { intake });
-    await savePlanToDb(plan, state.user.id);
+    // Compute the current week index based on plan start date
+    let weekNumber = 1;
+    if (existingPlan?.plan_data?.created_at_week) {
+      // Future-proof for now, just use 1
+    }
+
+    // Generate new plan starting from THIS week's Monday — savePlanToDb handles deletion of overlap
+    console.log('[Stryxs] Regenerating plan with skeleton:', !!skeleton);
+    const plan = await callCoach('generate_plan', { intake, weekNumber, skeleton, recentWorkouts: [] });
+    if (skeleton) plan.skeleton = skeleton;
+
+    await savePlanToDb(plan, state.user.id); // savePlanToDb now clears overlapping data
 
     toast('Plan regenerated based on your changes');
 
-    // Disable the button so they don't click again
     const wrap = btn.closest('.msg-actions-wrap');
     if (wrap) wrap.innerHTML = `<div style="font-size: 12px; color: var(--accent); padding: 4px 0;">✓ Plan regenerated</div>`;
 
-    // If user is on plan tab, refresh it
     if (document.getElementById('page-plan').classList.contains('active')) {
       renderPlan();
     }
@@ -7249,9 +7326,52 @@ function closeConfirmModal() {
 
 // Helper: save a plan (and create planned_workouts rows)
 // startDate optional — defaults to today. Used to save "next week" plans starting next Monday.
+// IDEMPOTENT: Clears overlapping data first to prevent duplicates from re-saves.
 async function savePlanToDb(plan, userId, startDate = null) {
   console.log('[Stryxs] savePlanToDb starting, userId:', userId, 'workouts:', plan?.workouts?.length);
 
+  // ═══ STEP 1: Compute the date range this plan will occupy ═══
+  let baseDate;
+  if (startDate) {
+    baseDate = new Date(startDate + 'T12:00:00');
+  } else {
+    // Find this week's Monday
+    baseDate = new Date();
+    baseDate.setHours(12, 0, 0, 0);
+    const dow = baseDate.getDay();
+    const daysToMonday = dow === 0 ? -6 : 1 - dow;
+    baseDate.setDate(baseDate.getDate() + daysToMonday);
+  }
+
+  // Range: baseDate (Monday) → baseDate + 6 (Sunday)
+  const rangeStart = baseDate.toISOString().split('T')[0];
+  const rangeEndDate = new Date(baseDate);
+  rangeEndDate.setDate(rangeEndDate.getDate() + 6);
+  const rangeEnd = rangeEndDate.toISOString().split('T')[0];
+  console.log('[Stryxs] Plan range:', rangeStart, '→', rangeEnd);
+
+  // ═══ STEP 2: Delete any existing planned_workouts in this date range ═══
+  // This prevents duplicates if savePlanToDb is called twice for the same week
+  const { error: delErr } = await sb.from('planned_workouts')
+    .delete()
+    .eq('user_id', userId)
+    .gte('scheduled_date', rangeStart)
+    .lte('scheduled_date', rangeEnd);
+  if (delErr) {
+    console.warn('[Stryxs] Pre-delete failed (non-fatal):', delErr);
+  } else {
+    console.log('[Stryxs] Cleared overlapping planned_workouts for', rangeStart, '→', rangeEnd);
+  }
+
+  // ═══ STEP 3: Mark all existing active training_plans as inactive ═══
+  // Only the most recently created plan should be active at any time
+  const { error: deactErr } = await sb.from('training_plans')
+    .update({ active: false })
+    .eq('user_id', userId)
+    .eq('active', true);
+  if (deactErr) console.warn('[Stryxs] Deactivate old plans failed (non-fatal):', deactErr);
+
+  // ═══ STEP 4: Insert new training_plan row ═══
   const { data: planRow, error: planErr } = await sb.from('training_plans').insert({
     user_id: userId,
     plan_data: plan,
@@ -7265,21 +7385,9 @@ async function savePlanToDb(plan, userId, startDate = null) {
   }
   console.log('[Stryxs] Plan row saved, id:', planRow?.id);
 
+  // ═══ STEP 5: Insert new planned_workouts ═══
   if (plan.workouts && Array.isArray(plan.workouts)) {
-    // Anchor: date_offset_days=0 means MONDAY of the start week (matches Coach's "0=Monday" convention)
-    // If startDate provided, treat that AS Monday. Otherwise, find this week's Monday.
-    let baseDate;
-    if (startDate) {
-      baseDate = new Date(startDate + 'T12:00:00');
-    } else {
-      // Find this week's Monday (or NEXT Monday if today IS already past the week)
-      baseDate = new Date();
-      baseDate.setHours(12, 0, 0, 0);
-      const dow = baseDate.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
-      const daysToMonday = dow === 0 ? -6 : 1 - dow; // Sunday → go back 6, Mon → 0, Tue → -1, etc.
-      baseDate.setDate(baseDate.getDate() + daysToMonday);
-    }
-    console.log('[Stryxs] Base date (Monday anchor):', baseDate.toISOString().split('T')[0]);
+    console.log('[Stryxs] Base date (Monday anchor):', rangeStart);
 
     const rows = plan.workouts.map(w => {
       const d = new Date(baseDate);
@@ -7708,21 +7816,20 @@ function renderProjectionsFromData(container, intake, recentWorkouts, proj) {
   }
 
   if (proj.data_sufficiency === 'low' || !proj.primary_projection) {
-    const TARGET_WORKOUTS = 8;
+    const MIN_WORKOUTS = 5;
+    const HIGH_QUALITY_WORKOUTS = 8;
     const haveWorkouts = recentWorkouts.length;
-    const needed = Math.max(0, TARGET_WORKOUTS - haveWorkouts);
+    const neededForBasic = Math.max(0, MIN_WORKOUTS - haveWorkouts);
     const hasPb = !!(intake.pb_5k || intake.pb_10k || intake.pb_half || intake.pb_marathon || intake.last_race);
 
     // Compute what's actually missing for clearer messaging
     let subtitle;
-    if (haveWorkouts < TARGET_WORKOUTS && !hasPb) {
-      subtitle = `Need ${needed} more workout${needed === 1 ? '' : 's'} OR a recent PB`;
-    } else if (haveWorkouts < TARGET_WORKOUTS) {
-      subtitle = `Need ${needed} more consistent workout${needed === 1 ? '' : 's'}`;
+    if (haveWorkouts < MIN_WORKOUTS) {
+      subtitle = `Need ${neededForBasic} more workout${neededForBasic === 1 ? '' : 's'} for projections`;
     } else if (!hasPb) {
-      subtitle = `Add a recent PB or race time for accurate projections`;
+      subtitle = `Add a recent PB for sharper projections (optional)`;
     } else {
-      subtitle = `Working on it — try refreshing in a moment`;
+      subtitle = `Generating in the background — check back shortly`;
     }
 
     container.innerHTML = `
@@ -7735,18 +7842,16 @@ function renderProjectionsFromData(container, intake, recentWorkouts, proj) {
         </div>
         <div style="display: flex; flex-direction: column; gap: 10px; font-size: 13px; color: var(--text-dim); line-height: 1.55;">
           <div style="display: flex; align-items: center; gap: 10px;">
-            <span style="font-size: 16px;">${haveWorkouts >= TARGET_WORKOUTS ? '✓' : '⏳'}</span>
-            <span>${haveWorkouts}/${TARGET_WORKOUTS} workouts uploaded ${haveWorkouts >= TARGET_WORKOUTS ? '<span style="color: #4ade80; font-weight: 600;">✓ done</span>' : `<span style="color: var(--text-mute);">(${needed} more needed)</span>`}</span>
+            <span style="font-size: 16px;">${haveWorkouts >= MIN_WORKOUTS ? '✓' : '⏳'}</span>
+            <span>${haveWorkouts}/${MIN_WORKOUTS} workouts logged ${haveWorkouts >= MIN_WORKOUTS ? '<span style="color: #4ade80; font-weight: 600;">✓</span>' : `<span style="color: var(--text-mute);">(${neededForBasic} more needed)</span>`}</span>
           </div>
           <div style="display: flex; align-items: center; gap: 10px;">
             <span style="font-size: 16px;">${hasPb ? '✓' : '○'}</span>
-            <span>${hasPb ? 'PB/race result on file <span style="color: #4ade80; font-weight: 600;">✓ done</span>' : 'Add a recent PB or race time'} ${!hasPb ? '<a style="color: var(--accent); cursor: pointer; text-decoration: underline; margin-left: 6px;" onclick="navigate(\'settings\')">in Settings</a>' : ''}</span>
+            <span>${hasPb ? 'PB/race result on file <span style="color: #4ade80; font-weight: 600;">✓</span>' : 'Recent PB (optional but improves accuracy) '} ${!hasPb ? '<a style="color: var(--accent); cursor: pointer; text-decoration: underline; margin-left: 6px;" onclick="navigate(\'settings\')">add in Settings</a>' : ''}</span>
           </div>
-          ${haveWorkouts >= TARGET_WORKOUTS && hasPb ? `
-            <div style="margin-top: 8px; padding: 10px 12px; background: rgba(74, 222, 128, 0.05); border: 1px solid rgba(74, 222, 128, 0.2); border-radius: 8px; font-size: 12px; color: var(--text-dim);">
-              Both requirements met! Your projection will appear shortly. It updates automatically each week.
-            </div>
-          ` : ''}
+          <div style="margin-top: 4px; padding: 8px 0 0; font-size: 11px; color: var(--text-mute); line-height: 1.5;">
+            Coach uses your actual training data to project times. Once you've logged a few workouts, projections appear automatically and refresh weekly.
+          </div>
         </div>
       </div>
     `;
@@ -9031,9 +9136,70 @@ async function renderPlan() {
     nextWeekStartLabel = nextStart.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   }
 
+  // Load active training plan to extract skeleton + week info
+  const { data: activePlan } = await sb.from('training_plans')
+    .select('plan_data, created_at')
+    .eq('user_id', state.user.id)
+    .eq('active', true)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const skeleton = activePlan?.plan_data?.skeleton || null;
+  const totalWeeks = skeleton?.length || null;
+
+  // Compute current week index — count how many distinct weeks the user has had since the plan started
+  let currentWeekIndex = 1;
+  let currentWeekInfo = null;
+  if (activePlan?.created_at) {
+    const planStart = new Date(activePlan.created_at);
+    planStart.setHours(12, 0, 0, 0);
+    // Find that week's Monday
+    const psDow = planStart.getDay();
+    const psDaysToMonday = psDow === 0 ? -6 : 1 - psDow;
+    const planMonday = new Date(planStart);
+    planMonday.setDate(planMonday.getDate() + psDaysToMonday);
+
+    const today = new Date();
+    today.setHours(12, 0, 0, 0);
+    const daysSinceStart = Math.floor((today.getTime() - planMonday.getTime()) / (24 * 60 * 60 * 1000));
+    currentWeekIndex = Math.max(1, Math.floor(daysSinceStart / 7) + 1);
+    if (skeleton && skeleton[currentWeekIndex - 1]) {
+      currentWeekInfo = skeleton[currentWeekIndex - 1];
+    }
+  }
+
   el.innerHTML = `
     <div class="section-title">Your Training Plan</div>
     <p class="section-sub">Coach generates this calendar from your goals. Updates automatically as you train.</p>
+
+    ${hasPlan && currentWeekInfo ? `
+      <div style="background: linear-gradient(135deg, rgba(0, 255, 163, 0.06), rgba(80, 130, 255, 0.03)); border: 1px solid rgba(0, 255, 163, 0.2); border-radius: 14px; padding: 16px 20px; margin-bottom: 18px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+          <div>
+            <div style="font-size: 11px; color: var(--accent); text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; margin-bottom: 4px;">You are here</div>
+            <div style="font-size: 18px; font-weight: 700; color: var(--text); margin-bottom: 2px;">
+              Week ${currentWeekIndex}${totalWeeks ? ` of ${totalWeeks}` : ''} · ${currentWeekInfo.phase.replace(/_/g, ' ')}${currentWeekInfo.is_deload ? ' · DELOAD' : ''}
+            </div>
+            <div style="font-size: 13px; color: var(--text-dim); line-height: 1.5;">${currentWeekInfo.focus || ''}</div>
+          </div>
+          ${currentWeekInfo.target_volume_hours ? `
+            <div style="text-align: right;">
+              <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px;">Target</div>
+              <div style="font-size: 22px; font-weight: 800; color: var(--text); font-family: 'JetBrains Mono', monospace; line-height: 1;">${currentWeekInfo.target_volume_hours}h</div>
+            </div>
+          ` : ''}
+        </div>
+      </div>
+    ` : hasPlan ? `
+      <div style="background: var(--bg-2); border: 1px solid var(--border); border-radius: 14px; padding: 14px 18px; margin-bottom: 18px; display: flex; align-items: center; gap: 12px;">
+        <div style="font-size: 20px;">📍</div>
+        <div>
+          <div style="font-size: 14px; font-weight: 600;">Week ${currentWeekIndex}</div>
+          <div style="font-size: 12px; color: var(--text-dim);">Your training plan is live. Check the calendar below.</div>
+        </div>
+      </div>
+    ` : ''}
 
     <div class="plan-header">
       <div class="plan-month">
