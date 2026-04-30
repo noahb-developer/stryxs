@@ -6884,8 +6884,34 @@ async function completeIntake() {
   if (error) {
     clearTimeout(masterTimeout);
     window.removeEventListener('beforeunload', beforeUnloadHandler);
-    toast('Save failed: ' + error.message);
-    console.error(error);
+    console.error('[Stryxs] athlete_intake upsert failed:', error);
+
+    // Detect missing-column errors specifically — likely means migration wasn't run
+    const errMsg = error.message || JSON.stringify(error);
+    const isMissingColumn = errMsg.toLowerCase().includes('column') ||
+                            error.code === 'PGRST204' ||
+                            error.code === '42703';
+
+    if (el) {
+      el.innerHTML = `
+        <div class="coach-hero">
+          <div class="coach-avatar">⚠️</div>
+          <div class="coach-intro">
+            <h2>Couldn't save your profile</h2>
+            <p style="color: #f87171; margin-bottom: 12px;">${errMsg}</p>
+            ${isMissingColumn ? `
+              <div style="background: rgba(255, 209, 102, 0.08); border: 1px solid rgba(255, 209, 102, 0.3); border-radius: 8px; padding: 12px 14px; margin-bottom: 16px; font-size: 13px; color: var(--text-dim); line-height: 1.55;">
+                <strong style="color: var(--text);">Likely cause:</strong> Your database is missing some columns. The app was updated but the database migration hasn't been run yet.
+                <br><br>
+                <strong style="color: var(--text);">How to fix:</strong> Run the latest migration SQL in Supabase Studio → SQL Editor. The file is <code style="background: var(--bg-3); padding: 2px 5px; border-radius: 3px; font-family: monospace;">intake_periodization_migration.sql</code> in the latest deploy.
+              </div>
+            ` : ''}
+            <button class="btn" onclick="renderCoach()">Try again</button>
+          </div>
+        </div>
+      `;
+    }
+    toast('Save failed: ' + errMsg.substring(0, 100));
     return;
   }
 
