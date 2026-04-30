@@ -6978,49 +6978,88 @@ async function completeIntake() {
     }
     if (masterTimeoutFired) return;
 
-    updateProgress('Building your week-1 plan…');
-    console.log('[Stryxs] Calling generate_plan with payload:', payload);
-    // Pass missingLthr=false to Coach because the starter week handles assessment — Coach just makes a clean plan
-    const planPayload = { ...payload };
-    if (missingLthr) {
-      // Tell Coach to skip the assessment-week mode — we're handling that via starter week
-      planPayload._suppress_assessment_week = true;
-    }
-    const plan = await callCoach('generate_plan', { intake: planPayload, weekNumber: 1, skeleton }, { timeoutMs: 90000 });
-    console.log('[Stryxs] Plan received, workouts:', plan?.workouts?.length || 0);
-    if (masterTimeoutFired) return;
+    // ═══ DECIDE: pre-generate periodized week 1 OR wait for LTHR? ═══
+    // If LTHR is missing for a Friel persona, DON'T pre-generate the periodized plan now.
+    // The athlete needs to complete LTHR tests first. Once they enter values in Settings,
+    // the periodized week 1 will be generated then.
+    // For now: save a stub training_plan with the skeleton + starter days.
+    const skipPeriodizedPlan = missingLthr && isFrielPersona;
 
-    if (!plan || !plan.workouts || plan.workouts.length === 0) {
-      throw new Error('Coach returned an empty plan');
-    }
+    if (skipPeriodizedPlan) {
+      updateProgress('Saving your plan structure…');
+      // Save a stub training_plans row so renderPlan can find the skeleton
+      const stubPlan = {
+        phase: 'starter',
+        phase_description: 'Starter week — LTHR field tests before periodized training begins',
+        weekly_summary: 'LTHR tests + light intro days. Periodized plan starts after tests are complete.',
+        workouts: [], // No periodized workouts yet
+        skeleton: skeleton || [],
+        plan_start_date: planStartStr,
+        _awaiting_lthr: true,
+      };
+      // Mark old plans inactive
+      await sb.from('training_plans').update({ active: false }).eq('user_id', state.user.id).eq('active', true);
+      // Insert stub plan
+      const { data: stubRow, error: stubErr } = await sb.from('training_plans').insert({
+        user_id: state.user.id,
+        plan_data: stubPlan,
+        current_phase: 'starter',
+        active: true,
+      }).select().single();
+      if (stubErr) {
+        console.error('[Stryxs] Stub plan save failed:', stubErr);
+        throw new Error('Failed to save plan stub: ' + stubErr.message);
+      }
+      console.log('[Stryxs] Stub plan saved, awaiting LTHR. Plan ID:', stubRow?.id);
+      if (masterTimeoutFired) return;
 
-    if (skeleton) plan.skeleton = skeleton;
+      // Save starter days
+      if (starterDays && starterDays.length > 0) {
+        updateProgress('Setting up your starter week…');
+        try {
+          await saveStarterWeek(starterDays, state.user.id, stubRow?.id || null);
+          console.log('[Stryxs] Starter week saved successfully');
+        } catch (starterErr) {
+          console.error('[Stryxs] Starter week save failed:', starterErr);
+          toast('Plan ready, but starter days failed to save: ' + (starterErr.message || 'unknown'));
+        }
+      }
+    } else {
+      // Normal flow: LTHR already known (or not a Friel persona) — generate periodized week 1 immediately
+      updateProgress('Building your week-1 plan…');
+      console.log('[Stryxs] Calling generate_plan with payload:', payload);
+      const plan = await callCoach('generate_plan', { intake: payload, weekNumber: 1, skeleton }, { timeoutMs: 90000 });
+      console.log('[Stryxs] Plan received, workouts:', plan?.workouts?.length || 0);
+      if (masterTimeoutFired) return;
 
-    updateProgress('Saving your plan to your calendar…');
-    // Save the periodized plan starting on NEXT MONDAY (or today if today is Monday)
-    const saveResult = await savePlanToDb(plan, state.user.id, planStartStr);
-    console.log('[Stryxs] Periodized plan saved');
-    if (masterTimeoutFired) return;
+      if (!plan || !plan.workouts || plan.workouts.length === 0) {
+        throw new Error('Coach returned an empty plan');
+      }
 
-    // If we have starter days, save them into planned_workouts (using same plan_id as the periodized plan)
-    if (starterDays && starterDays.length > 0) {
-      updateProgress('Setting up your first few days…');
-      // Get the plan_id we just created
-      const { data: latestPlan } = await sb.from('training_plans')
-        .select('id')
-        .eq('user_id', state.user.id)
-        .eq('active', true)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      console.log('[Stryxs] Saving starter week with', starterDays.length, 'days, planId:', latestPlan?.id);
-      try {
-        await saveStarterWeek(starterDays, state.user.id, latestPlan?.id || null);
-        console.log('[Stryxs] Starter week saved successfully');
-      } catch (starterErr) {
-        // Don't fail the whole flow, but DO show the user something visible so they know what's missing
-        console.error('[Stryxs] Starter week save failed:', starterErr);
-        toast('Plan ready, but starter days failed to save: ' + (starterErr.message || 'unknown'));
+      if (skeleton) plan.skeleton = skeleton;
+
+      updateProgress('Saving your plan to your calendar…');
+      const saveResult = await savePlanToDb(plan, state.user.id, planStartStr);
+      console.log('[Stryxs] Periodized plan saved');
+      if (masterTimeoutFired) return;
+
+      // Save starter days too (today through Sunday — light easy intro since LTHR known)
+      if (starterDays && starterDays.length > 0) {
+        updateProgress('Setting up your first few days…');
+        const { data: latestPlan } = await sb.from('training_plans')
+          .select('id')
+          .eq('user_id', state.user.id)
+          .eq('active', true)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        try {
+          await saveStarterWeek(starterDays, state.user.id, latestPlan?.id || null);
+          console.log('[Stryxs] Starter week saved successfully');
+        } catch (starterErr) {
+          console.error('[Stryxs] Starter week save failed:', starterErr);
+          toast('Plan ready, but starter days failed to save: ' + (starterErr.message || 'unknown'));
+        }
       }
     }
 
@@ -10641,9 +10680,11 @@ async function saveAllSettings(silent = false) {
   const pbMarathon = document.getElementById('settingsPbMarathon')?.value.trim() || null;
   const lastRace = document.getElementById('settingsLastRace')?.value.trim() || null;
 
-  // Zones
-  const runLthr = parseInt(document.getElementById('settingsRunLthr')?.value) || 170;
-  const bikeLthr = parseInt(document.getElementById('settingsBikeLthr')?.value) || 165;
+  // Zones — null means "not tested yet", don't save fake defaults
+  const runLthrRaw = document.getElementById('settingsRunLthr')?.value?.trim();
+  const bikeLthrRaw = document.getElementById('settingsBikeLthr')?.value?.trim();
+  const runLthr = runLthrRaw ? parseInt(runLthrRaw) : null;
+  const bikeLthr = bikeLthrRaw ? parseInt(bikeLthrRaw) : null;
 
   // Update profile state
   state.profile = { ...state.profile, runLthr, bikeLthr };
@@ -10664,6 +10705,12 @@ async function saveAllSettings(silent = false) {
     display_name: name,
     bio: bio,
   }).eq('id', state.user.id);
+
+  // Also sync LTHR to athlete_intake so plan generation has access
+  await sb.from('athlete_intake').update({
+    run_lthr: runLthr,
+    bike_lthr: bikeLthr,
+  }).eq('user_id', state.user.id);
 
   // Save intake fields
   await sb.from('athlete_intake').update({
@@ -10713,6 +10760,56 @@ async function saveAllSettings(silent = false) {
   _projectionsCache = null;
   _projectionsCacheTime = 0;
   try { localStorage.removeItem('stryxs_projections_cache'); } catch(e) {}
+
+  // ═══ AUTO-GENERATE PERIODIZED PLAN if user just entered LTHR ═══
+  // Conditions:
+  //   1. They have an active plan that was a STUB (awaiting LTHR)
+  //   2. They just entered both run_lthr AND bike_lthr (or run_lthr if not Friel persona)
+  //   3. The plan was saved with _awaiting_lthr=true
+  try {
+    const oldRunLthr = oldProfile?.run_lthr || null;
+    const oldBikeLthr = oldProfile?.bike_lthr || null;
+    const lthrJustAdded = (!oldRunLthr && runLthr) || (!oldBikeLthr && bikeLthr);
+
+    if (lthrJustAdded && runLthr && bikeLthr) {
+      const { data: activePlan } = await sb.from('training_plans')
+        .select('id, plan_data, created_at')
+        .eq('user_id', state.user.id)
+        .eq('active', true)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (activePlan?.plan_data?._awaiting_lthr) {
+        console.log('[Stryxs] LTHR entered + stub plan exists → auto-generating periodized week 1');
+
+        // Generate week 1 of periodized plan starting on the original plan_start_date
+        const planStartStr = activePlan.plan_data.plan_start_date;
+        const skeleton = activePlan.plan_data.skeleton || null;
+
+        toast('LTHR saved — building your periodized plan…');
+
+        // Get fresh intake (includes LTHR we just saved)
+        const { data: freshIntake } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).single();
+
+        const periodizedPlan = await callCoach('generate_plan', {
+          intake: freshIntake,
+          weekNumber: 1,
+          skeleton,
+        }, { timeoutMs: 90000 });
+
+        if (periodizedPlan && periodizedPlan.workouts && periodizedPlan.workouts.length > 0) {
+          if (skeleton) periodizedPlan.skeleton = skeleton;
+          await savePlanToDb(periodizedPlan, state.user.id, planStartStr);
+          console.log('[Stryxs] Periodized plan generated + saved post-LTHR');
+          toast('Periodized plan ready — check your Plan tab');
+        }
+      }
+    }
+  } catch (autoGenErr) {
+    console.error('[Stryxs] Auto-generate periodized plan failed (non-blocking):', autoGenErr);
+    // Don't surface this — it's a nice-to-have, user can manually generate via "Generate next week" button
+  }
 
   showApp();
   if (!silent) toast('Settings saved');
