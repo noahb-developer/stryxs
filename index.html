@@ -3996,7 +3996,7 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let state = {
   user: null,
-  profile: { runLthr: 170, bikeLthr: 165 },
+  profile: { runLthr: null, bikeLthr: null },
   workouts: [],
 };
 
@@ -4121,7 +4121,7 @@ async function doLogin() {
 async function doLogout() {
   await sb.auth.signOut();
   state.user = null; state.workouts = [];
-  state.profile = { runLthr: 170, bikeLthr: 165 };
+  state.profile = { runLthr: null, bikeLthr: null };
   showLanding(); navigate('landing');
 }
 
@@ -7013,10 +7013,14 @@ async function completeIntake() {
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
+      console.log('[Stryxs] Saving starter week with', starterDays.length, 'days, planId:', latestPlan?.id);
       try {
         await saveStarterWeek(starterDays, state.user.id, latestPlan?.id || null);
+        console.log('[Stryxs] Starter week saved successfully');
       } catch (starterErr) {
-        console.error('[Stryxs] Starter week save failed (non-blocking):', starterErr);
+        // Don't fail the whole flow, but DO show the user something visible so they know what's missing
+        console.error('[Stryxs] Starter week save failed:', starterErr);
+        toast('Plan ready, but starter days failed to save: ' + (starterErr.message || 'unknown'));
       }
     }
 
@@ -7697,27 +7701,29 @@ async function saveStarterWeek(starterDays, userId, planId) {
   // Compute date range to clear (today through next Sunday)
   const firstDate = starterDays[0].scheduled_date;
   const lastDate = starterDays[starterDays.length - 1].scheduled_date;
+  console.log('[Stryxs] saveStarterWeek: clearing range', firstDate, '→', lastDate);
 
   // Clear any existing planned workouts in that range
-  await sb.from('planned_workouts')
+  const { error: delErr } = await sb.from('planned_workouts')
     .delete()
     .eq('user_id', userId)
     .gte('scheduled_date', firstDate)
     .lte('scheduled_date', lastDate);
+  if (delErr) console.warn('[Stryxs] starter pre-delete failed (non-fatal):', delErr);
 
-  // Insert
+  // Insert — match the EXACT shape that savePlanToDb uses (no prescription_type, that column may not exist)
   const rows = starterDays.map(d => ({
     user_id: userId,
     plan_id: planId,
     scheduled_date: d.scheduled_date,
-    sport: d.sport,
-    workout_type: d.workout_type,
-    duration_minutes: d.duration_minutes,
-    distance_km: d.distance_km,
-    description: d.description,
-    intensity_target: d.intensity_target,
-    prescription_type: d.duration_minutes ? 'time' : 'distance',
+    sport: d.sport || 'rest',
+    workout_type: d.workout_type || 'rest',
+    duration_minutes: d.duration_minutes ?? null,
+    distance_km: d.distance_km ?? null,
+    description: d.description || '',
+    intensity_target: d.intensity_target || '',
   }));
+  console.log('[Stryxs] saveStarterWeek: inserting', rows.length, 'rows. Sample:', rows[0]);
 
   const { error } = await sb.from('planned_workouts').insert(rows);
   if (error) {
@@ -7770,6 +7776,10 @@ async function savePlanToDb(plan, userId, startDate = null) {
     .eq('user_id', userId)
     .eq('active', true);
   if (deactErr) console.warn('[Stryxs] Deactivate old plans failed (non-fatal):', deactErr);
+
+  // Store the plan start date INTO plan_data so renderPlan can compute "current week" correctly
+  // This is the date the periodized plan begins (date_offset_days=0 anchor)
+  plan.plan_start_date = rangeStart;
 
   // ═══ STEP 4: Insert new training_plan row ═══
   const { data: planRow, error: planErr } = await sb.from('training_plans').insert({
@@ -9641,14 +9651,47 @@ async function renderPlan() {
 
   const skeleton = activePlan?.plan_data?.skeleton || null;
   const totalWeeks = skeleton?.length || null;
+  // The actual date the periodized plan begins (next Monday after signup, OR today if signed up Monday)
+  const planStartDateStr = activePlan?.plan_data?.plan_start_date || null;
 
-  // Compute current week index — count how many distinct weeks the user has had since the plan started
+  // Determine where the athlete is RIGHT NOW
+  // 3 possibilities:
+  //   1. Today is BEFORE planStartDate → starter week (LTHR tests or easy intro)
+  //   2. Today is ON/AFTER planStartDate → periodized week N (compute index)
+  //   3. No active plan → no card
+  let currentState = null; // 'starter' | 'periodized' | null
   let currentWeekIndex = 1;
   let currentWeekInfo = null;
-  if (activePlan?.created_at) {
+  let starterDaysRemaining = 0;
+  let starterMissingLthr = false;
+
+  if (activePlan && planStartDateStr) {
+    const today = new Date();
+    today.setHours(12, 0, 0, 0);
+    const planStart = new Date(planStartDateStr + 'T12:00:00');
+    planStart.setHours(12, 0, 0, 0);
+    const daysFromPlanStart = Math.floor((today.getTime() - planStart.getTime()) / (24 * 60 * 60 * 1000));
+
+    if (daysFromPlanStart < 0) {
+      // We're in the starter week — plan hasn't begun yet
+      currentState = 'starter';
+      starterDaysRemaining = Math.abs(daysFromPlanStart);
+      // Detect if missing LTHR for friel persona — implies test schedule
+      const isFrielPersona = ['ironman', '70_3', 'olympic_tri', 'sprint_tri'].includes(intake?.goal_event);
+      starterMissingLthr = isFrielPersona && (!intake?.run_lthr || !intake?.bike_lthr);
+    } else {
+      // Periodized plan has begun — compute week index from plan start
+      currentState = 'periodized';
+      currentWeekIndex = Math.max(1, Math.floor(daysFromPlanStart / 7) + 1);
+      if (skeleton && skeleton[currentWeekIndex - 1]) {
+        currentWeekInfo = skeleton[currentWeekIndex - 1];
+      }
+    }
+  } else if (activePlan?.created_at) {
+    // Fallback for plans created before plan_start_date was stored
+    currentState = 'periodized';
     const planStart = new Date(activePlan.created_at);
     planStart.setHours(12, 0, 0, 0);
-    // Find that week's Monday
     const psDow = planStart.getDay();
     const psDaysToMonday = psDow === 0 ? -6 : 1 - psDow;
     const planMonday = new Date(planStart);
@@ -9663,11 +9706,33 @@ async function renderPlan() {
     }
   }
 
+  // Pre-format plan-start-Monday date for display in starter card
+  const planStartHumanLabel = planStartDateStr
+    ? new Date(planStartDateStr + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+    : null;
+
   el.innerHTML = `
     <div class="section-title">Your Training Plan</div>
     <p class="section-sub">Coach generates this calendar from your goals. Updates automatically as you train.</p>
 
-    ${hasPlan && currentWeekInfo ? `
+    ${hasPlan && currentState === 'starter' ? `
+      <div style="background: linear-gradient(135deg, rgba(255, 209, 102, 0.08), rgba(255, 209, 102, 0.03)); border: 1px solid rgba(255, 209, 102, 0.3); border-radius: 14px; padding: 16px 20px; margin-bottom: 18px;">
+        <div style="font-size: 11px; color: #ffd166; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; margin-bottom: 6px;">You are here · Starter week</div>
+        <div style="font-size: 17px; font-weight: 700; color: var(--text); margin-bottom: 6px;">
+          ${starterMissingLthr ? '🎯 LTHR test week' : '✨ Easy intro days'}
+        </div>
+        <div style="font-size: 13px; color: var(--text-dim); line-height: 1.55; margin-bottom: 10px;">
+          ${starterMissingLthr
+            ? `Your real periodized plan begins <strong style="color: var(--text);">${planStartHumanLabel}</strong>. Until then, complete the <strong style="color: var(--text);">Run + Bike LTHR tests</strong> scheduled below — they set your training zones for everything that follows.`
+            : `Your real periodized plan begins <strong style="color: var(--text);">${planStartHumanLabel}</strong>. Until then, take it easy — light aerobic days and rest. No pressure this week.`}
+        </div>
+        ${starterMissingLthr ? `
+          <div style="font-size: 12px; color: var(--text-dim); padding: 10px 12px; background: rgba(255, 209, 102, 0.06); border-radius: 8px; line-height: 1.6;">
+            <strong style="color: #ffd166;">After each test:</strong> calculate average HR over the last 20 min of the 30 min effort. Enter values in <a style="color: var(--accent); cursor: pointer; text-decoration: underline;" onclick="navigate('settings')">Settings → Heart Rate Zones</a>.
+          </div>
+        ` : ''}
+      </div>
+    ` : hasPlan && currentWeekInfo ? `
       <div style="background: linear-gradient(135deg, rgba(0, 255, 163, 0.06), rgba(80, 130, 255, 0.03)); border: 1px solid rgba(0, 255, 163, 0.2); border-radius: 14px; padding: 16px 20px; margin-bottom: 18px;">
         <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
           <div>
