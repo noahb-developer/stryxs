@@ -7066,10 +7066,11 @@ async function completeIntake() {
     // Generate Coach's intro message explaining the plan
     updateProgress('Writing your welcome message…');
     try {
+      const totalWeeksForIntro = skeleton ? skeleton.length : null;
       const introMsg = await callCoach('plan_intro_message', {
         intake: payload,
         isAssessmentWeek: missingLthr && isFrielPersona,
-        totalWeeks: plan._total_weeks || (skeleton ? skeleton.length : null),
+        totalWeeks: totalWeeksForIntro,
         starterWeek: needsStarterWeek ? {
           plan_starts_date: planStartStr,
           missing_lthr: missingLthr,
@@ -7137,7 +7138,7 @@ async function renderCoachChat(el, intake) {
 
     <div class="coach-chat">
       <div class="chat-messages" id="chatMessages">
-        ${(history && history.length > 0) ? history.map(m => renderMsg(m.role, m.content, m.context_type)).join('') : renderMsg('coach', `Hey ${state.user.name.split(' ')[0]}. I built your plan based on what you told me — check the Plan tab to see the calendar. Upload your workouts as you do them and I'll give you specific feedback. Ask me anything here.`)}
+        ${(history && history.length > 0) ? history.map(m => renderMsg(m.role, m.content, m.context_type, m.id)).join('') : renderMsg('coach', `Hey ${state.user.name.split(' ')[0]}. I built your plan based on what you told me — check the Plan tab to see the calendar. Upload your workouts as you do them and I'll give you specific feedback. Ask me anything here.`)}
       </div>
       <div class="chat-input-row">
         <input type="text" id="chatInput" placeholder="Ask Coach anything..." onkeydown="if(event.key==='Enter')sendChatMsg()" />
@@ -7218,11 +7219,11 @@ async function loadCoachPersonaBadge(intake) {
   }
 }
 
-function renderMsg(role, content, contextType = null) {
+function renderMsg(role, content, contextType = null, msgId = null) {
   const avatar = role === 'coach' ? '🧠' : (state.user?.name?.[0]?.toUpperCase() || 'A');
   const formatted = role === 'coach' ? formatMarkdown(content) : escapeHtml(content);
 
-  // Special button for settings_change_reactive context
+  // Special button for settings_change_reactive context (only show if NOT already applied)
   let actionsHtml = '';
   if (role === 'coach' && contextType === 'settings_change_reactive') {
     actionsHtml = `
@@ -7230,15 +7231,20 @@ function renderMsg(role, content, contextType = null) {
         <button class="btn" style="font-size: 13px; padding: 8px 14px;" onclick="regeneratePlanFromReactive(this)">
           🔄 Regenerate plan now
         </button>
-        <button class="btn ghost" style="font-size: 13px; padding: 8px 14px;" onclick="this.closest('.msg-actions-wrap').remove()">
+        <button class="btn ghost" style="font-size: 13px; padding: 8px 14px;" onclick="dismissReactiveMessage(this, '${msgId || ''}')">
           Maybe later
         </button>
       </div>
     `;
+  } else if (role === 'coach' && contextType === 'settings_change_reactive_applied') {
+    // Already-applied state — show confirmation, no button
+    actionsHtml = `
+      <div style="margin-top: 12px; font-size: 12px; color: var(--accent); padding: 4px 0;">✓ Plan regenerated</div>
+    `;
   }
 
   return `
-    <div class="chat-msg ${role === 'coach' ? '' : 'user'}">
+    <div class="chat-msg ${role === 'coach' ? '' : 'user'}"${msgId ? ` data-msg-id="${msgId}"` : ''}>
       <div class="msg-avatar">${avatar}</div>
       <div class="msg-bubble">
         ${formatted}
@@ -7248,44 +7254,120 @@ function renderMsg(role, content, contextType = null) {
   `;
 }
 
+// Dismiss a reactive message ("Maybe later") — also mark it dismissed in DB so it doesn't reappear
+async function dismissReactiveMessage(btn, msgId) {
+  const wrap = btn.closest('.msg-actions-wrap');
+  if (wrap) wrap.remove();
+  if (msgId) {
+    try {
+      await sb.from('coach_messages').update({ context_type: 'settings_change_reactive_applied' }).eq('id', msgId);
+    } catch (e) {
+      console.warn('Failed to mark message as dismissed:', e);
+    }
+  }
+}
+
 async function regeneratePlanFromReactive(btn) {
   if (!state.user) return;
   btn.disabled = true;
   btn.textContent = 'Regenerating...';
 
+  // Find the message ID to mark as applied later
+  const msgEl = btn.closest('.chat-msg');
+  const msgId = msgEl?.getAttribute('data-msg-id');
+
   try {
     // Get current intake
     const { data: intake } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).single();
 
-    // Pull the existing skeleton from the active plan (so periodization arc is preserved)
+    // Pull the existing skeleton + plan_start_date from the active plan
     const { data: existingPlan } = await sb.from('training_plans')
-      .select('plan_data')
+      .select('plan_data, created_at')
       .eq('user_id', state.user.id)
       .eq('active', true)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
     let skeleton = existingPlan?.plan_data?.skeleton || null;
+    let storedPlanStartDate = existingPlan?.plan_data?.plan_start_date || null;
 
     // If no skeleton, regenerate one
     if (!skeleton) {
       try { skeleton = await callCoach('generate_skeleton', { intake }); } catch(e) { console.warn('skeleton regen failed:', e); }
     }
 
-    // Compute the current week index based on plan start date
-    let weekNumber = 1;
-    if (existingPlan?.plan_data?.created_at_week) {
-      // Future-proof for now, just use 1
+    // ═══ COMPUTE THE RIGHT START DATE ═══
+    // Priority:
+    //   1. If existing plan has a plan_start_date that's in the FUTURE (still upcoming), use that
+    //   2. If we're past plan_start_date, find the NEXT Monday after the latest already-scheduled workout
+    //   3. Fallback: this week's Monday (legacy behavior)
+    const today = new Date();
+    today.setHours(12, 0, 0, 0);
+
+    let regenStartDate = null;
+    if (storedPlanStartDate) {
+      const storedStart = new Date(storedPlanStartDate + 'T12:00:00');
+      if (storedStart >= today) {
+        // Plan hasn't started yet — regenerate starting from the stored future start date
+        regenStartDate = storedPlanStartDate;
+      }
     }
 
-    // Generate new plan starting from THIS week's Monday — savePlanToDb handles deletion of overlap
-    console.log('[Stryxs] Regenerating plan with skeleton:', !!skeleton);
+    if (!regenStartDate) {
+      // Plan has started — find the Monday AFTER the latest scheduled workout
+      const { data: latestPlanned } = await sb.from('planned_workouts')
+        .select('scheduled_date')
+        .eq('user_id', state.user.id)
+        .order('scheduled_date', { ascending: false })
+        .limit(1);
+      if (latestPlanned && latestPlanned.length > 0) {
+        const lastDate = new Date(latestPlanned[0].scheduled_date + 'T12:00:00');
+        const nextStart = new Date(lastDate);
+        nextStart.setDate(lastDate.getDate() + 1);
+        const nsDow = nextStart.getDay();
+        if (nsDow !== 1) {
+          const daysToMon = nsDow === 0 ? 1 : (8 - nsDow);
+          nextStart.setDate(nextStart.getDate() + daysToMon);
+        }
+        regenStartDate = nextStart.toISOString().split('T')[0];
+      } else {
+        // No existing scheduled workouts — default to next Monday from today
+        const dow = today.getDay();
+        const daysUntilMonday = dow === 1 ? 0 : (dow === 0 ? 1 : (8 - dow));
+        const nextMon = new Date(today);
+        nextMon.setDate(today.getDate() + daysUntilMonday);
+        regenStartDate = nextMon.toISOString().split('T')[0];
+      }
+    }
+
+    console.log('[Stryxs] Regen start date:', regenStartDate, '(stored plan_start was:', storedPlanStartDate, ')');
+
+    // Compute current week index from skeleton based on regenStartDate
+    let weekNumber = 1;
+    if (skeleton && storedPlanStartDate) {
+      const storedStart = new Date(storedPlanStartDate + 'T12:00:00');
+      const regenStart = new Date(regenStartDate + 'T12:00:00');
+      const weeksDiff = Math.floor((regenStart.getTime() - storedStart.getTime()) / (7 * 24 * 60 * 60 * 1000));
+      weekNumber = Math.max(1, weeksDiff + 1);
+    }
+
+    console.log('[Stryxs] Regenerating plan, week:', weekNumber, 'start date:', regenStartDate);
     const plan = await callCoach('generate_plan', { intake, weekNumber, skeleton, recentWorkouts: [] });
     if (skeleton) plan.skeleton = skeleton;
+    plan.plan_start_date = storedPlanStartDate || regenStartDate; // preserve original anchor
 
-    await savePlanToDb(plan, state.user.id); // savePlanToDb now clears overlapping data
+    await savePlanToDb(plan, state.user.id, regenStartDate);
 
     toast('Plan regenerated based on your changes');
+
+    // Persist that this reactive message is "applied" so the button doesn't reappear on reload
+    if (msgId) {
+      try {
+        await sb.from('coach_messages').update({ context_type: 'settings_change_reactive_applied' }).eq('id', msgId);
+      } catch (e) {
+        console.warn('Failed to mark message as applied:', e);
+      }
+    }
 
     const wrap = btn.closest('.msg-actions-wrap');
     if (wrap) wrap.innerHTML = `<div style="font-size: 12px; color: var(--accent); padding: 4px 0;">✓ Plan regenerated</div>`;
@@ -10936,9 +11018,15 @@ async function sendCoachReactiveMessage(changes) {
     // Call Coach to write a methodology-aware response
     let coachResponse;
     try {
+      const weeklyHours = intake?.current_weekly_hours;
+      const knownVolumeContext = weeklyHours
+        ? `The athlete trains ${weeklyHours} hours/week (this is real data, use it).`
+        : `The athlete has NOT specified weekly hours. Do NOT make up a number — focus on the change itself.`;
       const messages = [{
         role: 'user',
-        content: `I just updated my settings. Specifically: ${summary.replace(/\*\*/g, '')}. Briefly explain (in 2-3 sentences) how this affects my training, then ask if I want to regenerate my plan. Speak in your methodology's voice.`,
+        content: `I just updated my settings. Specifically: ${summary.replace(/\*\*/g, '')}. ${knownVolumeContext}
+
+In 2-3 sentences, explain SPECIFICALLY how the change I made affects my upcoming training (don't reference data I haven't given you, don't make up numbers). Then ask if I want to regenerate my plan. Speak in your methodology's voice.`,
       }];
       coachResponse = await callCoach('chat', { messages, intake, recentWorkouts: [], plannedWorkouts: [], profile: state.profile });
     } catch (err) {
