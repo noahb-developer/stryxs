@@ -4015,8 +4015,9 @@ async function loadProfile() {
   const { data } = await sb.from('profiles').select('*').eq('id', state.user.id).single();
   if (data) {
     state.profile = {
-      runLthr: data.run_lthr || 170,
-      bikeLthr: data.bike_lthr || 165,
+      // null means "not tested yet" — don't fill defaults, the UI handles fallback for analysis
+      runLthr: data.run_lthr || null,
+      bikeLthr: data.bike_lthr || null,
       avatarUrl: data.avatar_url || null,
       bio: data.bio || '',
       displayName: data.display_name || data.name || null,
@@ -4895,9 +4896,12 @@ function classifyRideType(pct) {
 function analyzeRun(data, lthr) {
   const { laps, summary } = data;
   if (laps.length < 3) return null;
-  const zones = getZones(lthr);
+  // If LTHR not set yet (user skipped tests), use a sane default for analysis math
+  // The user gets reduced-accuracy zone data but the analysis still runs
+  const safeLthr = lthr || 170;
+  const zones = getZones(safeLthr);
   const avgHr = summary?.avgHr || Math.round(laps.reduce((s,l)=>s+l.hr,0)/laps.length);
-  const pct = (avgHr / lthr) * 100;
+  const pct = (avgHr / safeLthr) * 100;
   const { type, class: cls } = classifyRunType(pct);
   const zd = zoneDistribution(laps.map(l => l.hr), zones);
   const { first, second, drift } = cardiacDrift(laps);
@@ -4951,10 +4955,12 @@ function analyzeRun(data, lthr) {
 function analyzeBike(data, lthr) {
   const { laps, summary } = data;
   if (laps.length < 2) return null;
-  const zones = getZones(lthr);
+  // If LTHR not set yet (user skipped tests), use a sane default for analysis math
+  const safeLthr = lthr || 165;
+  const zones = getZones(safeLthr);
   const avgHr = summary?.avgHr || Math.round(laps.reduce((s,l)=>s+l.hr,0)/laps.length);
   const avgSpeed = summary?.avgSpeed || 0;
-  const pct = (avgHr / lthr) * 100;
+  const pct = (avgHr / safeLthr) * 100;
   const { type, class: cls } = classifyRideType(pct);
   const zd = zoneDistribution(laps.map(l => l.hr), zones);
   const { first, second, drift } = cardiacDrift(laps);
@@ -6929,11 +6935,44 @@ async function completeIntake() {
 
   // Standard path: generate skeleton first, then week 1
   try {
+    // ═══ COMPUTE START DATE ═══
+    // If today is Monday, plan starts today.
+    // Otherwise, the periodized plan starts NEXT Monday.
+    // The days between today and Sunday become a "starter week" (LTHR tests if missing, otherwise light easy).
+    const today = new Date();
+    today.setHours(12, 0, 0, 0);
+    const dow = today.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+
+    let planStartDate;
+    if (dow === 1) {
+      // Monday — plan starts today
+      planStartDate = new Date(today);
+    } else {
+      // Any other day — plan starts NEXT Monday
+      const daysUntilMonday = dow === 0 ? 1 : (8 - dow);
+      planStartDate = new Date(today);
+      planStartDate.setDate(today.getDate() + daysUntilMonday);
+    }
+    const planStartStr = planStartDate.toISOString().split('T')[0];
+    console.log('[Stryxs] Today:', today.toISOString().split('T')[0], 'dow=', dow);
+    console.log('[Stryxs] Plan starts:', planStartStr);
+
+    // Determine if we need a starter week (LTHR tests or light easy intro)
+    const isFrielPersona = ['ironman', '70_3', 'olympic_tri', 'sprint_tri'].includes(payload.goal_event);
+    const missingLthr = !payload.run_lthr || (isFrielPersona && !payload.bike_lthr);
+    const needsStarterWeek = dow !== 1; // Any day except Monday gets starter days
+
+    let starterDays = null;
+    if (needsStarterWeek) {
+      starterDays = buildStarterWeek(today, missingLthr, isFrielPersona, payload);
+      console.log('[Stryxs] Built starter week:', starterDays?.length, 'days, missingLthr=', missingLthr);
+    }
+
     updateProgress('Designing your periodization arc…');
     let skeleton = null;
     try {
       skeleton = await callCoach('generate_skeleton', { intake: payload }, { timeoutMs: 30000 });
-      console.log('[Stryxs] Skeleton received:', skeleton);
+      console.log('[Stryxs] Skeleton received:', skeleton?.length, 'weeks');
     } catch (skErr) {
       console.error('[Stryxs] Skeleton generation failed (non-blocking):', skErr);
     }
@@ -6941,9 +6980,14 @@ async function completeIntake() {
 
     updateProgress('Building your week-1 plan…');
     console.log('[Stryxs] Calling generate_plan with payload:', payload);
-    const plan = await callCoach('generate_plan', { intake: payload, weekNumber: 1, skeleton }, { timeoutMs: 90000 });
-    console.log('[Stryxs] Plan received:', plan);
-    console.log('[Stryxs] Plan workouts count:', plan?.workouts?.length || 0);
+    // Pass missingLthr=false to Coach because the starter week handles assessment — Coach just makes a clean plan
+    const planPayload = { ...payload };
+    if (missingLthr) {
+      // Tell Coach to skip the assessment-week mode — we're handling that via starter week
+      planPayload._suppress_assessment_week = true;
+    }
+    const plan = await callCoach('generate_plan', { intake: planPayload, weekNumber: 1, skeleton }, { timeoutMs: 90000 });
+    console.log('[Stryxs] Plan received, workouts:', plan?.workouts?.length || 0);
     if (masterTimeoutFired) return;
 
     if (!plan || !plan.workouts || plan.workouts.length === 0) {
@@ -6953,17 +6997,41 @@ async function completeIntake() {
     if (skeleton) plan.skeleton = skeleton;
 
     updateProgress('Saving your plan to your calendar…');
-    const saveResult = await savePlanToDb(plan, state.user.id);
-    console.log('[Stryxs] Save result:', saveResult);
+    // Save the periodized plan starting on NEXT MONDAY (or today if today is Monday)
+    const saveResult = await savePlanToDb(plan, state.user.id, planStartStr);
+    console.log('[Stryxs] Periodized plan saved');
     if (masterTimeoutFired) return;
+
+    // If we have starter days, save them into planned_workouts (using same plan_id as the periodized plan)
+    if (starterDays && starterDays.length > 0) {
+      updateProgress('Setting up your first few days…');
+      // Get the plan_id we just created
+      const { data: latestPlan } = await sb.from('training_plans')
+        .select('id')
+        .eq('user_id', state.user.id)
+        .eq('active', true)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      try {
+        await saveStarterWeek(starterDays, state.user.id, latestPlan?.id || null);
+      } catch (starterErr) {
+        console.error('[Stryxs] Starter week save failed (non-blocking):', starterErr);
+      }
+    }
 
     // Generate Coach's intro message explaining the plan
     updateProgress('Writing your welcome message…');
     try {
       const introMsg = await callCoach('plan_intro_message', {
         intake: payload,
-        isAssessmentWeek: !!plan._is_assessment_week,
+        isAssessmentWeek: missingLthr && isFrielPersona,
         totalWeeks: plan._total_weeks || (skeleton ? skeleton.length : null),
+        starterWeek: needsStarterWeek ? {
+          plan_starts_date: planStartStr,
+          missing_lthr: missingLthr,
+          starter_days_count: starterDays?.length || 0,
+        } : null,
       }, { timeoutMs: 30000 });
       if (introMsg) {
         await sb.from('coach_messages').insert({
@@ -7469,6 +7537,196 @@ function closeConfirmModal() {
 // Helper: save a plan (and create planned_workouts rows)
 // startDate optional — defaults to today. Used to save "next week" plans starting next Monday.
 // IDEMPOTENT: Clears overlapping data first to prevent duplicates from re-saves.
+// Build a "starter week" — covers today through next Sunday, BEFORE the periodized plan starts on Monday
+// Used to avoid the awkwardness of the periodized plan starting mid-week or 2 days in the past
+// Returns either: LTHR test schedule (if missingLthr), or light easy starter days (if LTHR known)
+function buildStarterWeek(today, missingLthr, isFrielPersona, intake) {
+  const startDayOfWeek = today.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+  // If today is Monday, no starter week needed — the actual plan starts today
+  if (startDayOfWeek === 1) return null;
+
+  // Compute days until next Monday
+  const daysUntilMonday = startDayOfWeek === 0 ? 1 : (8 - startDayOfWeek);
+  // If today is Sunday, only 1 day of "starter" — just rest/easy today, then plan starts Monday
+  // Otherwise we have today through Sunday as starter days
+
+  const starterDays = [];
+  const sportIcons = { run: '🏃', bike: '🚴', swim: '🏊', strength: '💪', rest: '💤' };
+
+  if (missingLthr && isFrielPersona) {
+    // ASSESSMENT MODE: Schedule the LTHR tests across the remaining days
+    // Day 1 (today): rest/light intro — get familiar
+    // Day 2 (next available): Run LTHR test
+    // Day 3+: rest day after run test (recovery)
+    // Day 4: Bike LTHR test
+    // Remaining days: rest/light easy
+
+    const slots = [];
+    for (let i = 0; i < daysUntilMonday; i++) {
+      const d = new Date(today);
+      d.setDate(today.getDate() + i);
+      slots.push({ date: d, dow: d.getDay() });
+    }
+
+    // Plan: today = rest/intro, then run LTHR test, rest, bike LTHR test, then easy
+    slots.forEach((slot, idx) => {
+      const dateStr = slot.date.toISOString().split('T')[0];
+      let workout;
+      if (idx === 0 && daysUntilMonday > 1) {
+        // Today: easy intro
+        workout = {
+          scheduled_date: dateStr,
+          sport: 'rest',
+          workout_type: 'rest',
+          duration_minutes: 0,
+          distance_km: 0,
+          description: 'Welcome day — get familiar with the app, look at your plan, rest up. Tomorrow we start with your LTHR test.',
+          intensity_target: 'Rest',
+        };
+      } else if (idx === 1 || (idx === 0 && daysUntilMonday === 1)) {
+        // Run LTHR test day
+        workout = {
+          scheduled_date: dateStr,
+          sport: 'run',
+          workout_type: 'tempo',
+          duration_minutes: 50,
+          distance_km: null,
+          description: 'Run LTHR test. 10 min easy warmup → 30 min hard sustained TT (best effort you can hold) → 10 min cool down. Use the AVERAGE HR from minutes 10-30 of the TT as your run LTHR. Enter it in Settings → Heart Rate Zones.',
+          intensity_target: 'Hard sustained — RPE 8-9/10',
+        };
+      } else if (idx === 2 && daysUntilMonday > 3) {
+        // Rest day after run test
+        workout = {
+          scheduled_date: dateStr,
+          sport: 'rest',
+          workout_type: 'rest',
+          duration_minutes: 0,
+          distance_km: 0,
+          description: 'Rest day — full recovery from yesterday\'s run test.',
+          intensity_target: 'Rest',
+        };
+      } else if (idx === 3 || (idx === 2 && daysUntilMonday === 3)) {
+        // Bike LTHR test day
+        workout = {
+          scheduled_date: dateStr,
+          sport: 'bike',
+          workout_type: 'tempo',
+          duration_minutes: 50,
+          distance_km: null,
+          description: 'Bike LTHR test. 10 min easy warmup → 30 min hard sustained TT (steady, strong effort) → 10 min cool down. Use the AVERAGE HR from minutes 10-30 as your bike LTHR. Enter it in Settings → Heart Rate Zones.',
+          intensity_target: 'Hard sustained — RPE 8-9/10',
+        };
+      } else {
+        // Filler day — easy aerobic or rest
+        const filler = idx % 2 === 0 ? 'rest' : 'run';
+        workout = filler === 'rest' ? {
+          scheduled_date: dateStr,
+          sport: 'rest',
+          workout_type: 'rest',
+          duration_minutes: 0,
+          distance_km: 0,
+          description: 'Rest day — your real plan starts Monday.',
+          intensity_target: 'Rest',
+        } : {
+          scheduled_date: dateStr,
+          sport: 'run',
+          workout_type: 'easy',
+          duration_minutes: 30,
+          distance_km: null,
+          description: 'Easy aerobic run — conversational pace. Just to keep moving before the real plan starts Monday.',
+          intensity_target: 'Easy — RPE 3-4/10, can hold a conversation',
+        };
+      }
+      starterDays.push(workout);
+    });
+  } else {
+    // LTHR ALREADY KNOWN: Light starter days through Sunday
+    for (let i = 0; i < daysUntilMonday; i++) {
+      const d = new Date(today);
+      d.setDate(today.getDate() + i);
+      const dateStr = d.toISOString().split('T')[0];
+      const dow = d.getDay();
+      // Mon=1...Sun=0. Make weekend slightly more substantial, weekdays lighter
+      const isWeekend = dow === 0 || dow === 6;
+      let workout;
+      if (i === 0) {
+        // Today
+        workout = {
+          scheduled_date: dateStr,
+          sport: 'rest',
+          workout_type: 'rest',
+          duration_minutes: 0,
+          distance_km: 0,
+          description: 'Welcome day — get familiar with the app and your plan. Your real plan starts Monday.',
+          intensity_target: 'Rest',
+        };
+      } else if (isWeekend) {
+        workout = {
+          sport: intake?.goal_event?.includes('marathon') || intake?.goal_event === '5k' || intake?.goal_event === '10k' || intake?.goal_event === 'half_marathon' ? 'run' : 'bike',
+          scheduled_date: dateStr,
+          workout_type: 'easy',
+          duration_minutes: 45,
+          distance_km: null,
+          description: 'Easy aerobic session — conversational pace. Light start before the real plan begins Monday.',
+          intensity_target: 'Easy — RPE 3-4/10',
+        };
+      } else {
+        workout = {
+          scheduled_date: dateStr,
+          sport: i % 2 === 0 ? 'rest' : 'run',
+          workout_type: i % 2 === 0 ? 'rest' : 'easy',
+          duration_minutes: i % 2 === 0 ? 0 : 30,
+          distance_km: 0,
+          description: i % 2 === 0
+            ? 'Rest day — your real plan starts Monday.'
+            : 'Easy aerobic run — conversational pace. Light intro before the real plan starts Monday.',
+          intensity_target: i % 2 === 0 ? 'Rest' : 'Easy — RPE 3-4/10',
+        };
+      }
+      starterDays.push(workout);
+    }
+  }
+
+  return starterDays;
+}
+
+// Save starter-week workouts directly into planned_workouts (separate from the periodized plan)
+async function saveStarterWeek(starterDays, userId, planId) {
+  if (!starterDays || starterDays.length === 0) return;
+
+  // Compute date range to clear (today through next Sunday)
+  const firstDate = starterDays[0].scheduled_date;
+  const lastDate = starterDays[starterDays.length - 1].scheduled_date;
+
+  // Clear any existing planned workouts in that range
+  await sb.from('planned_workouts')
+    .delete()
+    .eq('user_id', userId)
+    .gte('scheduled_date', firstDate)
+    .lte('scheduled_date', lastDate);
+
+  // Insert
+  const rows = starterDays.map(d => ({
+    user_id: userId,
+    plan_id: planId,
+    scheduled_date: d.scheduled_date,
+    sport: d.sport,
+    workout_type: d.workout_type,
+    duration_minutes: d.duration_minutes,
+    distance_km: d.distance_km,
+    description: d.description,
+    intensity_target: d.intensity_target,
+    prescription_type: d.duration_minutes ? 'time' : 'distance',
+  }));
+
+  const { error } = await sb.from('planned_workouts').insert(rows);
+  if (error) {
+    console.error('[Stryxs] Starter week save failed:', error);
+    throw new Error('Failed to save starter week: ' + error.message);
+  }
+  console.log('[Stryxs] Starter week saved:', rows.length, 'days');
+}
+
 async function savePlanToDb(plan, userId, startDate = null) {
   console.log('[Stryxs] savePlanToDb starting, userId:', userId, 'workouts:', plan?.workouts?.length);
 
@@ -8489,6 +8747,42 @@ async function generateNextWeek() {
   }
 
   try {
+    // ═══ GUARD: Block if LTHR missing for Friel persona ═══
+    const { data: intake } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).single();
+    const isFrielPersona = ['ironman', '70_3', 'olympic_tri', 'sprint_tri'].includes(intake?.goal_event);
+    const missingLthr = isFrielPersona && (!intake?.run_lthr || !intake?.bike_lthr);
+    if (missingLthr) {
+      toast('Enter your LTHR values in Settings → Heart Rate Zones first');
+      if (btn) { btn.disabled = false; btn.textContent = 'Generate next week →'; btn.style.opacity = '1'; }
+      // Show inline message in plan UI
+      const planEl = document.getElementById('planContent');
+      if (planEl) {
+        const existing = document.getElementById('lthrBlockBanner');
+        if (existing) existing.remove();
+        const banner = document.createElement('div');
+        banner.id = 'lthrBlockBanner';
+        banner.style.cssText = 'background: rgba(255, 209, 102, 0.08); border: 1px solid rgba(255, 209, 102, 0.3); border-radius: 12px; padding: 14px 18px; margin-top: 14px; display: flex; align-items: center; gap: 12px;';
+        banner.innerHTML = `
+          <div style="font-size: 20px;">⚠️</div>
+          <div style="flex: 1;">
+            <div style="font-weight: 700; font-size: 14px; margin-bottom: 4px;">LTHR required first</div>
+            <div style="font-size: 12px; color: var(--text-dim); line-height: 1.5;">
+              Friel methodology zones depend on your LTHR. Complete the Run + Bike LTHR tests scheduled in your starter days, then enter values in Settings → Heart Rate Zones to unlock next-week generation.
+            </div>
+          </div>
+          <button class="btn ghost" style="font-size: 12px; padding: 6px 10px;" onclick="navigate('settings')">Go to Settings →</button>
+        `;
+        // Insert near the generate button if possible, else append
+        const genBtnContainer = btn?.closest('div')?.parentElement;
+        if (genBtnContainer) {
+          genBtnContainer.insertAdjacentElement('afterend', banner);
+        } else {
+          planEl.appendChild(banner);
+        }
+      }
+      return;
+    }
+
     // 1. Find the latest scheduled workout to know where "next week" starts
     const { data: latestPlanned } = await sb.from('planned_workouts')
       .select('scheduled_date')
@@ -8525,9 +8819,7 @@ async function generateNextWeek() {
     const existingWeeks = Math.ceil(uniqueDays.size / 7);
     const nextWeekNumber = existingWeeks + 1;
 
-    // 3. Get intake
-    const { data: intake } = await sb.from('athlete_intake')
-      .select('*').eq('user_id', state.user.id).single();
+    // 3. intake already loaded above (from the LTHR guard) — reuse it
 
     // 4. Get last 14 days of completed TRAINING workouts for adaptive adjustments (exclude daily activities)
     const sevenDaysAgo = new Date();
@@ -9291,8 +9583,8 @@ async function renderPlan() {
   const el = document.getElementById('planContent');
   if (!state.user) { el.innerHTML = ''; return; }
 
-  // Check if intake is complete
-  const { data: intake } = await sb.from('athlete_intake').select('completed').eq('user_id', state.user.id).single();
+  // Check if intake is complete + load LTHR state for next-week button
+  const { data: intake } = await sb.from('athlete_intake').select('completed, goal_event, run_lthr, bike_lthr').eq('user_id', state.user.id).single();
 
   if (!intake || !intake.completed) {
     el.innerHTML = `
@@ -9333,6 +9625,10 @@ async function renderPlan() {
     nextStart.setDate(latest.getDate() + 1);
     nextWeekStartLabel = nextStart.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   }
+
+  // Lock next-week generation if LTHR is missing for Friel personas (the periodized plan needs zones)
+  const isFrielPersona = ['ironman', '70_3', 'olympic_tri', 'sprint_tri'].includes(intake?.goal_event);
+  const planLockedByLthr = isFrielPersona && (!intake?.run_lthr || !intake?.bike_lthr);
 
   // Load active training plan to extract skeleton + week info
   const { data: activePlan } = await sb.from('training_plans')
@@ -9427,10 +9723,17 @@ async function renderPlan() {
           <div style="font-size: 20px;">📅</div>
           <div>
             <div style="font-weight: 700; font-size: 15px;">Need more weeks?</div>
-            <div style="font-size: 13px; color: var(--text-dim);">Coach will build the next 7 days starting <strong style="color: var(--text);">${nextWeekStartLabel}</strong>, adjusted to your recent training.</div>
+            <div style="font-size: 13px; color: var(--text-dim);">${planLockedByLthr
+              ? 'Complete your LTHR tests + enter values in Settings to unlock next-week generation.'
+              : `Coach will build the next 7 days starting <strong style="color: var(--text);">${nextWeekStartLabel}</strong>, adjusted to your recent training.`}</div>
           </div>
         </div>
-        <button class="btn" id="generateNextWeekBtn" onclick="generateNextWeek()" style="width: 100%;">Generate next week →</button>
+        ${planLockedByLthr ? `
+          <button class="btn ghost" id="generateNextWeekBtn" disabled style="width: 100%; opacity: 0.55; cursor: not-allowed;" title="Enter LTHR in Settings to unlock">🔒 LTHR required first</button>
+          <button class="btn" style="width: 100%; margin-top: 8px; font-size: 13px;" onclick="navigate('settings')">Enter LTHR in Settings →</button>
+        ` : `
+          <button class="btn" id="generateNextWeekBtn" onclick="generateNextWeek()" style="width: 100%;">Generate next week →</button>
+        `}
       </div>
 
       <div style="margin-top: 14px; padding: 20px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 14px;">
