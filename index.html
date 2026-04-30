@@ -10832,7 +10832,27 @@ async function saveAllSettings(silent = false) {
       weight_kg: weight_kg,
     });
 
-    if (importantChanges.length > 0) {
+    // ═══ DETECT: is this the "first LTHR + stub plan" flow? ═══
+    // If so, we'll skip the reactive "regenerate?" message entirely — auto-gen handles it
+    // and posts its own intro message with the actual periodized plan info.
+    const oldRunLthrPre = oldProfile?.run_lthr || null;
+    const oldBikeLthrPre = oldProfile?.bike_lthr || null;
+    const lthrJustAddedPre = (!oldRunLthrPre && runLthr) || (!oldBikeLthrPre && bikeLthr);
+    let isStubPlanFlow = false;
+    if (lthrJustAddedPre && runLthr && bikeLthr) {
+      const { data: stubCheck } = await sb.from('training_plans')
+        .select('id, plan_data')
+        .eq('user_id', state.user.id)
+        .eq('active', true)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (stubCheck?.plan_data?._awaiting_lthr) {
+        isStubPlanFlow = true;
+      }
+    }
+
+    if (importantChanges.length > 0 && !isStubPlanFlow) {
       // Don't await — let it run in background
       sendCoachReactiveMessage(importantChanges).catch(err => console.error('Coach reactive msg failed:', err));
     }
@@ -10884,6 +10904,29 @@ async function saveAllSettings(silent = false) {
           if (skeleton) periodizedPlan.skeleton = skeleton;
           await savePlanToDb(periodizedPlan, state.user.id, planStartStr);
           console.log('[Stryxs] Periodized plan generated + saved post-LTHR');
+
+          // Post a Coach message explaining the periodized plan is now ready
+          try {
+            const introMsg = await callCoach('plan_intro_message', {
+              intake: freshIntake,
+              isAssessmentWeek: false, // assessment is done — they entered LTHR
+              totalWeeks: skeleton ? skeleton.length : null,
+              starterWeek: null, // starter week is done — periodized plan starts now
+              postLthrEntry: true, // signal to Coach this is the post-LTHR plan reveal
+            }, { timeoutMs: 30000 });
+            if (introMsg) {
+              await sb.from('coach_messages').insert({
+                user_id: state.user.id,
+                role: 'coach',
+                content: introMsg,
+                context_type: 'plan_intro',
+              });
+              setCoachUnread(true);
+            }
+          } catch (introErr) {
+            console.error('Post-LTHR intro message failed (non-blocking):', introErr);
+          }
+
           toast('Periodized plan ready — check your Plan tab');
         }
       }
