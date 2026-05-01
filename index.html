@@ -6308,8 +6308,9 @@ const intakeQuestions = [
   {
     id: 'race_date',
     question: "When's your race?",
-    context: "Pick a date or skip if you don't have one yet.",
+    context: "Pick a date, or skip if you haven't signed up yet. Coach will build a rolling Base cycle now and switch to a full periodized plan when you set a date.",
     type: 'date',
+    optional: true,
   },
   {
     id: 'experience_level',
@@ -6351,7 +6352,7 @@ const intakeQuestions = [
     placeholder: 'e.g. 175 (or skip)',
     min: 100, max: 220,
     optional: true,
-    relevant_when: (a) => ['ironman', '70_3', 'olympic_tri', 'sprint_tri', 'general'].includes(a.goal_event),
+    relevant_when: (a) => ['ironman', '70_3', 'olympic_tri', 'sprint_tri', 'general'].includes(a.goal_event) && !state.profile?.runLthr,
   },
   {
     id: 'lthr_bike',
@@ -6361,7 +6362,7 @@ const intakeQuestions = [
     placeholder: 'e.g. 165 (or skip)',
     min: 100, max: 220,
     optional: true,
-    relevant_when: (a) => ['ironman', '70_3', 'olympic_tri', 'sprint_tri'].includes(a.goal_event),
+    relevant_when: (a) => ['ironman', '70_3', 'olympic_tri', 'sprint_tri'].includes(a.goal_event) && !state.profile?.bikeLthr,
   },
   {
     id: 'goal_time',
