@@ -6552,7 +6552,14 @@ const intakeQuestions = [
       { value: 'sun', emoji: '', label: 'Sunday' },
     ],
     // Skip if F&H athlete picked 7 days/wk — they're available every day, no need to ask which.
-    relevant_when: (a) => !(a.goal_event === 'general' && a.fh_days_per_week === '7'),
+    relevant_when: (a) => {
+      if (a.goal_event !== 'general') return true;
+      const days = a.fh_days_per_week;
+      // Accept '7', 7, or anything that parseInts to 7
+      if (days === '7' || days === 7) return false;
+      if (days != null && parseInt(days) === 7) return false;
+      return true;
+    },
   },
   {
     id: 'preferred_long_day',
