@@ -4150,13 +4150,28 @@ function showEmailVerifyScreen(email) {
 
 async function checkSession() {
   const { data } = await sb.auth.getSession();
-  if (data.session) {
-    state.user = { id: data.session.user.id, email: data.session.user.email, name: data.session.user.user_metadata?.name || 'Athlete' };
-    await loadProfile();
-    await loadWorkouts();
-    return true;
+  if (!data.session) return false;
+
+  // Validate the user still exists in the auth system (not just a stale token).
+  // If the account was deleted in Supabase, this returns null and we sign out.
+  try {
+    const { data: userCheck, error: userErr } = await sb.auth.getUser();
+    if (userErr || !userCheck?.user) {
+      console.warn('[Stryxs] Session token exists but user no longer valid — signing out');
+      await sb.auth.signOut();
+      state.user = null;
+      try { toast('Your account is no longer available. Please sign in again or create a new account.'); } catch (_) {}
+      return false;
+    }
+  } catch (e) {
+    console.warn('[Stryxs] Session validation failed:', e);
+    // Don't sign out on transient network errors — only on definitive "user not found"
   }
-  return false;
+
+  state.user = { id: data.session.user.id, email: data.session.user.email, name: data.session.user.user_metadata?.name || 'Athlete' };
+  await loadProfile();
+  await loadWorkouts();
+  return true;
 }
 
 function showApp() {
@@ -5498,10 +5513,10 @@ async function renderDashboard() {
   } else {
     // Group by sport
     const sportGroups = {};
-    const sportEmojis = { run: '🏃', bike: '🚴', swim: '🏊', strength: '💪', gym: '💪', other: '⚡' };
-    const sportLabels = { run: 'Run', bike: 'Bike', swim: 'Swim', strength: 'Gym', gym: 'Gym', other: 'Other' };
+    const sportEmojis = { run: '🏃', running: '🏃', bike: '🚴', cycling: '🚴', swim: '🏊', swimming: '🏊', strength: '💪', gym: '💪', mobility: '🧘', stability: '🧘', other: '⚡' };
+    const sportLabels = { run: 'Run', running: 'Run', bike: 'Bike', cycling: 'Bike', swim: 'Swim', swimming: 'Swim', strength: 'Gym', gym: 'Gym', mobility: 'Mobility', stability: 'Mobility', other: 'Other' };
     recentList.forEach(w => {
-      const key = ['run','bike','swim','strength','gym'].includes(w.sport) ? (w.sport === 'gym' ? 'strength' : w.sport) : 'other';
+      const key = ['run','running','bike','cycling','swim','swimming','strength','gym'].includes(w.sport) ? ((w.sport === 'gym') ? 'strength' : (w.sport === 'running' ? 'run' : (w.sport === 'cycling' ? 'bike' : (w.sport === 'swimming' ? 'swim' : w.sport)))) : 'other';
       if (!sportGroups[key]) sportGroups[key] = { count: 0, distance: 0, hours: 0 };
       sportGroups[key].count++;
       sportGroups[key].distance += parseFloat(w.distance) || 0;
@@ -6536,6 +6551,8 @@ const intakeQuestions = [
       { value: 'sat', emoji: '', label: 'Saturday' },
       { value: 'sun', emoji: '', label: 'Sunday' },
     ],
+    // Skip if F&H athlete picked 7 days/wk — they're available every day, no need to ask which.
+    relevant_when: (a) => !(a.goal_event === 'general' && a.fh_days_per_week === '7'),
   },
   {
     id: 'preferred_long_day',
@@ -6584,15 +6601,14 @@ const intakeQuestions = [
       ];
       const bikeOptions = [
         { value: 'road_bike', emoji: '🚴', label: 'Road bike' },
+        { value: 'tt_bike', emoji: '⏱️', label: 'TT/Tri bike or aero bars' },
         { value: 'trainer', emoji: '🏠', label: 'Indoor trainer' },
-        { value: 'tt_bike', emoji: '⏱️', label: 'TT / Tri bike' },
-        { value: 'aero_bars', emoji: '✈️', label: 'Clip-on aero bars' },
       ];
       const runOptions = [
         { value: 'treadmill', emoji: '🏃', label: 'Treadmill' },
       ];
       const gymOptions = [
-        { value: 'gym', emoji: '🏋️', label: 'Gym / weights' },
+        { value: 'gym', emoji: '🏋️', label: 'Gym / weights access' },
       ];
 
       // Triathlon: always swim + bike + run + gym
@@ -6985,7 +7001,7 @@ async function completeIntake() {
     experience_level: intakeAnswers.experience_level || null,
     race_experience: intakeAnswers.race_experience || null,
     current_weekly_hours: intakeAnswers.current_weekly_hours || null,
-    available_days: intakeAnswers.available_days || null,
+    available_days: intakeAnswers.available_days || (intakeAnswers.fh_days_per_week === '7' ? ['mon','tue','wed','thu','fri','sat','sun'] : null),
     preferred_long_day: intakeAnswers.preferred_long_day || null,
     has_pool_access: (intakeAnswers.equipment || []).includes('pool'),
     has_bike_trainer: (intakeAnswers.equipment || []).includes('trainer'),
@@ -8953,9 +8969,9 @@ async function renderProgress() {
 
   const monthName = today.toLocaleDateString('en-US', { month: 'long' });
 
-  const sportColor = { run: '#60a5fa', bike: '#fb923c', swim: '#4ade80', strength: '#a78bfa', other: '#94a3b8' };
-  const sportLabel = { run: 'Run', bike: 'Bike', swim: 'Swim', strength: 'Gym', other: 'Other' };
-  const sportEmoji = { run: '🏃', bike: '🚴', swim: '🏊', strength: '💪', other: '⚡' };
+  const sportColor = { run: '#60a5fa', running: '#60a5fa', bike: '#fb923c', cycling: '#fb923c', swim: '#4ade80', swimming: '#4ade80', strength: '#a78bfa', gym: '#a78bfa', mobility: '#94a3b8', stability: '#94a3b8', other: '#94a3b8' };
+  const sportLabel = { run: 'Run', running: 'Run', bike: 'Bike', cycling: 'Bike', swim: 'Swim', swimming: 'Swim', strength: 'Gym', gym: 'Gym', mobility: 'Mobility', stability: 'Mobility', other: 'Other' };
+  const sportEmoji = { run: '🏃', running: '🏃', bike: '🚴', cycling: '🚴', swim: '🏊', swimming: '🏊', strength: '💪', gym: '💪', mobility: '🧘', stability: '🧘', other: '⚡' };
 
   container.innerHTML = `
     <div class="panel" style="margin-bottom: 20px;">
