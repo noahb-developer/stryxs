@@ -2089,11 +2089,13 @@ select option {
 }
 
 /* Modal (confirm, import) */
-#importPdfDropZone:hover {
+#importPdfDropZone:hover,
+#intakePdfDropZone:hover {
   border-color: var(--accent);
   background: rgba(0, 255, 163, 0.04);
 }
-#importPdfDropZone.drag-over {
+#importPdfDropZone.drag-over,
+#intakePdfDropZone.drag-over {
   border-color: var(--accent);
   background: rgba(0, 255, 163, 0.08);
   transform: scale(1.01);
@@ -9597,19 +9599,41 @@ async function showImportPlanFlow(intake) {
       <div class="coach-intro">
         <h2>Import your plan</h2>
         <p>${adaptMode
-          ? "Paste your existing training plan below. Coach will review it against the methodology and flag any concerns before applying it."
-          : "Paste your existing training plan below. Coach will load it as-is into your calendar."}</p>
+          ? "Upload a PDF or paste your existing training plan below. Coach will review it against the methodology and flag any concerns before applying it."
+          : "Upload a PDF or paste your existing training plan below. Coach will load it as-is into your calendar."}</p>
       </div>
     </div>
 
     <div class="panel" style="margin-top: 16px;">
       <div class="panel-header">
         <div>
-          <div class="panel-title">Paste your plan</div>
-          <div class="panel-sub">Copy/paste from another app, coach, AI, document — anything works</div>
+          <div class="panel-title">Upload or paste your plan</div>
+          <div class="panel-sub">PDF, copy/paste from another app, coach, AI, document — anything works</div>
         </div>
       </div>
-      <textarea id="importPlanText" placeholder="Paste any format. Examples:&#10;&#10;Mon: Easy run 45 min Z2&#10;Tue: 4x800m at 5K pace, 90s recovery&#10;Wed: Rest&#10;Thu: Tempo run 8 km&#10;Fri: Easy 30 min&#10;Sat: Long run 75 min Z2&#10;Sun: Rest&#10;&#10;Or natural language. Or a TrainingPeaks export. Or a coach's email. Whatever you have." style="width: 100%; min-height: 240px; padding: 14px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 12px; color: var(--text); font-size: 14px; font-family: 'JetBrains Mono', monospace; line-height: 1.6; resize: vertical;"></textarea>
+
+      <!-- ═══ PDF DRAG-DROP UPLOAD ═══ -->
+      <div id="intakePdfDropZone"
+           ondragover="event.preventDefault(); this.classList.add('drag-over');"
+           ondragleave="this.classList.remove('drag-over');"
+           ondrop="event.preventDefault(); this.classList.remove('drag-over'); handleIntakePdfDrop(event);"
+           onclick="document.getElementById('intakePdfFileInput').click();"
+           style="border: 2px dashed var(--border); border-radius: 12px; padding: 22px 18px; text-align: center; cursor: pointer; transition: all 0.2s; margin-bottom: 14px; background: var(--bg-3);">
+        <div style="font-size: 26px; margin-bottom: 6px;">📄</div>
+        <div style="font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 4px;">Drop a PDF here, or click to upload</div>
+        <div style="font-size: 12px; color: var(--text-mute);">Coach reads the text from your PDF automatically</div>
+        <input type="file" id="intakePdfFileInput" accept="application/pdf,.pdf" style="display: none;" onchange="handleIntakePdfFileSelected(event)" />
+      </div>
+
+      <div id="intakePdfStatus" style="display: none; margin-bottom: 12px; padding: 10px 14px; border-radius: 10px; font-size: 13px; line-height: 1.5;"></div>
+
+      <div style="display: flex; align-items: center; gap: 10px; margin: 14px 0;">
+        <div style="flex: 1; height: 1px; background: var(--border);"></div>
+        <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px; font-weight: 600;">or paste text</div>
+        <div style="flex: 1; height: 1px; background: var(--border);"></div>
+      </div>
+
+      <textarea id="importPlanText" placeholder="Paste any format. Examples:&#10;&#10;Mon: Easy run 45 min Z2&#10;Tue: 4x800m at 5K pace, 90s recovery&#10;Wed: Rest&#10;Thu: Tempo run 8 km&#10;Fri: Easy 30 min&#10;Sat: Long run 75 min Z2&#10;Sun: Rest&#10;&#10;Or natural language. Or a TrainingPeaks export. Or a coach's email. Whatever you have." style="width: 100%; min-height: 200px; padding: 14px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 12px; color: var(--text); font-size: 14px; font-family: 'JetBrains Mono', monospace; line-height: 1.6; resize: vertical;"></textarea>
       <div style="display: flex; gap: 10px; margin-top: 14px;">
         <button class="btn" style="flex: 1;" onclick="processImportFromIntake(${JSON.stringify(intake).replace(/"/g, '&quot;').replace(/'/g, '&#39;')}, ${adaptMode})">
           ${adaptMode ? '🔧 Import + review against methodology' : '📥 Import as-is'}
@@ -9617,7 +9641,7 @@ async function showImportPlanFlow(intake) {
         <button class="btn ghost" onclick="cancelImportAndStartFresh()">Cancel — build new instead</button>
       </div>
       <p style="margin-top: 12px; font-size: 12px; color: var(--text-mute); line-height: 1.55;">
-        Coach parses natural language ("easy run 45 min", "8x400m @ 5K pace"), structured tables, JSON, or pasted screenshots in text form. ${adaptMode ? "Coach will review against methodology and suggest adjustments. You decide what to accept." : "Plan loads as-is. Coach won't change it."}
+        Coach parses PDFs, natural language ("easy run 45 min", "8x400m @ 5K pace"), structured tables, JSON, or pasted screenshots in text form. ${adaptMode ? "Coach will review against methodology and suggest adjustments. You decide what to accept." : "Plan loads as-is. Coach won't change it."}
       </p>
     </div>
   `;
@@ -10115,30 +10139,37 @@ function closeImportModal() {
   document.getElementById('importModal').classList.remove('open');
 }
 
-// ─── PDF Upload Handlers ───
+// ─── PDF Upload Handlers (shared by import modal AND intake import page) ───
+
+// Modal handlers (use #importPdfStatus + #importText)
 function handlePdfDrop(event) {
   const files = event.dataTransfer?.files;
   if (!files || files.length === 0) return;
-  const file = files[0];
-  if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
-    showImportPdfStatus('That file isn\'t a PDF. Try again with a PDF file.', 'error');
-    return;
-  }
-  extractPdfTextAndFillTextarea(file);
+  extractPdfText(files[0], 'importPdfStatus', 'importText');
 }
 
 function handlePdfFileSelected(event) {
   const file = event.target.files?.[0];
   if (!file) return;
-  if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
-    showImportPdfStatus('That file isn\'t a PDF. Try again with a PDF file.', 'error');
-    return;
-  }
-  extractPdfTextAndFillTextarea(file);
+  extractPdfText(file, 'importPdfStatus', 'importText');
 }
 
-function showImportPdfStatus(html, kind) {
-  const el = document.getElementById('importPdfStatus');
+// Intake import page handlers (use #intakePdfStatus + #importPlanText)
+function handleIntakePdfDrop(event) {
+  const files = event.dataTransfer?.files;
+  if (!files || files.length === 0) return;
+  extractPdfText(files[0], 'intakePdfStatus', 'importPlanText');
+}
+
+function handleIntakePdfFileSelected(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  extractPdfText(file, 'intakePdfStatus', 'importPlanText');
+}
+
+// Display a status message in the PDF upload section
+function setPdfStatus(statusElId, html, kind) {
+  const el = document.getElementById(statusElId);
   if (!el) return;
   el.style.display = '';
   if (kind === 'error') {
@@ -10157,12 +10188,23 @@ function showImportPdfStatus(html, kind) {
   el.innerHTML = html;
 }
 
-async function extractPdfTextAndFillTextarea(file) {
-  if (typeof pdfjsLib === 'undefined') {
-    showImportPdfStatus('PDF reader didn\'t load. Refresh the page and try again, or paste the plan as text.', 'error');
+// Backwards-compat wrapper for the modal-specific status
+function showImportPdfStatus(html, kind) {
+  setPdfStatus('importPdfStatus', html, kind);
+}
+
+// Extract text from a PDF file using pdfjs-dist, drop into target textarea
+async function extractPdfText(file, statusElId, textareaId) {
+  // File-type guard
+  if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+    setPdfStatus(statusElId, "That file isn't a PDF. Try again with a PDF file.", 'error');
     return;
   }
-  showImportPdfStatus(`<div style="display: flex; align-items: center; gap: 10px;"><div class="spinner" style="width: 16px; height: 16px; border-width: 2px;"></div><div>Reading <strong>${file.name}</strong>…</div></div>`, 'loading');
+  if (typeof pdfjsLib === 'undefined') {
+    setPdfStatus(statusElId, "PDF reader didn't load. Refresh the page and try again, or paste the plan as text.", 'error');
+    return;
+  }
+  setPdfStatus(statusElId, `<div style="display: flex; align-items: center; gap: 10px;"><div class="spinner" style="width: 16px; height: 16px; border-width: 2px;"></div><div>Reading <strong>${file.name}</strong>…</div></div>`, 'loading');
 
   try {
     const arrayBuffer = await file.arrayBuffer();
@@ -10178,19 +10220,23 @@ async function extractPdfTextAndFillTextarea(file) {
     fullText = fullText.trim();
 
     if (fullText.length < 50) {
-      showImportPdfStatus(`This PDF doesn't seem to have selectable text — it might be a scanned document or image-based. For now, please paste your plan as text below. (OCR support is coming soon.)`, 'error');
+      setPdfStatus(statusElId, "This PDF doesn't seem to have selectable text — it might be a scanned document or image-based. For now, please paste your plan as text below. (OCR support is coming soon.)", 'error');
       return;
     }
 
-    // Drop the extracted text into the textarea
-    const ta = document.getElementById('importText');
+    const ta = document.getElementById(textareaId);
     if (ta) ta.value = fullText;
-    showImportPdfStatus(`✓ Extracted ${fullText.length.toLocaleString()} characters from <strong>${file.name}</strong> (${numPages} page${numPages === 1 ? '' : 's'}). Review the text below, then click <strong>Import plan →</strong>.`, 'success');
+    setPdfStatus(statusElId, `✓ Extracted ${fullText.length.toLocaleString()} characters from <strong>${file.name}</strong> (${numPages} page${numPages === 1 ? '' : 's'}). Review the text below, then click <strong>Import →</strong>.`, 'success');
     console.log('[Stryxs] PDF extracted:', file.name, fullText.length, 'chars,', numPages, 'pages');
   } catch (err) {
     console.error('[Stryxs] PDF extraction failed:', err);
-    showImportPdfStatus(`Couldn't read this PDF (${err.message || 'unknown error'}). Try pasting the plan as text instead.`, 'error');
+    setPdfStatus(statusElId, `Couldn't read this PDF (${err.message || 'unknown error'}). Try pasting the plan as text instead.`, 'error');
   }
+}
+
+// Backwards-compat wrapper for any code that called the old function name
+async function extractPdfTextAndFillTextarea(file) {
+  return extractPdfText(file, 'importPdfStatus', 'importText');
 }
 
 // ─── Share Plan ───
