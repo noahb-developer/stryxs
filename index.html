@@ -6383,6 +6383,7 @@ const intakeQuestions = [
       { value: 'intermediate', emoji: '🌿', label: '1-3 years' },
       { value: 'advanced', emoji: '🌳', label: '3+ years' },
     ],
+    relevant_when: (a) => a.goal_event && a.goal_event !== 'general',
   },
   {
     id: 'race_experience',
@@ -6577,21 +6578,43 @@ const intakeQuestions = [
       const isGeneral = a.goal_event === 'general';
       const runOnly = ['5k', '10k', 'half_marathon', 'marathon'].includes(a.goal_event);
 
-      const swimBikeOptions = [
+      const swimOptions = [
         { value: 'pool', emoji: '🏊', label: 'Pool' },
         { value: 'open_water', emoji: '🌊', label: 'Open water' },
+      ];
+      const bikeOptions = [
         { value: 'road_bike', emoji: '🚴', label: 'Road bike' },
         { value: 'trainer', emoji: '🏠', label: 'Indoor trainer' },
+        { value: 'tt_bike', emoji: '⏱️', label: 'TT / Tri bike' },
+        { value: 'aero_bars', emoji: '✈️', label: 'Clip-on aero bars' },
       ];
-      const generalOptions = [
-        { value: 'gym', emoji: '🏋️', label: 'Gym / weights' },
+      const runOptions = [
         { value: 'treadmill', emoji: '🏃', label: 'Treadmill' },
       ];
+      const gymOptions = [
+        { value: 'gym', emoji: '🏋️', label: 'Gym / weights' },
+      ];
 
-      if (isTri) return [...swimBikeOptions, ...generalOptions];
-      if (isGeneral) return [...swimBikeOptions, ...generalOptions];
-      if (runOnly) return generalOptions;
-      return [...swimBikeOptions, ...generalOptions];
+      // Triathlon: always swim + bike + run + gym
+      if (isTri) return [...swimOptions, ...bikeOptions, ...runOptions, ...gymOptions];
+      // Run-only races: just run + gym
+      if (runOnly) return [...runOptions, ...gymOptions];
+      // F&H: filter by chosen sports
+      if (isGeneral) {
+        const sports = a.fh_primary_sports || [];
+        // If "mixed" or no sports picked, show everything
+        if (sports.length === 0 || sports.includes('mixed')) {
+          return [...swimOptions, ...bikeOptions, ...runOptions, ...gymOptions];
+        }
+        const opts = [];
+        if (sports.includes('swim')) opts.push(...swimOptions);
+        if (sports.includes('bike')) opts.push(...bikeOptions);
+        if (sports.includes('run')) opts.push(...runOptions);
+        // Always include gym (they may have it even if "gym only" wasn't picked) — picked = required, not picked = optional
+        opts.push(...gymOptions);
+        return opts;
+      }
+      return [...swimOptions, ...bikeOptions, ...runOptions, ...gymOptions];
     },
   },
   {
