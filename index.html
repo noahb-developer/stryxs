@@ -2,9 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#0a0e1a">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Stryxs">
 <meta name="description" content="AI coaching for endurance athletes. Upload your training data. Get professional coaching insights instantly.">
@@ -57,6 +58,40 @@
 }
 
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+/* ═══ MOBILE FIXES ═══ */
+/* Prevent horizontal scroll / pan / weird zoom-and-stay behavior on phones */
+html, body {
+  max-width: 100vw;
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+  -webkit-touch-callout: none;
+  text-rendering: optimizeLegibility;
+  overscroll-behavior-x: none;
+}
+/* Force ALL text to wrap inside containers, never overflow horizontally */
+* {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+/* Code and URLs need aggressive break to fit narrow phones */
+code, pre, .url, [data-break] {
+  word-break: break-all;
+}
+/* Prevent iOS auto-zoom on input focus — happens when font-size < 16px */
+@media (max-width: 720px) {
+  input, select, textarea {
+    font-size: 16px !important;
+    max-width: 100%;
+  }
+}
+/* Pre-formatted text in chat messages must wrap, not overflow */
+.chat-msg, .msg-bubble, .panel, .modal-body {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  max-width: 100%;
+}
+
 html { scroll-behavior: smooth; }
 
 /* Loading state - prevents flash of landing page on app load */
@@ -488,8 +523,17 @@ body.on-landing .container {
   padding: 0;
 }
 
-.page { display: none; animation: fadeIn 0.25s ease-out; width: 100%; position: relative; }
+.page { display: none; animation: fadeIn 0.25s ease-out; width: 100%; max-width: 100%; position: relative; overflow-x: hidden; }
 .page.active { display: block; }
+/* Padding on the in-app content pages (NOT landing/login/signup which have their own layouts) */
+#page-coach.active, #page-plan.active, #page-dashboard.active, #page-upload.active, #page-history.active, #page-settings.active {
+  padding: 24px 20px 40px;
+}
+@media (max-width: 720px) {
+  #page-coach.active, #page-plan.active, #page-dashboard.active, #page-upload.active, #page-history.active, #page-settings.active {
+    padding: 16px 14px 90px;
+  }
+}
 
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(8px); }
@@ -1269,6 +1313,12 @@ select option {
   background: var(--bg-2); border: 1px solid var(--border);
   border-radius: 16px; padding: 24px;
   margin-bottom: 16px;
+  max-width: 100%;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+}
+@media (max-width: 720px) {
+  .panel { padding: 16px; border-radius: 14px; }
 }
 
 .panel-header {
@@ -1781,6 +1831,17 @@ select option {
   border: 1px solid var(--accent-border);
   border-radius: 18px; padding: 22px;
   margin-bottom: 20px;
+  max-width: 100%;
+  overflow: hidden;
+}
+@media (max-width: 720px) {
+  .coach-hero { padding: 16px; gap: 14px; border-radius: 14px; }
+  .coach-intro h2 { font-size: 19px !important; }
+  .coach-intro p { font-size: 13px !important; line-height: 1.45 !important; }
+}
+.coach-intro {
+  flex: 1;
+  min-width: 0; /* allow flex child to shrink below content size — KEY for text wrapping */
 }
 
 .coach-avatar {
@@ -1811,6 +1872,13 @@ select option {
   background: var(--bg-2); border: 1px solid var(--border);
   border-radius: 18px; padding: 28px;
   animation: fadeIn 0.3s;
+  max-width: 100%;
+  overflow-wrap: break-word;
+}
+@media (max-width: 720px) {
+  .intake-card { padding: 18px; border-radius: 14px; }
+  .intake-question { font-size: 17px !important; line-height: 1.3 !important; }
+  .intake-context { font-size: 13px !important; }
 }
 
 .intake-question {
@@ -1866,8 +1934,12 @@ select option {
 
 .chat-msg {
   display: flex; gap: 10px; max-width: 85%;
+  min-width: 0;
 }
 .chat-msg.user { align-self: flex-end; flex-direction: row-reverse; }
+@media (max-width: 720px) {
+  .chat-msg { max-width: 92%; gap: 8px; }
+}
 
 .chat-msg .msg-avatar {
   width: 32px; height: 32px; border-radius: 50%;
@@ -1883,6 +1955,10 @@ select option {
 .chat-msg .msg-bubble {
   padding: 10px 14px; border-radius: 14px;
   background: var(--bg-3); font-size: 14px; line-height: 1.55;
+  min-width: 0;
+  flex: 1;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 .chat-msg.user .msg-bubble {
   background: var(--accent); color: var(--bg);
@@ -9640,7 +9716,7 @@ async function showImportPlanFlow(intake) {
         <button class="btn" style="flex: 1;" onclick="processImportFromIntake(${JSON.stringify(intake).replace(/"/g, '&quot;').replace(/'/g, '&#39;')}, ${adaptMode})">
           ${adaptMode ? '🔧 Import + review against methodology' : '📥 Import as-is'}
         </button>
-        <button class="btn ghost" onclick="cancelImportAndStartFresh()">Cancel — build new instead</button>
+        <button class="btn ghost" onclick="cancelImportAndStartFresh()">← Go back</button>
       </div>
       <p style="margin-top: 12px; font-size: 12px; color: var(--text-mute); line-height: 1.55;">
         Coach parses PDFs, Word docs, text files, natural language ("easy run 45 min", "8x400m @ 5K pace"), structured tables, JSON, or pasted screenshots in text form. ${adaptMode ? "Coach will review against methodology and suggest adjustments. You decide what to accept." : "Plan loads as-is. Coach won't change it."}
@@ -10113,32 +10189,44 @@ async function discardImportAndBuildNew(intake) {
   }
 }
 
-function cancelImportAndStartFresh() {
+async function cancelImportAndStartFresh() {
   // User changed their mind — bounce them back to the plan_path question (question 0)
   // so they can re-pick. Preserve their other intake answers so they don't have to
-  // re-fill anything. NO API calls fire here — we don't burn credits on a cancel.
-  if (!confirm('Cancel import and go back? Your other answers are saved — you\'ll just need to pick a different option for "Where are you starting from?"')) {
+  // re-fill anything. NO API/Coach calls fire here — we don't burn credits on a cancel.
+  if (!confirm('Go back to the previous question? Your other answers are saved.')) {
     return;
   }
 
   // Reset just the plan_path so they can re-pick it
   delete intakeAnswers.plan_path;
 
-  // Mark intake as not-completed in DB so renderCoach re-shows the questions instead of building a plan
-  // (also clear plan_path in DB so it doesn't auto-route again)
+  // Mark intake as not-completed in DB so renderCoach re-shows the questions instead of building a plan.
+  // CRITICAL: must AWAIT this update before calling renderCoach. Previous version used .then() callback
+  // which caused renderCoach to read stale DB state (still completed=true, plan_path='import_use')
+  // and bypass the intake question.
   if (state.user) {
-    sb.from('athlete_intake').update({
-      plan_path: null,
-      completed: false,
-    }).eq('user_id', state.user.id).then(() => {
+    try {
+      const { error } = await sb.from('athlete_intake').update({
+        plan_path: null,
+        completed: false,
+      }).eq('user_id', state.user.id);
+      if (error) {
+        console.error('[Stryxs] Cancel update failed:', error);
+        toast('Could not go back — try refreshing the page');
+        return;
+      }
       console.log('[Stryxs] Intake reset to plan_path question — user can re-pick');
-    });
+    } catch (e) {
+      console.error('[Stryxs] Cancel update threw:', e);
+      toast('Could not go back — try refreshing the page');
+      return;
+    }
   }
 
   // Reset to the plan_path question (always question 0)
   intakeStep = 0;
-  // Re-render — renderCoach will detect completed=false and show the intake question
-  renderCoach();
+  // Re-render — renderCoach will see completed=false now and show the intake question
+  await renderCoach();
 }
 
 function openImportModal() {
