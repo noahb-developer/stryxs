@@ -526,11 +526,11 @@ body.on-landing .container {
 .page { display: none; animation: fadeIn 0.25s ease-out; width: 100%; max-width: 100%; position: relative; overflow-x: hidden; }
 .page.active { display: block; }
 /* Padding on the in-app content pages (NOT landing/login/signup which have their own layouts) */
-#page-coach.active, #page-plan.active, #page-dashboard.active, #page-upload.active, #page-history.active, #page-settings.active {
+#page-coach.active, #page-plan.active, #page-race-planner.active, #page-dashboard.active, #page-upload.active, #page-history.active, #page-settings.active {
   padding: 24px 20px 40px;
 }
 @media (max-width: 720px) {
-  #page-coach.active, #page-plan.active, #page-dashboard.active, #page-upload.active, #page-history.active, #page-settings.active {
+  #page-coach.active, #page-plan.active, #page-race-planner.active, #page-dashboard.active, #page-upload.active, #page-history.active, #page-settings.active {
     padding: 16px 14px 90px;
   }
 }
@@ -3441,6 +3441,10 @@ body.on-auth .container {
       <span class="nav-menu-icon">📅</span>
       <span class="nav-menu-label">Plan</span>
     </button>
+    <button class="nav-menu-item" data-page="race-planner" onclick="navigateAndCloseMenu('race-planner')">
+      <span class="nav-menu-icon">🏁</span>
+      <span class="nav-menu-label">Race Plan</span>
+    </button>
     <button class="nav-menu-item" data-page="upload" onclick="navigateAndCloseMenu('upload')">
       <span class="nav-menu-icon">📤</span>
       <span class="nav-menu-label">Analyze</span>
@@ -3821,6 +3825,11 @@ body.on-auth .container {
 <!-- PLAN -->
 <div class="page" id="page-plan">
   <div id="planContent"></div>
+</div>
+
+<!-- RACE PLANNER -->
+<div class="page" id="page-race-planner">
+  <div id="racePlannerContent"></div>
 </div>
 
 <!-- UPLOAD -->
@@ -4507,6 +4516,7 @@ function navigate(page) {
   if (page === 'dashboard') renderDashboard();
   if (page === 'coach') renderCoach();
   if (page === 'plan') renderPlan();
+  if (page === 'race-planner') renderRacePlanner();
   if (page === 'history') renderHistory();
   if (page === 'trends') renderTrends();
   if (page === 'settings') renderSettings();
@@ -7841,7 +7851,8 @@ function formatMarkdown(text) {
 }
 
 function escapeHtml(s) {
-  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  if (s === null || s === undefined) return '';
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 async function sendChatMsg() {
@@ -10837,6 +10848,537 @@ async function retakeIntake() {
 // ═══════════════════════════════════════════════════════════
 let calMonth = new Date();
 calMonth.setDate(1);
+
+// ═══════════════════════════════════════════════════════════
+// RACE PLANNER
+// Lets users generate hour-by-hour race-day plans (pacing, fueling, hydration,
+// equipment, contingencies). Each plan persists in race_plans table.
+// ═══════════════════════════════════════════════════════════
+const RACE_TYPES = [
+  { value: '5k', label: '5K Run', emoji: '🏃', distance: '5km' },
+  { value: '10k', label: '10K Run', emoji: '🏃', distance: '10km' },
+  { value: 'half_marathon', label: 'Half Marathon', emoji: '🏃', distance: '21.1km' },
+  { value: 'marathon', label: 'Marathon', emoji: '🏃', distance: '42.2km' },
+  { value: 'sprint_tri', label: 'Sprint Triathlon', emoji: '🏊🚴🏃', distance: '750m / 20km / 5km' },
+  { value: 'olympic_tri', label: 'Olympic Triathlon', emoji: '🏊🚴🏃', distance: '1.5km / 40km / 10km' },
+  { value: '70_3', label: 'Half Ironman (70.3)', emoji: '🏊🚴🏃', distance: '1.9km / 90km / 21.1km' },
+  { value: 'ironman', label: 'Full Ironman', emoji: '🏊🚴🏃', distance: '3.8km / 180km / 42.2km' },
+  { value: 'duathlon', label: 'Duathlon', emoji: '🏃🚴', distance: 'varies' },
+  { value: 'other', label: 'Other / Custom', emoji: '🏁', distance: 'custom' },
+];
+
+async function renderRacePlanner() {
+  const el = document.getElementById('racePlannerContent');
+  if (!state.user) { el.innerHTML = ''; return; }
+
+  // Check intake — race planner needs at least the basic profile
+  const { data: intake } = await sb.from('athlete_intake').select('completed, goal_event').eq('user_id', state.user.id).maybeSingle();
+
+  if (!intake || !intake.completed) {
+    el.innerHTML = `
+      <div class="coach-hero">
+        <div class="coach-avatar">🏁</div>
+        <div class="coach-intro">
+          <h2>Race Planner</h2>
+          <p>Finish your intake first — the race planner needs to know your zones and training data to build accurate plans.</p>
+          <button class="btn" style="margin-top: 14px;" onclick="navigate('coach')">Go to intake →</button>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // Load existing race plans for this user
+  const { data: existingPlans } = await sb.from('race_plans')
+    .select('*')
+    .eq('user_id', state.user.id)
+    .order('race_date', { ascending: true });
+
+  // Split into upcoming and past
+  const today = new Date().toISOString().split('T')[0];
+  const upcoming = (existingPlans || []).filter(p => !p.race_date || p.race_date >= today);
+  const past = (existingPlans || []).filter(p => p.race_date && p.race_date < today);
+
+  el.innerHTML = `
+    <div class="coach-hero">
+      <div class="coach-avatar">🏁</div>
+      <div class="coach-intro">
+        <h2>Race Planner</h2>
+        <p>Build a complete race-day plan — pacing, fueling, hydration, equipment, contingencies. Tailored to your training data.</p>
+      </div>
+    </div>
+
+    <div style="margin-top: 18px;">
+      <button class="btn" style="width: 100%;" onclick="openRacePlanForm()">+ New race plan</button>
+    </div>
+
+    ${upcoming.length > 0 ? `
+      <div class="panel" style="margin-top: 18px;">
+        <div class="panel-header"><div><div class="panel-title">Upcoming races (${upcoming.length})</div></div></div>
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          ${upcoming.map(p => renderRacePlanCard(p)).join('')}
+        </div>
+      </div>
+    ` : ''}
+
+    ${past.length > 0 ? `
+      <div class="panel" style="margin-top: 18px;">
+        <div class="panel-header"><div><div class="panel-title">Past races (${past.length})</div></div></div>
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          ${past.slice(0, 5).map(p => renderRacePlanCard(p, true)).join('')}
+        </div>
+      </div>
+    ` : ''}
+
+    ${(upcoming.length === 0 && past.length === 0) ? `
+      <div class="panel" style="margin-top: 18px; text-align: center;">
+        <div style="font-size: 38px; margin-bottom: 10px;">🏁</div>
+        <div style="font-size: 15px; font-weight: 600; margin-bottom: 6px;">No race plans yet</div>
+        <div style="font-size: 13px; color: var(--text-dim); line-height: 1.55;">
+          Tap <strong>+ New race plan</strong> above to build your first one. Coach uses your training data to tailor pacing and fueling specifically for you.
+        </div>
+      </div>
+    ` : ''}
+  `;
+}
+
+function renderRacePlanCard(p, isPast = false) {
+  const raceType = RACE_TYPES.find(rt => rt.value === p.race_type) || RACE_TYPES[0];
+  const dateLabel = p.race_date
+    ? new Date(p.race_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
+    : 'Date TBD';
+  const goalLabel = p.goal_time ? ` · Goal: ${p.goal_time}` : '';
+  return `
+    <div onclick="viewRacePlan('${p.id}')" style="background: var(--bg-3); border: 1px solid var(--border); border-radius: 12px; padding: 14px; cursor: pointer; transition: all 0.15s; ${isPast ? 'opacity: 0.7;' : ''}">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 6px;">
+        <div style="flex: 1; min-width: 0;">
+          <div style="font-weight: 700; font-size: 14px; color: var(--text); margin-bottom: 2px;">${raceType.emoji} ${p.race_name || raceType.label}</div>
+          <div style="font-size: 12px; color: var(--text-dim);">${dateLabel}${goalLabel}</div>
+        </div>
+        <div style="font-size: 11px; color: var(--text-mute); flex-shrink: 0;">View →</div>
+      </div>
+    </div>
+  `;
+}
+
+function openRacePlanForm() {
+  const el = document.getElementById('racePlannerContent');
+
+  el.innerHTML = `
+    <div class="coach-hero">
+      <div class="coach-avatar">🏁</div>
+      <div class="coach-intro">
+        <h2>New race plan</h2>
+        <p>Tell me about the race. Coach uses your training data + this info to build a complete race-day strategy.</p>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top: 18px;">
+      <div style="display: flex; flex-direction: column; gap: 18px;">
+
+        <div>
+          <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--text);">Race type</label>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px;">
+            ${RACE_TYPES.map(rt => `
+              <button class="rp-race-type" data-value="${rt.value}" onclick="selectRaceType('${rt.value}')" style="padding: 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-size: 13px; font-weight: 600; cursor: pointer; text-align: left; transition: all 0.15s;">
+                <div style="font-size: 16px; margin-bottom: 2px;">${rt.emoji}</div>
+                <div>${rt.label}</div>
+                <div style="font-size: 11px; color: var(--text-mute); font-weight: 500; margin-top: 2px;">${rt.distance}</div>
+              </button>
+            `).join('')}
+          </div>
+        </div>
+
+        <div>
+          <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--text);">Race name (optional)</label>
+          <input type="text" id="rpRaceName" placeholder="e.g., IRONMAN Jacksonville 2027" style="width: 100%; padding: 12px 14px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-family: inherit;">
+        </div>
+
+        <div>
+          <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--text);">Race date</label>
+          <input type="date" id="rpRaceDate" style="width: 100%; padding: 12px 14px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-family: inherit;">
+        </div>
+
+        <div>
+          <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--text);">Goal time</label>
+          <input type="text" id="rpGoalTime" placeholder="e.g., sub 11:00, under 4 hours, finish strong" style="width: 100%; padding: 12px 14px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-family: inherit;">
+        </div>
+
+        <div>
+          <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--text);">Goal tier</label>
+          <div style="display: flex; gap: 8px;">
+            <button class="rp-goal-tier" data-value="finish" onclick="selectGoalTier('finish')" style="flex: 1; padding: 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer;">Finish</button>
+            <button class="rp-goal-tier" data-value="realistic" onclick="selectGoalTier('realistic')" style="flex: 1; padding: 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer;">Realistic</button>
+            <button class="rp-goal-tier" data-value="stretch" onclick="selectGoalTier('stretch')" style="flex: 1; padding: 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer;">Stretch</button>
+          </div>
+        </div>
+
+        <div>
+          <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--text);">Terrain</label>
+          <input type="text" id="rpTerrain" placeholder="flat / hilly / mixed / specific notes" style="width: 100%; padding: 12px 14px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-family: inherit;">
+        </div>
+
+        <div>
+          <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--text);">Expected weather</label>
+          <input type="text" id="rpWeather" placeholder="e.g., 20°C sunny, hot/humid 28°C, cool 10°C wet" style="width: 100%; padding: 12px 14px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-family: inherit;">
+        </div>
+
+        <div>
+          <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--text);">Notes (optional)</label>
+          <textarea id="rpNotes" placeholder="Anything specific about this race — flat course, known to be hot, no aero bars allowed, etc." style="width: 100%; min-height: 80px; padding: 12px 14px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-family: inherit; resize: vertical; line-height: 1.55;"></textarea>
+        </div>
+
+        <div style="display: flex; gap: 10px;">
+          <button class="btn" style="flex: 1;" onclick="submitRacePlanForm()">🏁 Generate race plan</button>
+          <button class="btn ghost" style="flex: 0 0 auto;" onclick="renderRacePlanner()">Cancel</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Pre-select sensible defaults if athlete has goal_event matching a race type
+  if (state.user) {
+    sb.from('athlete_intake').select('goal_event, race_date, goal_time').eq('user_id', state.user.id).maybeSingle().then(({ data }) => {
+      if (!data) return;
+      // Map intake goal_event → race type value
+      const eventMap = {
+        'ironman': 'ironman', '70_3': '70_3', 'olympic_tri': 'olympic_tri', 'sprint_tri': 'sprint_tri',
+        'marathon': 'marathon', 'half_marathon': 'half_marathon', '5k': '5k', '10k': '10k',
+      };
+      const rt = eventMap[data.goal_event];
+      if (rt) selectRaceType(rt);
+      if (data.race_date) {
+        const dateInput = document.getElementById('rpRaceDate');
+        if (dateInput) dateInput.value = data.race_date;
+      }
+      if (data.goal_time) {
+        const goalInput = document.getElementById('rpGoalTime');
+        if (goalInput) goalInput.value = data.goal_time;
+      }
+    });
+  }
+
+  // Default selections
+  selectGoalTier('realistic');
+}
+
+let _rpSelectedRaceType = null;
+let _rpSelectedGoalTier = 'realistic';
+
+function selectRaceType(value) {
+  _rpSelectedRaceType = value;
+  document.querySelectorAll('.rp-race-type').forEach(btn => {
+    if (btn.dataset.value === value) {
+      btn.style.background = 'var(--accent-soft)';
+      btn.style.borderColor = 'var(--accent)';
+      btn.style.color = 'var(--accent)';
+    } else {
+      btn.style.background = 'var(--bg-3)';
+      btn.style.borderColor = 'var(--border)';
+      btn.style.color = 'var(--text)';
+    }
+  });
+}
+
+function selectGoalTier(value) {
+  _rpSelectedGoalTier = value;
+  document.querySelectorAll('.rp-goal-tier').forEach(btn => {
+    if (btn.dataset.value === value) {
+      btn.style.background = 'var(--accent-soft)';
+      btn.style.borderColor = 'var(--accent)';
+      btn.style.color = 'var(--accent)';
+    } else {
+      btn.style.background = 'var(--bg-3)';
+      btn.style.borderColor = 'var(--border)';
+      btn.style.color = 'var(--text)';
+    }
+  });
+}
+
+async function submitRacePlanForm() {
+  if (!_rpSelectedRaceType) {
+    toast('Please pick a race type');
+    return;
+  }
+
+  const raceName = document.getElementById('rpRaceName')?.value?.trim() || '';
+  const raceDate = document.getElementById('rpRaceDate')?.value || null;
+  const goalTime = document.getElementById('rpGoalTime')?.value?.trim() || '';
+  const terrain = document.getElementById('rpTerrain')?.value?.trim() || '';
+  const weather = document.getElementById('rpWeather')?.value?.trim() || '';
+  const notes = document.getElementById('rpNotes')?.value?.trim() || '';
+  const raceTypeData = RACE_TYPES.find(rt => rt.value === _rpSelectedRaceType);
+
+  const el = document.getElementById('racePlannerContent');
+  el.innerHTML = `<div class="loading"><div class="spinner"></div>Coach is building your race plan… (this can take 30-60 seconds — Coach is thinking through every leg, fueling, and contingency)</div>`;
+
+  try {
+    const { data: intake } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).single();
+    const recentWorkouts = state.workouts?.slice(-10).reverse() || [];
+
+    const raceInfo = {
+      race_type: _rpSelectedRaceType,
+      race_name: raceName,
+      race_date: raceDate,
+      distance_summary: raceTypeData?.distance || '',
+      terrain,
+      weather,
+      goal_time: goalTime,
+      goal_tier: _rpSelectedGoalTier,
+      notes,
+    };
+
+    const planData = await callCoach('generate_race_plan', { raceInfo, intake, recentWorkouts }, { timeoutMs: 120000 });
+
+    if (!planData) throw new Error('Empty response from Coach');
+
+    // Save to DB
+    const { data: saved, error: saveErr } = await sb.from('race_plans').insert({
+      user_id: state.user.id,
+      race_type: _rpSelectedRaceType,
+      race_name: raceName || null,
+      race_date: raceDate || null,
+      distance_summary: raceTypeData?.distance || null,
+      terrain: terrain || null,
+      weather: weather || null,
+      goal_time: goalTime || null,
+      goal_tier: _rpSelectedGoalTier,
+      notes: notes || null,
+      plan_data: planData,
+      active: true,
+    }).select().single();
+
+    if (saveErr) throw saveErr;
+
+    toast('Race plan ready');
+    viewRacePlan(saved.id);
+  } catch (err) {
+    console.error('[Stryxs] Race plan generation failed:', err);
+    el.innerHTML = `
+      <div class="coach-hero">
+        <div class="coach-avatar">⚠️</div>
+        <div class="coach-intro">
+          <h2>Couldn't generate plan</h2>
+          <p style="color: #f87171;">${err.message || 'Unknown error'}</p>
+          <button class="btn" style="margin-top: 12px;" onclick="openRacePlanForm()">Try again</button>
+          <button class="btn ghost" style="margin-top: 8px;" onclick="renderRacePlanner()">Back</button>
+        </div>
+      </div>
+    `;
+  }
+}
+
+async function viewRacePlan(planId) {
+  const el = document.getElementById('racePlannerContent');
+  el.innerHTML = `<div class="loading"><div class="spinner"></div>Loading race plan…</div>`;
+
+  const { data: rp, error } = await sb.from('race_plans').select('*').eq('id', planId).maybeSingle();
+  if (error || !rp) {
+    el.innerHTML = '<div style="padding: 24px;">Could not load race plan. <button class="btn ghost" onclick="renderRacePlanner()">Back</button></div>';
+    return;
+  }
+
+  const plan = rp.plan_data || {};
+  const raceTypeData = RACE_TYPES.find(rt => rt.value === rp.race_type) || RACE_TYPES[0];
+  const dateLabel = rp.race_date
+    ? new Date(rp.race_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+    : 'Date TBD';
+
+  const isMultiLeg = ['sprint_tri', 'olympic_tri', '70_3', 'ironman', 'duathlon'].includes(rp.race_type);
+
+  el.innerHTML = `
+    <div style="margin-bottom: 14px;">
+      <button class="btn ghost" onclick="renderRacePlanner()" style="font-size: 13px;">← Back to all race plans</button>
+    </div>
+
+    <div class="coach-hero">
+      <div class="coach-avatar">${raceTypeData.emoji.split('')[0] || '🏁'}</div>
+      <div class="coach-intro">
+        <h2>${rp.race_name || raceTypeData.label}</h2>
+        <p>${dateLabel}${rp.goal_time ? ` · Goal: ${rp.goal_time}` : ''}</p>
+      </div>
+    </div>
+
+    ${plan.race_summary ? `
+      <div class="panel" style="margin-top: 16px;">
+        <div style="font-size: 14px; line-height: 1.65; color: var(--text);">${escapeHtml(plan.race_summary)}</div>
+        ${plan.predicted_finish_time ? `
+          <div style="margin-top: 12px; padding: 12px; background: var(--bg-3); border-radius: 10px;">
+            <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; margin-bottom: 4px;">Predicted finish</div>
+            <div style="font-size: 22px; font-weight: 800; color: var(--accent);">${plan.predicted_finish_time}</div>
+            ${plan.confidence_level ? `<div style="font-size: 12px; color: var(--text-dim); margin-top: 4px;">Confidence: <strong>${plan.confidence_level}</strong>${plan.confidence_notes ? ` — ${escapeHtml(plan.confidence_notes)}` : ''}</div>` : ''}
+          </div>
+        ` : ''}
+      </div>
+    ` : ''}
+
+    ${plan.key_warnings?.length > 0 ? `
+      <div class="panel" style="margin-top: 16px; border-color: rgba(251, 191, 36, 0.3); background: rgba(251, 191, 36, 0.04);">
+        <div style="font-weight: 700; font-size: 14px; color: #fbbf24; margin-bottom: 10px;">⚠️ Key warnings</div>
+        <ul style="margin: 0; padding-left: 20px; color: var(--text-dim); font-size: 13px; line-height: 1.65;">
+          ${plan.key_warnings.map(w => `<li style="margin-bottom: 6px;">${escapeHtml(w)}</li>`).join('')}
+        </ul>
+      </div>
+    ` : ''}
+
+    ${plan.pacing_strategy ? `
+      <div class="panel" style="margin-top: 16px;">
+        <div class="panel-title" style="margin-bottom: 12px;">⚡ Pacing strategy</div>
+        ${plan.pacing_strategy.overall_approach ? `<div style="font-size: 14px; color: var(--text-dim); line-height: 1.6; margin-bottom: 14px;">${escapeHtml(plan.pacing_strategy.overall_approach)}</div>` : ''}
+        ${isMultiLeg ? `
+          ${plan.pacing_strategy.swim_leg ? renderRaceLeg('🏊 Swim', plan.pacing_strategy.swim_leg) : ''}
+          ${plan.pacing_strategy.t1_strategy ? `<div style="padding: 12px; background: var(--bg-3); border-radius: 10px; font-size: 13px; color: var(--text-dim); line-height: 1.6; margin-bottom: 10px;"><strong style="color: var(--text);">T1:</strong> ${escapeHtml(plan.pacing_strategy.t1_strategy)}</div>` : ''}
+          ${plan.pacing_strategy.bike_leg ? renderRaceLeg('🚴 Bike', plan.pacing_strategy.bike_leg) : ''}
+          ${plan.pacing_strategy.t2_strategy ? `<div style="padding: 12px; background: var(--bg-3); border-radius: 10px; font-size: 13px; color: var(--text-dim); line-height: 1.6; margin-bottom: 10px;"><strong style="color: var(--text);">T2:</strong> ${escapeHtml(plan.pacing_strategy.t2_strategy)}</div>` : ''}
+          ${plan.pacing_strategy.run_leg ? renderRaceLeg('🏃 Run', plan.pacing_strategy.run_leg) : ''}
+        ` : `
+          ${(plan.pacing_strategy.segments || []).map(s => `
+            <div style="padding: 12px; background: var(--bg-3); border-radius: 10px; margin-bottom: 10px;">
+              <div style="font-weight: 700; font-size: 13px; color: var(--text); margin-bottom: 4px;">${escapeHtml(s.label || '')}</div>
+              <div style="font-size: 12px; color: var(--text-dim); line-height: 1.6;">
+                ${s.target_pace_per_km ? `<div>Pace: <strong>${escapeHtml(s.target_pace_per_km)}</strong></div>` : ''}
+                ${s.target_hr ? `<div>HR: <strong>${escapeHtml(s.target_hr)}</strong></div>` : ''}
+                ${s.strategy ? `<div style="margin-top: 4px;">${escapeHtml(s.strategy)}</div>` : ''}
+              </div>
+            </div>
+          `).join('')}
+        `}
+      </div>
+    ` : ''}
+
+    ${plan.fueling_plan ? `
+      <div class="panel" style="margin-top: 16px;">
+        <div class="panel-title" style="margin-bottom: 12px;">⚡ Fueling plan</div>
+        ${plan.fueling_plan.pre_race ? `
+          <div style="margin-bottom: 14px;">
+            <div style="font-weight: 700; font-size: 13px; color: var(--text); margin-bottom: 6px;">Pre-race</div>
+            <div style="font-size: 13px; color: var(--text-dim); line-height: 1.6;">
+              ${plan.fueling_plan.pre_race.timing ? `<div><strong>When:</strong> ${escapeHtml(plan.fueling_plan.pre_race.timing)}</div>` : ''}
+              ${plan.fueling_plan.pre_race.what ? `<div><strong>What:</strong> ${escapeHtml(plan.fueling_plan.pre_race.what)}</div>` : ''}
+              ${plan.fueling_plan.pre_race.hydration ? `<div><strong>Hydration:</strong> ${escapeHtml(plan.fueling_plan.pre_race.hydration)}</div>` : ''}
+            </div>
+          </div>
+        ` : ''}
+        ${plan.fueling_plan.during_race ? `
+          <div style="margin-bottom: 14px;">
+            <div style="font-weight: 700; font-size: 13px; color: var(--text); margin-bottom: 6px;">During race</div>
+            <div style="font-size: 13px; color: var(--text-dim); line-height: 1.6;">
+              ${plan.fueling_plan.during_race.carbs_per_hour_target ? `<div><strong>Carbs/hour:</strong> ${escapeHtml(plan.fueling_plan.during_race.carbs_per_hour_target)}</div>` : ''}
+              ${plan.fueling_plan.during_race.fluid_per_hour_target ? `<div><strong>Fluid/hour:</strong> ${escapeHtml(plan.fueling_plan.during_race.fluid_per_hour_target)}</div>` : ''}
+              ${plan.fueling_plan.during_race.sodium_per_hour_target ? `<div><strong>Sodium/hour:</strong> ${escapeHtml(plan.fueling_plan.during_race.sodium_per_hour_target)}</div>` : ''}
+            </div>
+            ${(plan.fueling_plan.during_race.schedule || []).length > 0 ? `
+              <div style="margin-top: 10px;">
+                <div style="font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 6px;">Schedule:</div>
+                <div style="display: flex; flex-direction: column; gap: 6px;">
+                  ${plan.fueling_plan.during_race.schedule.map(s => `
+                    <div style="padding: 8px 12px; background: var(--bg-3); border-radius: 8px; font-size: 12px; color: var(--text-dim); line-height: 1.5;">
+                      <strong style="color: var(--text);">${escapeHtml(s.time_or_segment || '')}</strong>${s.fuel ? ` — ${escapeHtml(s.fuel)}` : ''}${s.fluid ? ` · ${escapeHtml(s.fluid)}` : ''}
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+            ` : ''}
+            ${plan.fueling_plan.during_race.notes ? `<div style="margin-top: 10px; font-size: 12px; color: var(--text-mute); font-style: italic;">${escapeHtml(plan.fueling_plan.during_race.notes)}</div>` : ''}
+          </div>
+        ` : ''}
+        ${plan.fueling_plan.post_race_recovery ? `
+          <div>
+            <div style="font-weight: 700; font-size: 13px; color: var(--text); margin-bottom: 6px;">Post-race recovery</div>
+            <div style="font-size: 13px; color: var(--text-dim); line-height: 1.6;">${escapeHtml(plan.fueling_plan.post_race_recovery)}</div>
+          </div>
+        ` : ''}
+      </div>
+    ` : ''}
+
+    ${plan.equipment_checklist?.length > 0 ? `
+      <div class="panel" style="margin-top: 16px;">
+        <div class="panel-title" style="margin-bottom: 12px;">🎒 Equipment checklist</div>
+        <ul style="margin: 0; padding-left: 20px; color: var(--text-dim); font-size: 13px; line-height: 1.7;">
+          ${plan.equipment_checklist.map(e => `<li>${escapeHtml(e)}</li>`).join('')}
+        </ul>
+      </div>
+    ` : ''}
+
+    ${plan.contingency_plans ? `
+      <div class="panel" style="margin-top: 16px;">
+        <div class="panel-title" style="margin-bottom: 12px;">🔧 Contingencies</div>
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          ${Object.entries(plan.contingency_plans).map(([key, val]) => `
+            <div style="padding: 12px; background: var(--bg-3); border-radius: 10px;">
+              <div style="font-weight: 700; font-size: 13px; color: var(--text); margin-bottom: 4px; text-transform: capitalize;">${escapeHtml(key.replace(/_/g, ' '))}</div>
+              <div style="font-size: 13px; color: var(--text-dim); line-height: 1.6;">${escapeHtml(val)}</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    ` : ''}
+
+    ${plan.race_morning_timeline?.length > 0 ? `
+      <div class="panel" style="margin-top: 16px;">
+        <div class="panel-title" style="margin-bottom: 12px;">⏰ Race morning timeline</div>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          ${plan.race_morning_timeline.map(t => `
+            <div style="display: flex; gap: 12px; padding: 10px 12px; background: var(--bg-3); border-radius: 10px;">
+              <div style="font-weight: 700; font-size: 13px; color: var(--accent); flex-shrink: 0; min-width: 50px; font-family: 'JetBrains Mono', monospace;">${escapeHtml(t.time_relative_to_start || '')}</div>
+              <div style="font-size: 13px; color: var(--text-dim); line-height: 1.55;">${escapeHtml(t.action || '')}</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    ` : ''}
+
+    ${plan.mental_strategy ? `
+      <div class="panel" style="margin-top: 16px;">
+        <div class="panel-title" style="margin-bottom: 12px;">🧠 Mental strategy</div>
+        ${plan.mental_strategy.pre_race_mindset ? `<div style="font-size: 13px; color: var(--text-dim); line-height: 1.6; margin-bottom: 10px;"><strong style="color: var(--text);">Pre-race:</strong> ${escapeHtml(plan.mental_strategy.pre_race_mindset)}</div>` : ''}
+        ${plan.mental_strategy.during_race_anchors?.length > 0 ? `
+          <div style="margin-bottom: 10px;">
+            <div style="font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 6px;">Anchors during race:</div>
+            <ul style="margin: 0; padding-left: 20px; color: var(--text-dim); font-size: 13px; line-height: 1.65;">
+              ${plan.mental_strategy.during_race_anchors.map(a => `<li>${escapeHtml(a)}</li>`).join('')}
+            </ul>
+          </div>
+        ` : ''}
+        ${plan.mental_strategy.if_things_go_wrong ? `<div style="font-size: 13px; color: var(--text-dim); line-height: 1.6;"><strong style="color: var(--text);">If things go wrong:</strong> ${escapeHtml(plan.mental_strategy.if_things_go_wrong)}</div>` : ''}
+      </div>
+    ` : ''}
+
+    <div style="margin-top: 18px; display: flex; gap: 10px; flex-wrap: wrap;">
+      <button class="btn ghost" style="flex: 1; min-width: 140px;" onclick="confirmDeleteRacePlan('${rp.id}')">🗑 Delete plan</button>
+      <button class="btn ghost" style="flex: 1; min-width: 140px;" onclick="renderRacePlanner()">← All races</button>
+    </div>
+  `;
+}
+
+function renderRaceLeg(label, leg) {
+  return `
+    <div style="padding: 12px; background: var(--bg-3); border-radius: 10px; margin-bottom: 10px;">
+      <div style="font-weight: 700; font-size: 13px; color: var(--text); margin-bottom: 6px;">${label}${leg.estimated_split ? ` <span style="color: var(--accent); font-family: 'JetBrains Mono', monospace; font-size: 12px; margin-left: 8px;">${leg.estimated_split}</span>` : ''}</div>
+      <div style="font-size: 12px; color: var(--text-dim); line-height: 1.65;">
+        ${leg.target_pace_per_100m ? `<div><strong>Pace:</strong> ${escapeHtml(leg.target_pace_per_100m)} per 100m</div>` : ''}
+        ${leg.target_pace_per_km ? `<div><strong>Pace:</strong> ${escapeHtml(leg.target_pace_per_km)}</div>` : ''}
+        ${leg.target_pace_kmh ? `<div><strong>Speed:</strong> ${escapeHtml(leg.target_pace_kmh)}</div>` : ''}
+        ${leg.target_power_or_hr ? `<div><strong>Power/HR:</strong> ${escapeHtml(leg.target_power_or_hr)}</div>` : ''}
+        ${leg.target_hr_zone ? `<div><strong>HR zone:</strong> ${escapeHtml(leg.target_hr_zone)}</div>` : ''}
+        ${leg.strategy ? `<div style="margin-top: 6px;">${escapeHtml(leg.strategy)}</div>` : ''}
+      </div>
+    </div>
+  `;
+}
+
+async function confirmDeleteRacePlan(planId) {
+  if (!confirm('Delete this race plan? This cannot be undone.')) return;
+  try {
+    const { error } = await sb.from('race_plans').delete().eq('id', planId);
+    if (error) throw error;
+    toast('Race plan deleted');
+    renderRacePlanner();
+  } catch (err) {
+    toast('Could not delete plan: ' + err.message);
+  }
+}
+
 
 async function renderPlan() {
   const el = document.getElementById('planContent');
