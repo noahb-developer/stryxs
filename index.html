@@ -4286,6 +4286,32 @@ body.on-auth .container {
   </div>
 </div>
 
+<!-- Edit Current Week Modal — corrects imported_current_week + plan_start_date -->
+<div class="modal-backdrop" id="editWeekModal">
+  <div class="modal" style="max-width: 460px;">
+    <div class="modal-header">
+      <div class="modal-title">✏️ Edit current week</div>
+      <button class="modal-close" onclick="closeEditWeekModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <p style="margin-bottom: 14px; color: var(--text-dim); font-size: 13px; line-height: 1.55;">
+        If the displayed week doesn't match where you actually are in your plan, fix it here. Coach will rebuild the math from this anchor.
+      </p>
+      <div class="field">
+        <label>Current week (1–<span id="editWeekMaxDisplay">81</span>)</label>
+        <input type="number" id="editWeekInput" min="1" placeholder="e.g. 29" />
+      </div>
+      <p style="font-size: 12px; color: var(--text-mute); margin-top: 8px; line-height: 1.5;">
+        This sets today's Monday as the start of the week you specify. Future weeks will increment from here. Doesn't change your imported plan structure.
+      </p>
+    </div>
+    <div class="modal-actions">
+      <button class="btn ghost" onclick="closeEditWeekModal()">Cancel</button>
+      <button class="btn" onclick="saveEditCurrentWeek()">Save</button>
+    </div>
+  </div>
+</div>
+
 <!-- Import Plan Modal -->
 <div class="modal-backdrop" id="importModal">
   <div class="modal" style="max-width: 560px;">
@@ -4750,6 +4776,145 @@ function showOnboardingAgain() {
   try { localStorage.removeItem(getOnboardingKey()); } catch(e) {}
   // Force-show even if all steps are complete — user explicitly asked to see it again
   checkAndShowOnboarding(true);
+}
+
+// ═══════════════════════════════════════════════════════════
+// DEV TOOL — SAMPLE PLAN AUDIT
+// Generates one sample plan per persona using a synthetic intake.
+// Lets the developer eyeball all 7 personas in one shot to confirm
+// each produces a coachable plan that respects its methodology.
+// Hidden behind localStorage.stryxs_dev_mode = '1'.
+// ═══════════════════════════════════════════════════════════
+async function runSamplePlanAudit() {
+  const out = document.getElementById('samplePlanAuditResults');
+  if (!out) return;
+
+  // Synthetic intake fixtures — one per persona. Realistic enough to produce
+  // a plan, simple enough to not require real DB rows. race_date is set to
+  // ~6 months out for race personas (puts them in Build phase).
+  const today = new Date();
+  const sixMonthsOut = new Date(today);
+  sixMonthsOut.setMonth(sixMonthsOut.getMonth() + 6);
+  const raceDate = sixMonthsOut.toISOString().split('T')[0];
+
+  const fixtures = [
+    {
+      label: 'Long-Course Triathlon (Ironman)',
+      goal_event: 'ironman',
+      intake: { goal_event: 'ironman', sex: 'male', age: 35, weight_kg: 75, run_lthr: 165, bike_lthr: 158, swim_css: '1:50', race_date: raceDate, weekly_hours: 12, race_experience: 'first_time', goal_time: 'sub_12', completed: true, unit_preference: 'metric' },
+    },
+    {
+      label: '70.3 / Half Ironman',
+      goal_event: '70_3',
+      intake: { goal_event: '70_3', sex: 'female', age: 31, weight_kg: 62, run_lthr: 170, bike_lthr: 162, swim_css: '1:45', race_date: raceDate, weekly_hours: 10, race_experience: 'multiple', goal_time: 'sub_5_30', completed: true, unit_preference: 'metric' },
+    },
+    {
+      label: 'Short-Course Triathlon (Sprint/Olympic)',
+      goal_event: 'olympic_tri',
+      intake: { goal_event: 'olympic_tri', sex: 'male', age: 28, weight_kg: 70, run_lthr: 175, bike_lthr: 165, swim_css: '1:35', race_date: raceDate, weekly_hours: 8, race_experience: 'multiple', goal_time: 'sub_2_30', completed: true, unit_preference: 'metric' },
+    },
+    {
+      label: 'Marathon',
+      goal_event: 'marathon',
+      intake: { goal_event: 'marathon', sex: 'female', age: 38, weight_kg: 58, run_lthr: 168, race_date: raceDate, weekly_hours: 7, race_experience: 'multiple', goal_time: 'sub_3_45', pb_marathon: '3:55', completed: true, unit_preference: 'metric' },
+    },
+    {
+      label: 'Half Marathon',
+      goal_event: 'half_marathon',
+      intake: { goal_event: 'half_marathon', sex: 'male', age: 26, weight_kg: 68, run_lthr: 178, race_date: raceDate, weekly_hours: 6, race_experience: 'first_time', goal_time: 'sub_1_45', completed: true, unit_preference: 'metric' },
+    },
+    {
+      label: '5K / 10K',
+      goal_event: '10k',
+      intake: { goal_event: '10k', sex: 'female', age: 24, weight_kg: 55, run_lthr: 180, race_date: raceDate, weekly_hours: 5, race_experience: 'multiple', goal_time: 'sub_45', pb_10k: '49:30', completed: true, unit_preference: 'metric' },
+    },
+    {
+      label: 'General Fitness / Longevity',
+      goal_event: 'general',
+      intake: { goal_event: 'general', sex: 'male', age: 45, weight_kg: 80, run_lthr: 160, bike_lthr: 155, weekly_hours: 6, race_experience: 'none', goal_tier: 'attia_full', completed: true, unit_preference: 'metric' },
+    },
+  ];
+
+  // Render scaffold with one card per fixture, in 'pending' state
+  out.innerHTML = `
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      ${fixtures.map((f, i) => `
+        <div id="sampleAudit_${i}" class="sample-audit-card" data-state="pending" style="background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; padding: 12px; font-size: 13px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px;">
+            <div style="font-weight: 700; color: var(--text);">${escapeHtml(f.label)}</div>
+            <div class="sample-audit-status" style="font-size: 11px; color: var(--text-mute);">Pending</div>
+          </div>
+          <div class="sample-audit-body" style="font-size: 12px; color: var(--text-dim); line-height: 1.5;"></div>
+        </div>
+      `).join('')}
+    </div>
+    <div id="samplePlanAuditSummary" style="margin-top: 14px; font-size: 12px; color: var(--text-dim);"></div>
+  `;
+
+  let okCount = 0;
+  let errCount = 0;
+
+  for (let i = 0; i < fixtures.length; i++) {
+    const fixture = fixtures[i];
+    const card = document.getElementById(`sampleAudit_${i}`);
+    const status = card?.querySelector('.sample-audit-status');
+    const body = card?.querySelector('.sample-audit-body');
+    if (!card || !status || !body) continue;
+
+    status.textContent = 'Generating…';
+    status.style.color = '#fbbf24';
+    card.style.borderColor = 'rgba(251, 191, 36, 0.3)';
+
+    try {
+      const t0 = Date.now();
+      const plan = await callCoach('generate_plan', {
+        intake: fixture.intake,
+        weekNumber: 4, // mid-Base 2 — most personas have meaningful content here
+      }, { timeoutMs: 90000 });
+      const elapsed = Math.round((Date.now() - t0) / 1000);
+
+      if (!plan || !Array.isArray(plan.workouts) || plan.workouts.length === 0) {
+        throw new Error('Empty plan returned');
+      }
+
+      // Compact summary: phase + workout count + sport breakdown + 3 sample workouts
+      const sportCounts = {};
+      plan.workouts.forEach(w => {
+        const s = w.sport || 'other';
+        sportCounts[s] = (sportCounts[s] || 0) + 1;
+      });
+      const sportSummary = Object.entries(sportCounts).map(([s, n]) => `${n} ${s}`).join(' · ');
+      const sampleWorkouts = plan.workouts.slice(0, 3).map(w => {
+        const dur = w.duration_minutes ? `${w.duration_minutes}min` : '';
+        const dist = w.distance_km ? `${w.distance_km}km` : '';
+        const meta = [dur, dist].filter(Boolean).join(' ');
+        return `<div style="margin-top: 4px;">• <strong>${escapeHtml(w.sport)}</strong> ${w.workout_type ? '· ' + escapeHtml(w.workout_type) : ''} ${meta ? '— ' + meta : ''}</div>`;
+      }).join('');
+
+      body.innerHTML = `
+        <div><strong style="color: var(--text);">Phase:</strong> ${escapeHtml(plan.phase || '?')} ${plan.weekly_summary ? `· <strong>Summary:</strong> ${escapeHtml(plan.weekly_summary)}` : ''}</div>
+        <div style="margin-top: 4px;"><strong style="color: var(--text);">${plan.workouts.length} workouts:</strong> ${escapeHtml(sportSummary)}</div>
+        <details style="margin-top: 6px;"><summary style="cursor: pointer; color: var(--accent); font-size: 11px;">Show first 3 workouts</summary>${sampleWorkouts}</details>
+      `;
+
+      status.textContent = `✓ ${elapsed}s`;
+      status.style.color = 'var(--accent)';
+      card.style.borderColor = 'rgba(0, 229, 160, 0.3)';
+      okCount++;
+    } catch (err) {
+      console.error(`[Stryxs Audit] ${fixture.label} failed:`, err);
+      body.innerHTML = `<div style="color: #f87171;">${escapeHtml(err.message || 'Unknown error')}</div>`;
+      status.textContent = '✕ Failed';
+      status.style.color = '#f87171';
+      card.style.borderColor = 'rgba(239, 68, 68, 0.3)';
+      errCount++;
+    }
+  }
+
+  const summary = document.getElementById('samplePlanAuditSummary');
+  if (summary) {
+    summary.innerHTML = `<strong style="color: ${errCount === 0 ? 'var(--accent)' : '#fbbf24'};">${okCount}/${fixtures.length} personas passed</strong>${errCount > 0 ? ` · ${errCount} failed (check console for details)` : ''}`;
+  }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -9931,6 +10096,94 @@ function initPlanMgmtHelpAutoOpen() {
   }
 }
 
+// ═══════════════════════════════════════════════════════════
+// EDIT CURRENT WEEK — corrects imported_current_week + plan_start_date
+// when the LLM-extracted week is wrong, or the user lost track of where they are.
+// ═══════════════════════════════════════════════════════════
+function openEditCurrentWeekModal(currentWeek, totalWeeks) {
+  const modal = document.getElementById('editWeekModal');
+  const input = document.getElementById('editWeekInput');
+  const maxDisplay = document.getElementById('editWeekMaxDisplay');
+  if (!modal || !input) return;
+  input.value = currentWeek || '';
+  if (totalWeeks && Number.isFinite(totalWeeks)) {
+    input.max = totalWeeks;
+    if (maxDisplay) maxDisplay.textContent = totalWeeks;
+  } else {
+    input.removeAttribute('max');
+    if (maxDisplay) maxDisplay.textContent = '?';
+  }
+  modal.classList.add('open');
+  setTimeout(() => input.focus(), 50);
+}
+
+function closeEditWeekModal() {
+  const modal = document.getElementById('editWeekModal');
+  if (modal) modal.classList.remove('open');
+}
+
+async function saveEditCurrentWeek() {
+  if (!state.user) return;
+  const input = document.getElementById('editWeekInput');
+  const newWeek = parseInt(input?.value);
+  if (!Number.isFinite(newWeek) || newWeek < 1) {
+    toast('Enter a valid week number');
+    return;
+  }
+
+  try {
+    const { data: activePlan } = await sb.from('training_plans')
+      .select('id, plan_data')
+      .eq('user_id', state.user.id)
+      .eq('active', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!activePlan) {
+      toast('No active plan found');
+      closeEditWeekModal();
+      return;
+    }
+
+    // Compute today's Monday as the new plan_start_date anchor.
+    // After this update: weeksElapsed = 0 today → currentWeekIndex = newWeek.
+    // Next Monday → weeksElapsed = 1 → newWeek + 1. Math stays consistent.
+    const today = new Date();
+    today.setHours(12, 0, 0, 0);
+    const dow = today.getDay();
+    const daysToMonday = dow === 0 ? -6 : 1 - dow; // Sunday → -6, Monday → 0, Tuesday → -1, etc.
+    const thisMonday = new Date(today);
+    thisMonday.setDate(today.getDate() + daysToMonday);
+    const newPlanStart = thisMonday.toISOString().split('T')[0];
+
+    const updatedPlanData = {
+      ...activePlan.plan_data,
+      _imported_current_week: newWeek,
+      plan_start_date: newPlanStart,
+    };
+
+    const { error } = await sb.from('training_plans')
+      .update({ plan_data: updatedPlanData })
+      .eq('id', activePlan.id);
+
+    if (error) {
+      console.error('[Stryxs] Edit week save failed:', error);
+      toast('Could not save: ' + error.message);
+      return;
+    }
+
+    closeEditWeekModal();
+    toast(`✓ Now on Week ${newWeek}`);
+    console.log('[Stryxs] Current week corrected:', { newWeek, newPlanStart });
+    // Re-render plan with new anchor
+    renderPlan();
+  } catch (err) {
+    console.error('[Stryxs] saveEditCurrentWeek failed:', err);
+    toast('Could not save: ' + (err.message || 'unknown'));
+  }
+}
+
 function openResetModal(type) {
   // type: 'regenerate' (keep profile, new plan) or 'full' (clear everything)
   const modal = document.getElementById('confirmModal');
@@ -13679,8 +13932,9 @@ async function renderPlan() {
         <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
           <div>
             <div style="font-size: 11px; color: var(--accent); text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; margin-bottom: 4px;">You are here</div>
-            <div style="font-size: 18px; font-weight: 700; color: var(--text); margin-bottom: 2px;">
-              Week ${currentWeekIndex}${isImportedPlan && importedTotalWeeks ? ` of ${importedTotalWeeks}` : (totalWeeks ? ` of ${totalWeeks}` : '')} · ${(currentWeekInfo.phase || '').replace(/_/g, ' ')}${currentWeekInfo.is_deload ? ' · DELOAD' : ''}
+            <div style="font-size: 18px; font-weight: 700; color: var(--text); margin-bottom: 2px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+              <span>Week ${currentWeekIndex}${isImportedPlan && importedTotalWeeks ? ` of ${importedTotalWeeks}` : (totalWeeks ? ` of ${totalWeeks}` : '')} · ${(currentWeekInfo.phase || '').replace(/_/g, ' ')}${currentWeekInfo.is_deload ? ' · DELOAD' : ''}</span>
+              ${isImportedPlan ? `<button onclick="openEditCurrentWeekModal(${currentWeekIndex}, ${importedTotalWeeks || 'null'})" title="Adjust the current week if it's wrong" style="background: var(--bg-3); border: 1px solid var(--border); border-radius: 6px; padding: 2px 8px; color: var(--text-dim); cursor: pointer; font-size: 11px; font-family: inherit; line-height: 1; height: 22px; display: inline-flex; align-items: center; gap: 4px;">✏️ <span>Edit</span></button>` : ''}
             </div>
             <div style="font-size: 13px; color: var(--text-dim); line-height: 1.5;">${currentWeekInfo.focus || ''}</div>
             ${isImportedPlan && (() => {
@@ -14238,6 +14492,25 @@ async function renderSettings() {
     <div style="text-align: center; margin-top: 18px;">
       <a onclick="showOnboardingAgain()" style="font-size: 12px; color: var(--text-mute); cursor: pointer; text-decoration: underline;">Show welcome tour again</a>
     </div>
+
+    ${(() => {
+      // ═══ DEV MODE: SAMPLE PLAN GENERATOR ═══
+      // Hidden behind a localStorage flag. To enable: open browser console and run:
+      //   localStorage.setItem('stryxs_dev_mode', '1'); location.reload();
+      // To disable:
+      //   localStorage.removeItem('stryxs_dev_mode'); location.reload();
+      let isDev = false;
+      try { isDev = localStorage.getItem('stryxs_dev_mode') === '1'; } catch (_) {}
+      if (!isDev) return '';
+      return `
+        <div style="margin-top: 30px; padding: 16px; background: rgba(80, 130, 255, 0.04); border: 1px dashed rgba(80, 130, 255, 0.3); border-radius: 12px;">
+          <div style="font-size: 11px; color: #82a4ff; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 800; margin-bottom: 4px;">🛠 Dev Tools</div>
+          <div style="font-size: 12px; color: var(--text-dim); line-height: 1.5; margin-bottom: 14px;">Generate sample plans for each persona to verify methodology depth. Costs ~$0.10-0.20 in API calls per full run.</div>
+          <button class="btn ghost" style="width: 100%; font-size: 13px;" onclick="runSamplePlanAudit()">▶ Generate sample plans (all 7 personas)</button>
+          <div id="samplePlanAuditResults" style="margin-top: 14px;"></div>
+        </div>
+      `;
+    })()}
   `;
 
   // Wire up live zone preview updates
