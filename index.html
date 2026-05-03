@@ -7568,27 +7568,58 @@ async function renderCoachChat(el, intake) {
     const allMsgs = chatEl.querySelectorAll('.chat-msg');
     const lastMsg = allMsgs[allMsgs.length - 1];
 
-    if (!window._stryxsCoachLoadedThisSession) {
-      // First load this session — anchor at TOP of last message (or bottom of last short message)
-      if (lastMsg) {
-        const lastMsgText = lastMsg.textContent || '';
-        if (lastMsgText.length > 500) {
-          // Long final message — start from its top so user reads it
-          chatEl.scrollTop = Math.max(0, lastMsg.offsetTop - 16);
-        } else {
-          // Short final message — bottom-anchor as usual
-          chatEl.scrollTop = chatEl.scrollHeight;
+    // ═══ READ-RECEIPT TRACKING ═══
+    // Each .chat-msg gets data-msg-id={message id}. We track the last-read message ID
+    // in localStorage per user. On Coach tab open, scroll to the FIRST message after
+    // last-read. If all messages are read, scroll to TOP of the last message.
+    const lastReadKey = state.user ? `stryxs_coach_last_read_${state.user.id}` : null;
+    const lastReadId = lastReadKey ? localStorage.getItem(lastReadKey) : null;
+    let firstUnread = null;
+    if (lastReadId) {
+      let foundLastRead = false;
+      for (const m of allMsgs) {
+        if (foundLastRead) {
+          firstUnread = m;
+          break;
         }
+        if (m.getAttribute('data-msg-id') === lastReadId) {
+          foundLastRead = true;
+        }
+      }
+    } else if (allMsgs.length > 0) {
+      // No last-read recorded yet — treat the first message as first-unread on initial load
+      firstUnread = allMsgs[0];
+    }
+
+    if (!window._stryxsCoachLoadedThisSession) {
+      // First load this session — anchor at TOP of first unread (preferred) or top of last message
+      if (firstUnread) {
+        chatEl.scrollTop = Math.max(0, firstUnread.offsetTop - 16);
+      } else if (lastMsg) {
+        // Everything read — scroll to top of last message so user re-reads it cleanly
+        chatEl.scrollTop = Math.max(0, lastMsg.offsetTop - 16);
       } else {
         chatEl.scrollTop = 0;
       }
       window._stryxsCoachLoadedThisSession = true;
     } else {
+      // Subsequent renders within session — anchor at top of last message (so newly arriving
+      // long Coach replies start from their top, not the bottom)
       const lastMsgText = lastMsg?.textContent || '';
       if (lastMsg && lastMsgText.length > 500) {
         chatEl.scrollTop = Math.max(0, lastMsg.offsetTop - 16);
       } else {
         chatEl.scrollTop = chatEl.scrollHeight;
+      }
+    }
+
+    // Mark all messages as read NOW that user is viewing the Coach tab.
+    // We mark on view (eager) — the alternative (mark on scroll-past) is fiddly and
+    // doesn't add much value here since the unread state is just "scroll-anchor hint."
+    if (lastReadKey && lastMsg) {
+      const lastMsgId = lastMsg.getAttribute('data-msg-id');
+      if (lastMsgId) {
+        localStorage.setItem(lastReadKey, lastMsgId);
       }
     }
   }
@@ -8471,9 +8502,13 @@ async function savePlanToDb(plan, userId, startDate = null) {
     .eq('active', true);
   if (deactErr) console.warn('[Stryxs] Deactivate old plans failed (non-fatal):', deactErr);
 
-  // Store the plan start date INTO plan_data so renderPlan can compute "current week" correctly
-  // This is the date the periodized plan begins (date_offset_days=0 anchor)
-  plan.plan_start_date = rangeStart;
+  // Store the plan start date INTO plan_data so renderPlan can compute "current week" correctly.
+  // The plan_start_date is the ORIGINAL anchor — the first Monday of the plan. It MUST stay
+  // pinned forever, even when savePlanToDb is called for week N>1 (where rangeStart is week N's Monday,
+  // not the original anchor). If the caller already set plan.plan_start_date, preserve it.
+  if (!plan.plan_start_date) {
+    plan.plan_start_date = rangeStart;
+  }
 
   // ═══ STEP 4: Insert new training_plan row ═══
   const { data: planRow, error: planErr } = await sb.from('training_plans').insert({
@@ -9489,12 +9524,33 @@ async function generateNextWeekFromAck(intake, activePlan) {
 
   const skeleton = activePlan?.plan_data?.skeleton || null;
 
+  // Sunday alternation lookup
+  let lastSundaySport = null;
+  const profile = activePlan?.plan_data?._plan_profile;
+  if (profile?.weekly_structure?.sunday?.primary_sport === 'swim_or_run') {
+    try {
+      const nextStart = new Date(nextStartStr + 'T12:00:00');
+      const prevSunday = new Date(nextStart);
+      prevSunday.setDate(prevSunday.getDate() - 1);
+      const prevSundayStr = prevSunday.toISOString().split('T')[0];
+      const { data: lastSun } = await sb.from('planned_workouts')
+        .select('sport')
+        .eq('user_id', state.user.id)
+        .eq('scheduled_date', prevSundayStr)
+        .maybeSingle();
+      if (lastSun?.sport) lastSundaySport = lastSun.sport;
+    } catch (e) {
+      console.warn('[Stryxs] Sunday lookup failed:', e);
+    }
+  }
+
   // Generate the plan via Coach
   const plan = await callCoach('generate_plan', {
     intake,
     weekNumber: nextWeekNumber,
     skeleton,
     recentWorkouts: [],
+    lastSundaySport,
   }, { timeoutMs: 90000 });
 
   if (!plan || !plan.workouts || plan.workouts.length === 0) {
@@ -9505,8 +9561,14 @@ async function generateNextWeekFromAck(intake, activePlan) {
   if (activePlan?.plan_data?._plan_profile) plan._plan_profile = activePlan.plan_data._plan_profile;
   if (activePlan?.plan_data?._imported_plan) {
     plan._imported_plan = true;
-    plan._imported_current_week = nextWeekNumber;
+    // _imported_current_week is the ORIGINAL value (e.g., Week 28 when user imported)
+    // — don't bump it. The "user is currently in Week N" calc derives from today's date
+    // vs plan_start_date. _imported_latest_generated_week tracks how far ahead we've built.
+    plan._imported_current_week = activePlan.plan_data._imported_current_week || null;
+    plan._imported_latest_generated_week = nextWeekNumber;
     plan._imported_total_weeks = activePlan.plan_data._imported_total_weeks || null;
+    // Preserve the original plan_start_date so date-based week calc keeps anchoring correctly
+    if (activePlan.plan_data.plan_start_date) plan.plan_start_date = activePlan.plan_data.plan_start_date;
   }
   if (skeleton) plan.skeleton = skeleton;
 
@@ -9645,20 +9707,51 @@ async function generateNextWeek() {
       console.log('[Stryxs] Next-week generation: restored imported plan profile');
     }
 
+    // ═══ SUNDAY ALTERNATION TRACKING ═══
+    // If the imported plan's Sunday slot is "swim_or_run", we need to inject what the PREVIOUS
+    // week's Sunday sport was so Coach picks the OTHER one this week. Without this, Coach
+    // picks arbitrarily and you can get swim two Sundays in a row.
+    let lastSundaySport = null;
+    if (importedProfile?.weekly_structure?.sunday?.primary_sport === 'swim_or_run') {
+      try {
+        // Find last Sunday's planned workout (most recent Sunday before this new week)
+        const nextStart = new Date(nextStartStr + 'T12:00:00');
+        const prevSunday = new Date(nextStart);
+        prevSunday.setDate(prevSunday.getDate() - 1); // Sunday before the new Monday
+        const prevSundayStr = prevSunday.toISOString().split('T')[0];
+        const { data: lastSun } = await sb.from('planned_workouts')
+          .select('sport')
+          .eq('user_id', state.user.id)
+          .eq('scheduled_date', prevSundayStr)
+          .maybeSingle();
+        if (lastSun?.sport) {
+          lastSundaySport = lastSun.sport;
+          console.log(`[Stryxs] Last Sunday's sport was ${lastSundaySport} — this Sunday should be the opposite`);
+        }
+      } catch (e) {
+        console.warn('[Stryxs] Sunday alternation lookup failed (non-fatal):', e);
+      }
+    }
+
     // 5. Generate next week plan via Coach (passing skeleton if available)
     const plan = await callCoach('generate_plan', {
       intake,
       weekNumber: nextWeekNumber,
       recentWorkouts,
       skeleton,
+      lastSundaySport,
     });
 
     // 6. Save plan starting from nextStart (not today)
     if (importedProfile) plan._plan_profile = importedProfile; // PRESERVE across weeks
     if (activePlan?.plan_data?._imported_plan) {
       plan._imported_plan = true;
-      plan._imported_current_week = nextWeekNumber;
+      // Pin to ORIGINAL imported value — don't bump. The "user is currently in Week N"
+      // is derived from today's date vs plan_start_date.
+      plan._imported_current_week = activePlan.plan_data._imported_current_week || null;
+      plan._imported_latest_generated_week = nextWeekNumber;
       plan._imported_total_weeks = activePlan.plan_data._imported_total_weeks || null;
+      if (activePlan.plan_data.plan_start_date) plan.plan_start_date = activePlan.plan_data.plan_start_date;
     }
     await savePlanToDb(plan, state.user.id, nextStartStr);
 
@@ -10170,8 +10263,13 @@ async function finalizeImportedPlan(parsedPlan, intake) {
     }
 
     toast('Plan imported successfully');
+    // Reset the Coach session-loaded flag so renderCoach scrolls to the top of
+    // the recap message (newest unread) instead of leaving the user at bottom.
+    window._stryxsCoachLoadedThisSession = false;
     await renderCoach();
-    navigate('plan');
+    // Navigate to Coach tab (NOT Plan tab) so user lands at the top of the recap message
+    // they're meant to read. They can move to Plan tab manually after.
+    navigate('coach');
   } catch (err) {
     console.error('Finalize import failed:', err);
     toast('Failed to save: ' + err.message);
@@ -11583,17 +11681,44 @@ async function renderPlan() {
 
   if (isImportedPlan) {
     currentState = 'periodized';
-    currentWeekIndex = importedCurrentWeek || 1;
+    // ═══ COMPUTE CURRENT WEEK FROM DATE ═══
+    // _imported_current_week is the ORIGINAL value at import time (e.g., Week 28).
+    // The user's ACTUAL current week today = imported_current_week + weeks_elapsed_since_import.
+    // We use plan_start_date (the original Monday of the imported week) as anchor.
+    const baseImportedWeek = importedCurrentWeek || 1;
+    if (planStartDateStr) {
+      const today = new Date();
+      today.setHours(12, 0, 0, 0);
+      const planStart = new Date(planStartDateStr + 'T12:00:00');
+      planStart.setHours(12, 0, 0, 0);
+      const daysFromPlanStart = Math.floor((today.getTime() - planStart.getTime()) / (24 * 60 * 60 * 1000));
+      const weeksElapsed = Math.max(0, Math.floor(daysFromPlanStart / 7));
+      currentWeekIndex = baseImportedWeek + weeksElapsed;
+    } else {
+      currentWeekIndex = baseImportedWeek;
+    }
     if (skeleton && skeleton[currentWeekIndex - 1]) {
       currentWeekInfo = skeleton[currentWeekIndex - 1];
-    } else if (activePlan?.plan_data?.phase) {
-      // Fallback — fabricate a minimal week info from the plan's phase
-      currentWeekInfo = {
-        phase: activePlan.plan_data.phase,
-        focus: activePlan.plan_data.phase_description || '',
-        is_deload: false,
-        target_volume_hours: null,
-      };
+    } else {
+      // Try to use the active plan's phase info or look up from weeks_overview if it's an imported plan
+      const profile = activePlan?.plan_data?._plan_profile;
+      const matchedWeek = profile?.weeks_overview?.find(w => w.week_number === currentWeekIndex);
+      if (matchedWeek) {
+        currentWeekInfo = {
+          phase: matchedWeek.phase || activePlan?.plan_data?.phase || '',
+          focus: matchedWeek.focus || activePlan?.plan_data?.phase_description || '',
+          is_deload: !!matchedWeek.is_recovery_week,
+          target_volume_hours: matchedWeek.volume_target_hours || null,
+        };
+      } else if (activePlan?.plan_data?.phase) {
+        // Fallback — fabricate a minimal week info from the plan's phase
+        currentWeekInfo = {
+          phase: activePlan.plan_data.phase,
+          focus: activePlan.plan_data.phase_description || '',
+          is_deload: false,
+          target_volume_hours: null,
+        };
+      }
     }
   } else if (activePlan && planStartDateStr) {
     const today = new Date();
