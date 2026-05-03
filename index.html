@@ -6480,7 +6480,7 @@ function renderInsightCard(p) {
             <button class="btn ghost" style="font-size: 11px; padding: 4px 10px;" onclick="explainInsightInChat('${p.id}', this)" title="Get a deeper explanation in Coach chat">💬 Why?</button>
             ${canApply ? `<button class="btn" style="font-size: 12px; padding: 6px 14px;" onclick="applyInsightToPlan('${p.id}', this)">⚡ Apply to plan</button>` : ''}
             ${canUndo ? `<button class="btn ghost" style="font-size: 11px; padding: 4px 10px;" onclick="undoAppliedInsight('${p.id}', this)">↶ Undo</button>` : ''}
-            ${!isApplied ? `<button class="btn ghost" style="font-size: 11px; padding: 4px 10px; color: var(--text-mute);" onclick="dismissTrendInsight('${p.id}')">Dismiss</button>` : ''}
+            ${!isApplied ? `<button class="btn ghost rp-dismiss-btn" data-insight-id="${p.id}" style="font-size: 11px; padding: 4px 10px; color: #f87171; border-color: rgba(239, 68, 68, 0.25);" onclick="initiateDismissTrendInsight('${p.id}', this)">Dismiss</button>` : ''}
           </div>
         </div>
       </div>
@@ -6579,6 +6579,34 @@ async function refreshInsights() {
     btn.disabled = false;
     btn.textContent = '↻ Refresh';
   }
+}
+
+// Two-step dismiss: first click arms (button turns solid red, text changes to "Tap again to confirm").
+// Second click within 4 seconds triggers actual dismissal. Auto-resets after 4s if user doesn't follow through.
+function initiateDismissTrendInsight(insightId, btnEl) {
+  if (!btnEl) return;
+  if (btnEl.dataset.armed === 'true') {
+    // Second tap — actually dismiss
+    dismissTrendInsight(insightId);
+    return;
+  }
+  btnEl.dataset.armed = 'true';
+  btnEl.style.background = 'var(--danger)';
+  btnEl.style.borderColor = 'var(--danger)';
+  btnEl.style.color = '#fff';
+  btnEl.style.boxShadow = '0 4px 20px rgba(239, 68, 68, 0.25)';
+  btnEl.innerHTML = '⚠ Tap again to dismiss';
+  // Auto-reset after 4 seconds if user doesn't confirm
+  setTimeout(() => {
+    if (btnEl.dataset.armed === 'true') {
+      btnEl.dataset.armed = 'false';
+      btnEl.style.background = '';
+      btnEl.style.borderColor = 'rgba(239, 68, 68, 0.25)';
+      btnEl.style.color = '#f87171';
+      btnEl.style.boxShadow = '';
+      btnEl.innerHTML = 'Dismiss';
+    }
+  }, 4000);
 }
 
 async function dismissTrendInsight(insightId) {
