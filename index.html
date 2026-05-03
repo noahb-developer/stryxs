@@ -4891,15 +4891,34 @@ async function runSamplePlanAudit() {
         return `<div style="margin-top: 4px;">• <strong>${escapeHtml(w.sport)}</strong> ${w.workout_type ? '· ' + escapeHtml(w.workout_type) : ''} ${meta ? '— ' + meta : ''}</div>`;
       }).join('');
 
+      // Pull validation summary from backend response (added by post-generation check)
+      const vSummary = plan._validation_summary || null;
+      const vWarnings = Array.isArray(plan._validation_warnings) ? plan._validation_warnings : [];
+      const volumeLine = vSummary
+        ? `<div style="margin-top: 4px;"><strong style="color: var(--text);">Volume:</strong> ${vSummary.totalHours}h ${vSummary.targetHours ? `(target ${vSummary.targetHours}h)` : ''}</div>`
+        : '';
+      const warningBlock = vWarnings.length > 0
+        ? `<div style="margin-top: 8px; padding: 8px 10px; background: rgba(251, 191, 36, 0.08); border: 1px solid rgba(251, 191, 36, 0.3); border-radius: 6px; font-size: 11px; color: #fbbf24;"><strong>⚠️ Validation warnings:</strong><br>${vWarnings.map(w => '• ' + escapeHtml(w)).join('<br>')}</div>`
+        : '';
+
       body.innerHTML = `
         <div><strong style="color: var(--text);">Phase:</strong> ${escapeHtml(plan.phase || '?')} ${plan.weekly_summary ? `· <strong>Summary:</strong> ${escapeHtml(plan.weekly_summary)}` : ''}</div>
         <div style="margin-top: 4px;"><strong style="color: var(--text);">${plan.workouts.length} workouts:</strong> ${escapeHtml(sportSummary)}</div>
+        ${volumeLine}
+        ${warningBlock}
         <details style="margin-top: 6px;"><summary style="cursor: pointer; color: var(--accent); font-size: 11px;">Show first 3 workouts</summary>${sampleWorkouts}</details>
       `;
 
-      status.textContent = `✓ ${elapsed}s`;
-      status.style.color = 'var(--accent)';
-      card.style.borderColor = 'rgba(0, 229, 160, 0.3)';
+      // If there are validation warnings, treat as a soft-fail visually (yellow border)
+      if (vWarnings.length > 0) {
+        status.textContent = `⚠ ${elapsed}s`;
+        status.style.color = '#fbbf24';
+        card.style.borderColor = 'rgba(251, 191, 36, 0.4)';
+      } else {
+        status.textContent = `✓ ${elapsed}s`;
+        status.style.color = 'var(--accent)';
+        card.style.borderColor = 'rgba(0, 229, 160, 0.3)';
+      }
       okCount++;
     } catch (err) {
       console.error(`[Stryxs Audit] ${fixture.label} failed:`, err);
