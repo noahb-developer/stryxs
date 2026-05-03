@@ -3891,7 +3891,7 @@ body.on-auth .container {
         <div class="lv2-step lv2-reveal">
           <div class="lv2-step-num">ii</div>
           <h3>Get your plan</h3>
-          <p>Periodized training built on Friel's framework, your LTHR zones, and 80/20 distribution. Loaded into a calendar you can actually use.</p>
+          <p>Periodized training built on proven endurance frameworks, your LTHR zones, and 80/20 distribution. Loaded into a calendar you can actually use.</p>
           <div class="lv2-step-graphic lv2-cal">
             <div class="lv2-cal-cell lv2-workout"></div>
             <div class="lv2-cal-cell lv2-rest"></div>
@@ -9289,8 +9289,26 @@ async function loadCoachPersonaBadge(intake) {
   const badge = document.getElementById('coachPersonaBadge');
   if (!badge) return;
   try {
-    console.log('[Stryxs] Loading persona for goal_event:', intake?.goal_event);
-    const persona = await callCoach('get_persona', { intake });
+    // Enrich intake with active imported plan profile so detectPhase backend can use it.
+    // Without this, an imported-plan user with no race_date set sees the misleading
+    // "Base — building foundation (no race date set)" instead of their actual phase/week.
+    const intakeForBadge = { ...intake };
+    try {
+      const { data: activePlan } = await sb.from('training_plans')
+        .select('plan_data')
+        .eq('user_id', state.user.id)
+        .eq('active', true)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (activePlan?.plan_data?._plan_profile) {
+        intakeForBadge._plan_profile = activePlan.plan_data._plan_profile;
+      }
+    } catch (e) {
+      console.warn('[Stryxs] Persona badge: plan profile lookup failed (non-fatal):', e);
+    }
+    console.log('[Stryxs] Loading persona for goal_event:', intakeForBadge?.goal_event);
+    const persona = await callCoach('get_persona', { intake: intakeForBadge });
     console.log('[Stryxs] Persona received:', persona);
     if (!persona) return;
     badge.innerHTML = `
@@ -13544,8 +13562,24 @@ async function renderPlan() {
       const daysFromPlanStart = Math.floor((today.getTime() - planStart.getTime()) / (24 * 60 * 60 * 1000));
       const weeksElapsed = Math.max(0, Math.floor(daysFromPlanStart / 7));
       currentWeekIndex = baseImportedWeek + weeksElapsed;
+      // ═══ DIAGNOSTIC LOG — helps debug "wrong week shown" reports ═══
+      console.log('[Stryxs] 📅 Plan tab week calc:', {
+        importedCurrentWeek_pinned: importedCurrentWeek,
+        baseImportedWeek_used: baseImportedWeek,
+        plan_start_date: planStartDateStr,
+        today: today.toISOString().split('T')[0],
+        daysFromPlanStart,
+        weeksElapsed,
+        computed_currentWeekIndex: currentWeekIndex,
+        importedTotalWeeks,
+        imported_latest_generated_week: activePlan?._imported_latest_generated_week || activePlan?.plan_data?._imported_latest_generated_week || null,
+      });
     } else {
       currentWeekIndex = baseImportedWeek;
+      console.log('[Stryxs] 📅 Plan tab week calc (no plan_start_date — using import week as-is):', {
+        importedCurrentWeek_pinned: importedCurrentWeek,
+        currentWeekIndex,
+      });
     }
     if (skeleton && skeleton[currentWeekIndex - 1]) {
       currentWeekInfo = skeleton[currentWeekIndex - 1];
