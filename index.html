@@ -1900,13 +1900,18 @@ select option {
 @media (max-width: 720px) {
   /* On mobile, the hero collapses into a single compact strip — chat is the main content, not the hero */
   .coach-hero {
-    padding: 14px 18px;
-    gap: 0;
+    padding: 14px 16px;
+    gap: 12px;
     border-radius: 12px;
     margin-bottom: 12px;
-    justify-content: flex-start;
+    align-items: center;
   }
   /* For the chat-page hero specifically: hide the avatar + intro, show big "Coach" text */
+  .coach-hero-chat {
+    gap: 0 !important;
+    padding: 14px 18px !important;
+    justify-content: flex-start !important;
+  }
   .coach-hero-chat .coach-avatar,
   .coach-hero-chat .coach-intro { display: none !important; }
   .coach-hero-chat .coach-hero-mobile-title {
@@ -1917,16 +1922,19 @@ select option {
     color: var(--text);
     line-height: 1;
   }
-  /* For other heroes (intake page) — keep avatar + heading visible (smaller) */
+  /* For other heroes (intake page, race planner) — keep avatar + heading visible (smaller) */
   .coach-hero:not(.coach-hero-chat) .coach-avatar {
-    width: 36px !important; height: 36px !important;
+    width: 38px !important; height: 38px !important;
     font-size: 18px !important;
     box-shadow: none !important;
+    flex-shrink: 0;
   }
   .coach-hero:not(.coach-hero-chat) .coach-intro h2 {
-    font-size: 15px !important; margin-bottom: 0 !important; line-height: 1.2 !important;
+    font-size: 16px !important; margin-bottom: 2px !important; line-height: 1.2 !important;
   }
-  .coach-hero:not(.coach-hero-chat) .coach-intro p { display: none !important; }
+  .coach-hero:not(.coach-hero-chat) .coach-intro p {
+    font-size: 12px !important; line-height: 1.4 !important; color: var(--text-dim);
+  }
 }
 .coach-hero-mobile-title { display: none; } /* hidden by default — only mobile shows it */
 .coach-intro {
@@ -4514,12 +4522,14 @@ function getOnboardingKey() {
   return `stryxs_onboarding_seen_v1_${uid}`;
 }
 
-async function checkAndShowOnboarding() {
+async function checkAndShowOnboarding(forceShow = false) {
   if (!state.user) return;
-  // Skip if user has already seen onboarding (per-user key)
-  try {
-    if (localStorage.getItem(getOnboardingKey()) === '1') return;
-  } catch(e) {}
+  // Skip if user has already seen onboarding (per-user key) — UNLESS this is a force-show
+  if (!forceShow) {
+    try {
+      if (localStorage.getItem(getOnboardingKey()) === '1') return;
+    } catch(e) {}
+  }
 
   // Determine which steps are already complete
   const intake = await sb.from('athlete_intake').select('completed, run_lthr, bike_lthr').eq('user_id', state.user.id).maybeSingle();
@@ -4551,8 +4561,8 @@ async function checkAndShowOnboarding() {
     },
   ];
 
-  // If everything is done, mark complete and skip
-  if (steps.every(s => s.complete)) {
+  // If everything is done AND this isn't a force-show, mark complete and skip
+  if (!forceShow && steps.every(s => s.complete)) {
     try { localStorage.setItem(getOnboardingKey(), '1'); } catch(e) {}
     return;
   }
@@ -4567,35 +4577,36 @@ function showOnboardingModal(steps) {
 
   const completedCount = steps.filter(s => s.complete).length;
   const total = steps.length;
+  const allDone = completedCount === total;
 
   const overlay = document.createElement('div');
   overlay.id = 'onboardingModal';
   overlay.className = 'onb-overlay';
   overlay.innerHTML = `
     <div class="onb-modal">
-      <div class="onb-emoji">⚡</div>
-      <div class="onb-title">Welcome to Stryxs, ${state.user?.name?.split(' ')[0] || 'athlete'}.</div>
-      <div class="onb-sub">Stryxs is your AI coach for endurance training. Three quick steps and you're set.</div>
+      <div class="onb-emoji">${allDone ? '🎉' : '⚡'}</div>
+      <div class="onb-title">${allDone ? `You're all set, ${state.user?.name?.split(' ')[0] || 'athlete'}!` : `Welcome to Stryxs, ${state.user?.name?.split(' ')[0] || 'athlete'}.`}</div>
+      <div class="onb-sub">${allDone ? 'Everything is connected and configured. You\'re ready to train.' : 'Stryxs is your AI coach for endurance training. Three quick steps and you\'re set.'}</div>
       <div class="onb-checklist">
         ${steps.map((s, i) => `
           <div class="onb-step ${s.complete ? 'complete' : ''}" onclick="onboardingActions[${i}]()" style="cursor: ${s.complete ? 'default' : 'pointer'};">
             <div class="onb-step-num">${s.complete ? '✓' : (i + 1)}</div>
             <div class="onb-step-content">
               <div class="onb-step-title">${s.title}</div>
-              <div class="onb-step-desc">${s.desc}</div>
+              <div class="onb-step-desc">${s.complete ? 'Done' : s.desc}</div>
             </div>
             ${!s.complete ? '<div style="color: var(--text-mute); font-size: 16px;">→</div>' : ''}
           </div>
         `).join('')}
       </div>
       <div class="onb-actions">
-        ${completedCount < total ? `
-          <button class="btn" onclick="onboardingNext()">Get started</button>
+        ${!allDone ? `
+          <button class="btn" onclick="onboardingNext()">Continue setup</button>
         ` : `
           <button class="btn" onclick="dismissOnboarding()">Continue to dashboard</button>
         `}
       </div>
-      <div class="onb-skip" onclick="dismissOnboarding()">Skip for now</div>
+      <div class="onb-skip" onclick="dismissOnboarding()">${allDone ? 'Close' : 'Skip for now'}</div>
     </div>
   `;
   document.body.appendChild(overlay);
@@ -4619,10 +4630,11 @@ function dismissOnboarding() {
   if (modal) modal.remove();
 }
 
-// Force-show onboarding (for testing or manual trigger)
+// Force-show onboarding (for "Show welcome tour again" link in Settings)
 function showOnboardingAgain() {
   try { localStorage.removeItem(getOnboardingKey()); } catch(e) {}
-  checkAndShowOnboarding();
+  // Force-show even if all steps are complete — user explicitly asked to see it again
+  checkAndShowOnboarding(true);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -5695,7 +5707,7 @@ function renderSummaryWorkout(a) {
         <div class="workout-meta">
           ${a.distance > 0 ? `<span>📍 ${a.distance.toFixed(2)} km</span>` : ''}
           ${a.time ? `<span>⏱ ${a.time}</span>` : ''}
-          ${a.avgHr ? `<span>💓 ${a.avgHr} bpm avg</span>` : ''}
+          ${a.avgHr ? `<span>❤️ ${a.avgHr} bpm avg</span>` : ''}
           ${a.maxHr ? `<span>🔥 ${a.maxHr} bpm max</span>` : ''}
           ${a.avgPace ? `<span>⚡ ${a.avgPace}/km</span>` : ''}
           ${a.elevationGain > 0 ? `<span>⛰ ${Math.round(a.elevationGain)}m</span>` : ''}
@@ -5727,7 +5739,7 @@ function renderRun(a) {
         <div class="workout-meta">
           <span>📍 ${a.distance.toFixed(2)} km</span>
           <span>⏱ ${a.time}</span>
-          <span>💓 ${a.avgHr} bpm avg</span>
+          <span>❤️ ${a.avgHr} bpm avg</span>
           ${a.lapCount ? `<span>🏁 ${a.lapCount} laps</span>` : ''}
         </div>
         <div class="type-badge type-${a.typeClass}">${Math.round(a.pct)}% of LTHR (${a.lthr})</div>
@@ -5783,7 +5795,7 @@ function renderBike(a) {
         <div class="workout-meta">
           <span>📍 ${a.distance.toFixed(1)} km</span>
           <span>⏱ ${a.time}</span>
-          <span>💓 ${a.avgHr} bpm avg</span>
+          <span>❤️ ${a.avgHr} bpm avg</span>
           ${a.avgSpeed ? `<span>⚡ ${a.avgSpeed.toFixed(1)} km/h</span>` : ''}
         </div>
         <div class="type-badge type-${a.typeClass}">${Math.round(a.pct)}% of LTHR (${a.lthr})</div>
@@ -5846,7 +5858,7 @@ function renderSwim(a) {
         <div class="workout-name">Pool Swim</div>
         <div class="workout-meta">
           <span>${a.sets.length} sets</span>
-          <span>💓 ${a.avgHr} bpm avg</span>
+          <span>❤️ ${a.avgHr} bpm avg</span>
         </div>
       </div>
       <div class="analysis-body">
@@ -6320,47 +6332,48 @@ async function renderDashRaceProjectionMini(intake) {
     return;
   }
 
-  // Use cached projection if available
-  let projTime = '—';
-  let confidence = null;
-  if (typeof _projectionsCache !== 'undefined' && _projectionsCache?.proj?.primary_projection) {
-    projTime = _projectionsCache.proj.primary_projection.time || _projectionsCache.proj.primary_projection.predicted_time || '—';
-    confidence = _projectionsCache.proj.data_sufficiency || null;
-  }
-
   // Update race countdown chip with intake context (depends on goal/race_date)
   await renderDashRaceCountdown(intake);
 
-  const eventName = formatGoal(intake.goal_event) || 'race';
+  // Inner render — pulls latest from cache and paints. Called initially, then again
+  // after async fetch completes if the cache was empty on first paint.
+  const paintMini = () => {
+    let projTime = '—';
+    let confidence = null;
+    if (typeof _projectionsCache !== 'undefined' && _projectionsCache?.proj?.primary_projection) {
+      const p = _projectionsCache.proj.primary_projection;
+      projTime = p.predicted_time || p.time || '—';
+      confidence = _projectionsCache.proj.data_sufficiency || p.confidence || null;
+    }
+    const eventName = formatGoal(intake.goal_event) || 'race';
 
-  card.innerHTML = `
-    <div class="panel" style="margin-bottom: 14px; cursor: pointer;" onclick="navigate('race-planner')">
-      <div style="display: flex; align-items: center; gap: 14px;">
-        <div style="font-size: 22px; flex-shrink: 0;">🎯</div>
-        <div style="flex: 1; min-width: 0;">
-          <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; font-weight: 700; margin-bottom: 2px;">Projected ${escapeHtml(eventName)}</div>
-          <div style="display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;">
-            <div style="font-size: 18px; font-weight: 800; color: var(--accent); font-family: 'JetBrains Mono', monospace;">${escapeHtml(projTime)}</div>
-            ${confidence ? `<div style="font-size: 10px; color: var(--text-mute); text-transform: uppercase;">${escapeHtml(confidence)} confidence</div>` : ''}
+    card.innerHTML = `
+      <div class="panel" style="margin-bottom: 14px; cursor: pointer;" onclick="navigate('race-planner')">
+        <div style="display: flex; align-items: center; gap: 14px;">
+          <div style="font-size: 22px; flex-shrink: 0;">🎯</div>
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; font-weight: 700; margin-bottom: 2px;">Projected ${escapeHtml(eventName)}</div>
+            <div style="display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;">
+              <div style="font-size: 18px; font-weight: 800; color: var(--accent); font-family: 'JetBrains Mono', monospace;">${escapeHtml(projTime)}</div>
+              ${confidence ? `<div style="font-size: 10px; color: var(--text-mute); text-transform: uppercase;">${escapeHtml(confidence)} confidence</div>` : ''}
+            </div>
           </div>
+          <div style="font-size: 12px; color: var(--accent); font-weight: 600; flex-shrink: 0;">View more →</div>
         </div>
-        <div style="font-size: 12px; color: var(--accent); font-weight: 600; flex-shrink: 0;">View more →</div>
       </div>
-    </div>
-  `;
+    `;
+  };
 
-  // Trigger projection refresh in background if cache is empty (don't await — non-blocking)
+  paintMini();
+
+  // Trigger projection refresh in background if cache is empty (don't await — non-blocking).
+  // After fetch completes, re-paint the entire mini-card with the fresh data.
   if (typeof _projectionsCache === 'undefined' || !_projectionsCache?.proj) {
     setTimeout(() => {
       if (typeof renderProjections === 'function') {
         renderProjections().then(() => {
-          // After fetch, update the mini-card
-          if (_projectionsCache?.proj?.primary_projection) {
-            const pTime = _projectionsCache.proj.primary_projection.time || _projectionsCache.proj.primary_projection.predicted_time || '—';
-            const pConf = _projectionsCache.proj.data_sufficiency;
-            const timeEl = card.querySelector('div[style*="font-family: \'JetBrains"]');
-            if (timeEl) timeEl.textContent = pTime;
-          }
+          // After fetch, re-render the whole mini-card with the fresh cache
+          paintMini();
         }).catch(() => {});
       }
     }, 500);
@@ -12548,6 +12561,9 @@ async function renderRacePlanner() {
       })()}
     </div>
 
+    <!-- Race projections section — full breakdown of predicted finish + per-leg paces -->
+    <div id="raceProjectionsSection" style="margin-top: 18px;"></div>
+
     ${upcoming.length > 0 ? `
       <div class="panel" style="margin-top: 18px;">
         <div class="panel-header"><div><div class="panel-title">Upcoming races (${upcoming.length})</div></div></div>
@@ -12576,6 +12592,67 @@ async function renderRacePlanner() {
       </div>
     ` : ''}
   `;
+
+  // After painting, populate the race projections section using the existing rich render
+  await renderRacePlannerProjections();
+}
+
+// Render the rich race-day projection breakdown into the Race Planner page.
+// Uses the existing renderProjectionsFromData (full panel) and triggers a fetch
+// if the cache is empty.
+async function renderRacePlannerProjections() {
+  const container = document.getElementById('raceProjectionsSection');
+  if (!container || !state.user) return;
+
+  // Get the latest intake for goal context
+  const { data: intake } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).maybeSingle();
+  if (!intake?.goal_event || intake.goal_event === 'general' || intake.goal_event === 'general_fitness') {
+    // No goal event — show a simple prompt
+    container.innerHTML = `
+      <div class="panel">
+        <div style="text-align: center; padding: 4px;">
+          <div style="font-size: 28px; margin-bottom: 8px;">🎯</div>
+          <div style="font-size: 14px; font-weight: 600; margin-bottom: 4px;">No goal event set</div>
+          <div style="font-size: 12px; color: var(--text-dim); line-height: 1.5;">Set a target race in your intake to see projected finish times.</div>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // If no cache, show loading + trigger fetch
+  if (!_projectionsCache?.proj) {
+    container.innerHTML = `
+      <div class="panel">
+        <div style="display: flex; align-items: center; gap: 12px; padding: 4px;">
+          <div class="spinner" style="width: 20px; height: 20px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite;"></div>
+          <div style="font-size: 13px; color: var(--text-dim);">Calculating race projections from your training data…</div>
+        </div>
+      </div>
+    `;
+    try {
+      await renderProjections();
+    } catch (e) {
+      console.error('[Stryxs] Race planner projections fetch failed:', e);
+    }
+  }
+
+  // Render with whatever's now in cache
+  if (_projectionsCache?.proj && _projectionsCache?.intake && Array.isArray(_projectionsCache?.recentWorkouts)) {
+    // Use the existing rich renderer — writes the full panel into the container
+    renderProjectionsFromData(container, _projectionsCache.intake, _projectionsCache.recentWorkouts, _projectionsCache.proj);
+  } else if (!container.innerHTML.includes('spinner')) {
+    // Fetch failed and we don't have cache — show error
+    container.innerHTML = `
+      <div class="panel">
+        <div style="text-align: center; padding: 4px;">
+          <div style="font-size: 14px; font-weight: 600; margin-bottom: 4px;">Projections unavailable</div>
+          <div style="font-size: 12px; color: var(--text-dim); line-height: 1.5; margin-bottom: 12px;">Need a few more workouts logged before Coach can project times accurately.</div>
+          <button class="btn ghost" style="font-size: 12px; padding: 6px 14px;" onclick="forceRefreshProjections().then(() => renderRacePlannerProjections())">↻ Try again</button>
+        </div>
+      </div>
+    `;
+  }
 }
 
 function renderRacePlanCard(p, isPast = false) {
@@ -13349,9 +13426,9 @@ async function renderPlan() {
             })()}
           </div>
           ${currentWeekInfo.target_volume_hours ? `
-            <div style="text-align: right; flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end;">
-              <div style="font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1.2px; font-weight: 700; margin-bottom: 2px;">Target</div>
-              <div style="font-size: 22px; font-weight: 800; color: var(--text); font-family: 'JetBrains Mono', monospace; line-height: 1;">${currentWeekInfo.target_volume_hours}h</div>
+            <div style="flex-shrink: 0; display: flex; flex-direction: column; align-items: center; min-width: 60px;">
+              <div style="font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1.2px; font-weight: 700; margin-bottom: 4px; text-align: center;">Target</div>
+              <div style="font-size: 22px; font-weight: 800; color: var(--text); font-family: 'JetBrains Mono', monospace; line-height: 1; text-align: center;">${currentWeekInfo.target_volume_hours}h</div>
             </div>
           ` : ''}
         </div>
