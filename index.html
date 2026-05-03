@@ -1380,6 +1380,51 @@ select option {
 }
 
 /* ════════ UPLOAD ════════ */
+/* New collapsible toggle buttons at top of Analyze page */
+.analyze-toggles {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.analyze-toggle {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 14px 12px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.analyze-toggle:hover { border-color: var(--border-light); }
+.analyze-toggle .analyze-toggle-icon { font-size: 16px; line-height: 1; }
+.analyze-toggle .analyze-toggle-chev {
+  font-size: 12px; color: var(--text-mute); transition: transform 0.2s;
+}
+.analyze-toggle.active {
+  background: rgba(0, 229, 160, 0.08);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.analyze-toggle.active .analyze-toggle-chev { color: var(--accent); transform: rotate(180deg); }
+
+.analyze-panel {
+  background: var(--bg-2);
+  border: 1px solid var(--accent-border);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 18px;
+  animation: fadeIn 0.2s ease-out;
+}
+@media (max-width: 720px) {
+  .analyze-toggle { font-size: 13px; padding: 12px 10px; }
+  .analyze-panel { padding: 12px; }
+}
+
 .source-tabs {
   display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap;
 }
@@ -1855,20 +1900,35 @@ select option {
 @media (max-width: 720px) {
   /* On mobile, the hero collapses into a single compact strip — chat is the main content, not the hero */
   .coach-hero {
-    padding: 10px 14px;
-    gap: 10px;
-    border-radius: 10px;
-    margin-bottom: 10px;
+    padding: 14px 18px;
+    gap: 0;
+    border-radius: 12px;
+    margin-bottom: 12px;
+    justify-content: flex-start;
   }
-  .coach-avatar {
+  /* For the chat-page hero specifically: hide the avatar + intro, show big "Coach" text */
+  .coach-hero-chat .coach-avatar,
+  .coach-hero-chat .coach-intro { display: none !important; }
+  .coach-hero-chat .coach-hero-mobile-title {
+    display: block;
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    color: var(--text);
+    line-height: 1;
+  }
+  /* For other heroes (intake page) — keep avatar + heading visible (smaller) */
+  .coach-hero:not(.coach-hero-chat) .coach-avatar {
     width: 36px !important; height: 36px !important;
     font-size: 18px !important;
     box-shadow: none !important;
   }
-  .coach-intro h2 { font-size: 15px !important; margin-bottom: 0 !important; line-height: 1.2 !important; }
-  /* Hide the description paragraph on mobile — saves a lot of vertical space, the chat below explains itself */
-  .coach-intro p { display: none !important; }
+  .coach-hero:not(.coach-hero-chat) .coach-intro h2 {
+    font-size: 15px !important; margin-bottom: 0 !important; line-height: 1.2 !important;
+  }
+  .coach-hero:not(.coach-hero-chat) .coach-intro p { display: none !important; }
 }
+.coach-hero-mobile-title { display: none; } /* hidden by default — only mobile shows it */
 .coach-intro {
   flex: 1;
   min-width: 0; /* allow flex child to shrink below content size — KEY for text wrapping */
@@ -1957,25 +2017,25 @@ select option {
   overflow: hidden;
 }
 @media (max-width: 720px) {
-  /* ═══ COACH MOBILE — EDGE-TO-EDGE CHAT ═══
-     The chat extends past the page padding to fill the entire phone width.
-     No bordered box, no rounded corners — chat IS the screen on mobile,
-     not a widget on the screen. Pattern matches ChatGPT/Claude/iMessage.
+  /* ═══ COACH MOBILE — ALL BOXES CONSISTENT WIDTH ═══
+     Boxes match each other (hero, persona, chat, plan-mgmt) and are wider
+     than before. Borders preserved. Bubbles extend full width by hiding avatars.
   */
   .coach-chat {
     height: calc(100dvh - 200px);
     min-height: 460px;
-    border-radius: 0;
-    border-left: none;
-    border-right: none;
-    /* Negative horizontal margin to bleed past page padding (page-coach has 16px 14px on mobile) */
-    margin-left: -14px;
-    margin-right: -14px;
-    background: transparent;
+    border-radius: 12px;
   }
 
+  /* Hide chat message avatars on mobile so bubbles can use the full width.
+     Color (green vs grey) still distinguishes who sent each message. */
+  .chat-msg .msg-avatar { display: none !important; }
+  .chat-msg { gap: 0 !important; max-width: 100% !important; }
+  .chat-msg.user .msg-bubble { max-width: 88%; margin-left: auto; }
+  .chat-msg .msg-bubble { max-width: 96%; }
+
   /* Persona badge: collapse to single-line summary on mobile, expand on tap */
-  .coach-persona-card { padding: 10px 14px !important; border-radius: 10px !important; }
+  .coach-persona-card { padding: 12px 14px !important; border-radius: 12px !important; }
   .coach-persona-card .persona-mobile-summary { display: block !important; }
   .coach-persona-card .persona-full-content { display: none; }
   .coach-persona-card.persona-expanded .persona-mobile-summary { display: none !important; }
@@ -2000,8 +2060,6 @@ select option {
   .chat-messages {
     padding: 16px 14px 18px;
     gap: 14px;
-    /* Solid background since the panel border was removed */
-    background: var(--bg-2);
   }
 }
 
@@ -3963,19 +4021,32 @@ body.on-auth .container {
 <!-- UPLOAD -->
 <div class="page" id="page-upload">
   <div class="section-title">Analyze Workout</div>
-  <p class="section-sub">Today's analyses at the top, sync & upload tools below.</p>
+  <p class="section-sub">Sync, upload, or review today's workouts.</p>
 
-  <!-- ═══ TODAY'S ANALYSES — populated dynamically with workouts logged today ═══ -->
-  <div id="todaysAnalyses" style="margin-bottom: 22px;"></div>
-
-  <!-- ═══ SYNC + UPLOAD TOOLS (moved below) ═══ -->
-  <div class="source-tabs">
-    <button class="source-tab active" data-source="connect">🔗 Auto-sync</button>
-    <button class="source-tab" data-source="upload">📁 Upload CSV (deep analysis)</button>
+  <!-- ═══ TWO COLLAPSIBLE TOGGLE BUTTONS ═══ -->
+  <div class="analyze-toggles">
+    <button class="analyze-toggle" id="toggleAutoSync" onclick="toggleAnalyzeSection('autoSync')">
+      <span class="analyze-toggle-icon">🔗</span>
+      <span class="analyze-toggle-label">Auto-sync</span>
+      <span class="analyze-toggle-chev">▾</span>
+    </button>
+    <button class="analyze-toggle" id="toggleUploadCsv" onclick="toggleAnalyzeSection('uploadCsv')">
+      <span class="analyze-toggle-icon">📁</span>
+      <span class="analyze-toggle-label">Upload CSV</span>
+      <span class="analyze-toggle-chev">▾</span>
+    </button>
   </div>
 
-  <div id="sourceUpload" style="display: none;">
-    <div style="padding: 14px; background: rgba(0, 255, 163, 0.04); border: 1px solid rgba(0, 255, 163, 0.15); border-radius: 10px; margin-bottom: 18px;">
+  <!-- ═══ AUTO-SYNC PANEL (collapsed by default) ═══ -->
+  <div id="autoSyncPanel" class="analyze-panel" style="display: none;">
+    <div id="autoSyncContent">
+      <!-- populated dynamically by renderAutoSyncPanel based on connection status -->
+    </div>
+  </div>
+
+  <!-- ═══ UPLOAD CSV PANEL (collapsed by default) ═══ -->
+  <div id="uploadCsvPanel" class="analyze-panel" style="display: none;">
+    <div style="padding: 14px; background: rgba(0, 255, 163, 0.04); border: 1px solid rgba(0, 255, 163, 0.15); border-radius: 10px; margin-bottom: 14px;">
       <div style="font-size: 13px; color: var(--text-dim); line-height: 1.55;">
         <strong style="color: var(--accent);">For power users:</strong> Upload a CSV from your watch for full per-lap analysis (cardiac drift, zone distribution, intensity targets). Strava sync gives you the basics; CSV gives you everything.
       </div>
@@ -3989,56 +4060,30 @@ body.on-auth .container {
     <p class="source-supports">Supports Garmin, COROS, Polar, Suunto, Apple Watch exports (.csv)</p>
   </div>
 
-  <div id="sourceConnect">
+  <!-- ═══ TODAY'S ANALYSES (always at top, below the toggles) ═══ -->
+  <div id="todaysAnalyses" style="margin-top: 4px;"></div>
+
+  <!-- analysisOutput kept for legacy CSV uploads — falls back behind today's analyses -->
+  <div id="analysisOutput" style="margin-top: 20px;"></div>
+
+  <!-- LEGACY hidden containers — kept for backward-compat with old code paths -->
+  <div class="source-tabs" style="display: none;">
+    <button class="source-tab active" data-source="connect">🔗 Auto-sync</button>
+    <button class="source-tab" data-source="upload">📁 Upload CSV</button>
+  </div>
+  <div id="sourceConnect" style="display: none;">
     <div class="connect-card" id="stravaConnectCard">
       <div class="connect-logo" style="background: rgba(252, 76, 2, 0.15);">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="#FC4C02"><path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169"/></svg>
       </div>
       <div class="connect-info">
         <div class="connect-name">Strava</div>
-        <div class="connect-desc">Auto-sync every workout from any watch via Strava. New activities appear here as soon as you finish them.</div>
+        <div class="connect-desc">Auto-sync every workout from any watch via Strava.</div>
       </div>
       <button class="btn" style="background: #FC4C02; border-color: #FC4C02; color: white;" onclick="navigate('settings'); setTimeout(() => toggleSettingsSection('connections'), 100);">Connect</button>
     </div>
-    <div class="connect-card">
-      <div class="connect-logo" style="background: rgba(0, 122, 255, 0.15);">⌚</div>
-      <div class="connect-info">
-        <div class="connect-name">Garmin Connect <span class="connect-badge">Coming soon</span></div>
-        <div class="connect-desc">Direct integration with Garmin Connect for automatic workout syncing.</div>
-      </div>
-      <button class="btn ghost" disabled style="opacity: 0.5; cursor: not-allowed;">Connect</button>
-    </div>
-    <div class="connect-card">
-      <div class="connect-logo" style="background: rgba(255, 45, 85, 0.15);">🍎</div>
-      <div class="connect-info">
-        <div class="connect-name">Apple Health <span class="connect-badge">Coming soon</span></div>
-        <div class="connect-desc">Sync your Apple Watch workouts automatically through Apple Health integration.</div>
-      </div>
-      <button class="btn ghost" disabled style="opacity: 0.5; cursor: not-allowed;">Connect</button>
-    </div>
-    <div class="connect-card">
-      <div class="connect-logo" style="background: rgba(20, 174, 92, 0.15);">📱</div>
-      <div class="connect-info">
-        <div class="connect-name">Samsung Health <span class="connect-badge">Coming soon</span></div>
-        <div class="connect-desc">Direct sync with Samsung Health for Galaxy Watch users.</div>
-      </div>
-      <button class="btn ghost" disabled style="opacity: 0.5; cursor: not-allowed;">Connect</button>
-    </div>
-    <div class="connect-card">
-      <div class="connect-logo" style="background: rgba(255, 195, 0, 0.15);">⌚</div>
-      <div class="connect-info">
-        <div class="connect-name">COROS <span class="connect-badge">Coming soon</span></div>
-        <div class="connect-desc">Auto-sync your COROS watch workouts directly to Stryxs.</div>
-      </div>
-      <button class="btn ghost" disabled style="opacity: 0.5; cursor: not-allowed;">Connect</button>
-    </div>
-    <p style="text-align: center; color: var(--text-mute); font-size: 12px; margin-top: 16px;">
-      We're working on direct integrations. For now, export a CSV manually.<br>
-      <a style="color: var(--accent); cursor: pointer;" onclick="navigate('help')">See how →</a>
-    </p>
   </div>
-
-  <div id="analysisOutput" style="margin-top: 20px;"></div>
+  <div id="sourceUpload" style="display: none;"></div>
 </div>
 
 <!-- HISTORY -->
@@ -4800,7 +4845,7 @@ async function renderTodaysAnalyses() {
     container.innerHTML = `
       <div style="padding: 16px; background: rgba(255, 255, 255, 0.02); border: 1px dashed var(--border); border-radius: 12px; text-align: center;">
         <div style="font-size: 13px; color: var(--text-dim); line-height: 1.55;">
-          No workouts logged today yet. Sync from Strava or upload a CSV below — your analyses will appear here.
+          No workouts logged today yet. Use Auto-sync or Upload CSV above — your analyses will appear here.
         </div>
       </div>
     `;
@@ -4809,6 +4854,10 @@ async function renderTodaysAnalyses() {
 
   const sportEmojis = { run: '🏃', bike: '🚴', swim: '🏊', strength: '💪', mobility: '🧘', other: '⚡' };
 
+  // Each card stores its workout index. We attach the workout to a global cache so the toggle
+  // function can pull it without re-querying. Keys are the _dbId or array index.
+  window._todaysAnalysesCache = todays;
+
   container.innerHTML = `
     <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
       <div style="font-size: 11px; color: var(--accent); text-transform: uppercase; letter-spacing: 1.5px; font-weight: 800;">Today's analyses</div>
@@ -4816,12 +4865,12 @@ async function renderTodaysAnalyses() {
       <div style="font-size: 11px; color: var(--text-mute);">${todays.length} workout${todays.length === 1 ? '' : 's'}</div>
     </div>
     <div style="display: flex; flex-direction: column; gap: 10px;">
-      ${todays.map(w => renderTodaysAnalysisCard(w, sportEmojis)).join('')}
+      ${todays.map((w, i) => renderTodaysAnalysisCard(w, sportEmojis, i)).join('')}
     </div>
   `;
 }
 
-function renderTodaysAnalysisCard(w, sportEmojis) {
+function renderTodaysAnalysisCard(w, sportEmojis, idx) {
   const sport = normalizeSport(w.sport);
   const emoji = sportEmojis[sport] || '⚡';
   const distance = w.distance ? `${parseFloat(w.distance).toFixed(1)}km` : '';
@@ -4841,18 +4890,156 @@ function renderTodaysAnalysisCard(w, sportEmojis) {
   const meta = [durationStr, distance, avgHr ? `${avgHr} bpm` : '', drift ? `${drift}% drift` : ''].filter(Boolean).join(' · ');
 
   return `
-    <div onclick="navigate('history')" style="display: flex; align-items: center; gap: 14px; padding: 14px 16px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 12px; cursor: pointer; transition: all 0.15s;">
-      <div style="font-size: 22px; flex-shrink: 0;">${emoji}</div>
-      <div style="flex: 1; min-width: 0;">
-        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 2px;">
-          <div style="font-weight: 600; color: var(--text); font-size: 14px; text-transform: capitalize;">${escapeHtml(sport || 'workout')}</div>
-          ${isStrava ? `<span style="font-size: 9px; padding: 2px 6px; background: rgba(252, 76, 2, 0.12); border: 1px solid rgba(252, 76, 2, 0.3); border-radius: 4px; color: #fc4c02; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Strava</span>` : ''}
+    <div class="todays-analysis-wrap" data-workout-idx="${idx}">
+      <div class="todays-analysis-card" onclick="toggleTodaysAnalysis(${idx}, this)" style="display: flex; align-items: center; gap: 14px; padding: 14px 16px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 12px; cursor: pointer; transition: all 0.15s;">
+        <div style="font-size: 22px; flex-shrink: 0;">${emoji}</div>
+        <div style="flex: 1; min-width: 0;">
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 2px;">
+            <div style="font-weight: 600; color: var(--text); font-size: 14px; text-transform: capitalize;">${escapeHtml(sport || 'workout')}</div>
+            ${isStrava ? `<span style="font-size: 9px; padding: 2px 6px; background: rgba(252, 76, 2, 0.12); border: 1px solid rgba(252, 76, 2, 0.3); border-radius: 4px; color: #fc4c02; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Strava</span>` : ''}
+          </div>
+          ${meta ? `<div style="font-size: 12px; color: var(--text-dim); line-height: 1.4;">${escapeHtml(meta)}</div>` : ''}
         </div>
-        ${meta ? `<div style="font-size: 12px; color: var(--text-dim); line-height: 1.4;">${escapeHtml(meta)}</div>` : ''}
+        <div class="todays-analysis-chev" style="color: var(--text-mute); font-size: 14px; flex-shrink: 0; transition: transform 0.2s;">▾</div>
       </div>
-      <div style="color: var(--text-mute); font-size: 16px; flex-shrink: 0;">→</div>
+      <div class="todays-analysis-detail" style="display: none; margin-top: 10px;"></div>
     </div>
   `;
+}
+
+// Toggle inline analysis expansion. Clicking the card expands the full analysis right under it.
+// Clicking again collapses. Uses the cached workouts to avoid re-querying.
+function toggleTodaysAnalysis(idx, cardEl) {
+  const wrap = cardEl?.closest('.todays-analysis-wrap');
+  if (!wrap) return;
+  const detail = wrap.querySelector('.todays-analysis-detail');
+  const chev = cardEl.querySelector('.todays-analysis-chev');
+  const cache = window._todaysAnalysesCache || [];
+  const workout = cache[idx];
+
+  if (!detail) return;
+
+  // Collapse if currently open
+  if (detail.style.display !== 'none' && detail.style.display !== '') {
+    detail.style.display = 'none';
+    detail.innerHTML = '';
+    if (chev) chev.style.transform = 'rotate(0deg)';
+    cardEl.style.borderColor = 'var(--border)';
+    return;
+  }
+
+  if (!workout) {
+    detail.innerHTML = '<div style="padding: 14px; color: var(--text-dim); font-size: 13px;">Analysis not available — refresh and try again.</div>';
+    detail.style.display = 'block';
+    return;
+  }
+
+  // Render the full analysis using existing renderAnalysis
+  try {
+    detail.innerHTML = renderAnalysis(workout);
+    detail.style.display = 'block';
+    if (chev) chev.style.transform = 'rotate(180deg)';
+    cardEl.style.borderColor = 'var(--accent-border)';
+  } catch (err) {
+    console.error('[Stryxs] Failed to render today\'s analysis:', err);
+    detail.innerHTML = '<div style="padding: 14px; color: var(--text-dim); font-size: 13px;">Could not render analysis. Try the History tab for a full view.</div>';
+    detail.style.display = 'block';
+  }
+}
+
+// Toggle the auto-sync or upload-csv panel. Two-button toggle UX.
+function toggleAnalyzeSection(section) {
+  const panels = { autoSync: 'autoSyncPanel', uploadCsv: 'uploadCsvPanel' };
+  const buttons = { autoSync: 'toggleAutoSync', uploadCsv: 'toggleUploadCsv' };
+  const targetPanel = document.getElementById(panels[section]);
+  const targetBtn = document.getElementById(buttons[section]);
+  if (!targetPanel || !targetBtn) return;
+
+  const isOpening = targetPanel.style.display === 'none';
+
+  // Close everything else first
+  Object.entries(panels).forEach(([key, panelId]) => {
+    if (key !== section) {
+      const p = document.getElementById(panelId);
+      const b = document.getElementById(buttons[key]);
+      if (p) p.style.display = 'none';
+      if (b) b.classList.remove('active');
+    }
+  });
+
+  if (isOpening) {
+    targetPanel.style.display = 'block';
+    targetBtn.classList.add('active');
+    // For auto-sync: render proper content based on connection status
+    if (section === 'autoSync') {
+      renderAutoSyncPanel();
+    }
+  } else {
+    targetPanel.style.display = 'none';
+    targetBtn.classList.remove('active');
+  }
+}
+
+// Render the auto-sync panel content. If Strava is connected, show a clean "Manage connections"
+// CTA. If not, show the full Strava connect prompt + a link to see other options in Settings.
+async function renderAutoSyncPanel() {
+  const container = document.getElementById('autoSyncContent');
+  if (!container || !state.user) return;
+
+  // Default while loading
+  container.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-dim); font-size: 13px;">Checking connection…</div>';
+
+  try {
+    const { connected, connection } = await callStrava('get_status');
+
+    if (connected && connection) {
+      const fullName = [connection.athlete_firstname, connection.athlete_lastname].filter(Boolean).join(' ') || connection.athlete_username || 'Strava athlete';
+      // ═══ CONNECTED STATE ═══
+      // Minimalist single-card view — connected status + "Manage connections" link to Settings.
+      container.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 14px; padding: 4px 4px 12px;">
+          <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(252, 76, 2, 0.15); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="#FC4C02"><path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169"/></svg>
+          </div>
+          <div style="flex: 1; min-width: 0;">
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 2px;">
+              <div style="font-size: 14px; font-weight: 700; color: var(--text);">Strava</div>
+              <span style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; background: rgba(74, 222, 128, 0.12); border: 1px solid rgba(74, 222, 128, 0.3); border-radius: 6px; font-size: 10px; color: #4ade80; font-weight: 600;">
+                <span style="width: 5px; height: 5px; border-radius: 50%; background: #4ade80;"></span>
+                Connected
+              </span>
+            </div>
+            <div style="font-size: 12px; color: var(--text-dim);">${escapeHtml(fullName)} · auto-syncing</div>
+          </div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <button class="btn ghost" style="font-size: 13px; padding: 10px 14px; justify-content: center;" onclick="syncStravaNow(this)">↻ Sync now</button>
+          <button class="btn ghost" style="font-size: 13px; padding: 10px 14px; justify-content: center;" onclick="navigate('settings'); setTimeout(() => toggleSettingsSection('connections'), 100);">⚙ Manage connections</button>
+        </div>
+      `;
+    } else {
+      // ═══ NOT CONNECTED STATE ═══
+      // Concise Strava connect card — single CTA, then link to other options in Settings.
+      container.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 14px; padding: 4px 4px 12px;">
+          <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(252, 76, 2, 0.15); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="#FC4C02"><path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169"/></svg>
+          </div>
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 2px;">Strava</div>
+            <div style="font-size: 12px; color: var(--text-dim); line-height: 1.45;">Auto-sync every workout. Works with any watch via Strava.</div>
+          </div>
+        </div>
+        <button class="btn" style="background: #FC4C02; border-color: #FC4C02; color: white; font-size: 13px; padding: 10px 14px; width: 100%; justify-content: center; margin-bottom: 8px;" onclick="navigate('settings'); setTimeout(() => toggleSettingsSection('connections'), 100);">Connect Strava</button>
+        <div style="text-align: center;">
+          <a style="color: var(--text-dim); cursor: pointer; font-size: 12px;" onclick="navigate('settings'); setTimeout(() => toggleSettingsSection('connections'), 100);">Other connections (Garmin, Apple, COROS) →</a>
+        </div>
+      `;
+    }
+  } catch (err) {
+    console.error('[Stryxs] renderAutoSyncPanel failed:', err);
+    container.innerHTML = '<div style="padding: 14px; color: var(--text-dim); font-size: 13px;">Could not load connection status. Try refreshing.</div>';
+  }
 }
 
 // Refresh the Strava card on the Analyze page based on connection status
@@ -8797,7 +8984,8 @@ async function renderCoachChat(el, intake) {
   const archivedMessages = allMessages.slice(0, archivedCount);
 
   el.innerHTML = `
-    <div class="coach-hero">
+    <div class="coach-hero coach-hero-chat">
+      <div class="coach-hero-mobile-title">Coach</div>
       <div class="coach-avatar">🧠</div>
       <div class="coach-intro">
         <h2>Coach</h2>
@@ -8965,7 +9153,7 @@ async function loadCoachPersonaBadge(intake) {
             <span style="font-size: 11px; font-weight: 700; color: var(--text);">${escapeHtml(persona.label)}</span>
             <span style="font-size: 10px; color: var(--text-mute);">·</span>
             <span style="font-size: 10px; color: var(--text-dim);">${escapeHtml(persona.phase)}</span>
-            <button onclick="this.parentElement.parentElement.parentElement.classList.toggle('persona-expanded')" style="margin-left: auto; background: transparent; border: none; color: var(--text-mute); cursor: pointer; padding: 0; font-size: 11px;">ⓘ</button>
+            <button onclick="this.parentElement.parentElement.parentElement.classList.toggle('persona-expanded')" style="margin-left: auto; background: rgba(0, 229, 160, 0.12); border: 1px solid rgba(0, 229, 160, 0.4); border-radius: 50%; width: 22px; height: 22px; color: var(--accent); cursor: pointer; padding: 0; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center;">ⓘ</button>
           </div>
         </div>
         <div class="persona-full-content">
