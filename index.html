@@ -3827,7 +3827,7 @@ body.on-auth .container {
 
       <div class="lv2-meta">
         <span><span class="lv2-dot"></span>Free forever tier</span>
-        <span><span class="lv2-dot"></span>Garmin · Apple · COROS · Samsung</span>
+        <span><span class="lv2-dot"></span>Works with Strava + CSV from any watch</span>
         <span><span class="lv2-dot"></span>No credit card</span>
       </div>
     </section>
@@ -7247,7 +7247,27 @@ async function viewHistoryDetail(idx) {
 function renderTrends() {
   const el = document.getElementById('trendsContent');
   if (state.workouts.length < 3) {
-    el.innerHTML = `<div class="empty"><div class="empty-icon">📈</div><div class="empty-title">Need ${3 - state.workouts.length} more workout${(3-state.workouts.length)>1?'s':''}</div><div class="empty-desc">Trends unlock after 3 analyzed workouts. You have ${state.workouts.length}.</div></div>`;
+    // Different empty states based on whether user has zero vs some workouts
+    if (state.workouts.length === 0) {
+      el.innerHTML = `
+        <div class="empty">
+          <div class="empty-icon">📈</div>
+          <div class="empty-title">No workouts yet</div>
+          <div class="empty-desc" style="margin-bottom: 18px;">Trends show patterns across your training — drift, intensity distribution, volume changes. Connect Strava or upload a workout to start.</div>
+          <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+            <button class="btn" onclick="navigate('settings'); setTimeout(() => toggleSettingsSection('connections'), 100);">Connect Strava</button>
+            <button class="btn ghost" onclick="navigate('upload')">Upload a workout</button>
+          </div>
+        </div>`;
+    } else {
+      const remaining = 3 - state.workouts.length;
+      el.innerHTML = `
+        <div class="empty">
+          <div class="empty-icon">📈</div>
+          <div class="empty-title">${remaining} more workout${remaining > 1 ? 's' : ''} to unlock trends</div>
+          <div class="empty-desc">You have ${state.workouts.length} of 3 needed. Trends need at least 3 analyzed workouts to spot patterns.</div>
+        </div>`;
+    }
     return;
   }
   const recent = state.workouts.slice(-20);
@@ -14933,21 +14953,29 @@ async function handleStravaCallback() {
       return true;
     }
 
-    toast('Connecting to Strava...');
+    toast('Connecting to Strava...', 3000);
     const result = await callStrava('exchange_code', { code });
     if (result.success) {
-      toast(`Strava connected! Syncing recent workouts...`);
-      // Auto-trigger backfill of last 30 days
+      // Auto-trigger backfill of last 30 days, then show a single clear final toast
+      let importedCount = 0;
       try {
         const sync = await callStrava('sync_recent', { days: 30 });
-        if (sync.imported > 0) {
-          toast(`Imported ${sync.imported} workout${sync.imported === 1 ? '' : 's'} from Strava`);
+        importedCount = sync?.imported || 0;
+        if (importedCount > 0) {
           await loadWorkouts();
         }
       } catch (syncErr) {
-        console.error('Initial sync failed:', syncErr);
+        console.error('[Stryxs] Initial Strava sync failed:', syncErr);
       }
-      // Clean URL and navigate to settings
+
+      // Single consolidated success toast — long enough to read on mobile
+      if (importedCount > 0) {
+        toast(`✓ Strava connected — synced ${importedCount} recent workout${importedCount === 1 ? '' : 's'}`, 5000);
+      } else {
+        toast('✓ Strava connected — your future workouts will auto-sync', 5000);
+      }
+
+      // Clean URL and navigate to settings so user sees the Connections card
       history.replaceState({}, '', '/');
       navigate('settings');
     }
