@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+=<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -4193,6 +4193,14 @@ async function saveWorkout(workout) {
   }).select().single();
   if (data) workout._dbId = data.id;
   else if (error) console.error('Workout save error:', error);
+
+  // Real-time anomaly check (fires async — don't block UI on it)
+  // Only runs if rate-limit + idempotency conditions allow.
+  setTimeout(() => {
+    if (typeof runAnomalyCheckIfNeeded === 'function') {
+      runAnomalyCheckIfNeeded().catch(err => console.error('[Stryxs] Anomaly check error:', err));
+    }
+  }, 1000);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -4246,6 +4254,13 @@ async function doLogin() {
   toast(`Welcome back, ${state.user.name}`);
   showApp();
   navigate('dashboard');
+  // Catch any anomalies on workouts that arrived via Strava webhook while user was away.
+  // Idempotent + rate-limited inside the function — safe to call.
+  setTimeout(() => {
+    if (typeof runAnomalyCheckIfNeeded === 'function') {
+      runAnomalyCheckIfNeeded().catch(err => console.error('[Stryxs] Anomaly check error:', err));
+    }
+  }, 2500);
 }
 
 async function doLogout() {
@@ -6383,7 +6398,7 @@ function renderInsightCard(p) {
           ${p.data_points?.trend_summary ? `<div style="font-size: 11px; color: var(--text-mute); font-family: 'JetBrains Mono', monospace; padding: 6px 10px; background: rgba(0,0,0,0.2); border-radius: 6px; display: inline-block; margin-bottom: 8px;">${escapeHtml(p.data_points.trend_summary)}</div>` : ''}
           ${p.recommendation ? `<div style="font-size: 13px; color: var(--text); line-height: 1.55; padding: 10px 12px; background: rgba(0, 229, 160, 0.06); border-left: 3px solid var(--accent); border-radius: 6px;"><strong style="color: var(--accent);">→ Recommendation:</strong> ${escapeHtml(p.recommendation)}</div>` : ''}
           <div style="margin-top: 10px; display: flex; justify-content: flex-end;">
-            <button class="btn ghost" style="font-size: 11px; padding: 4px 10px; color: var(--text-mute);" onclick="dismissInsight('${p.id}')">Dismiss</button>
+            <button class="btn ghost" style="font-size: 11px; padding: 4px 10px; color: var(--text-mute);" onclick="dismissTrendInsight('${p.id}')">Dismiss</button>
           </div>
         </div>
       </div>
@@ -6484,14 +6499,146 @@ async function refreshInsights() {
   }
 }
 
-async function dismissInsight(insightId) {
+async function dismissTrendInsight(insightId) {
   try {
     await sb.from('training_insights')
       .update({ status: 'dismissed', dismissed_at: new Date().toISOString() })
       .eq('id', insightId);
     await renderInsightsFromDb();
+    // Also refresh the dashboard mini-card if the user goes back to it
+    await renderInsightsMiniCard();
   } catch (err) {
     toast('Could not dismiss: ' + err.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// REAL-TIME ANOMALY DETECTION (FRONTEND)
+// Runs after a new workout is saved (CSV upload OR Strava sync).
+// Compares the latest workout against recent same-sport baseline via the
+// check_anomalies backend action. If anomalies fire, inserts them into
+// training_insights table (severity=urgent or actionable). The Trends tab
+// + dashboard mini-card pick them up automatically.
+//
+// IDEMPOTENCY: tracks which workouts have already been checked via localStorage
+// (workout DB ids). Won't re-check the same workout.
+//
+// COST CONTROL: skips check entirely if last check ran within 30 min (rate limit).
+// One Strava sync can pull 5+ workouts at once — we only check the most recent.
+// ═══════════════════════════════════════════════════════════
+
+const ANOMALY_CHECK_RATE_LIMIT_MS = 30 * 60 * 1000; // 30 min between checks
+
+async function runAnomalyCheckIfNeeded() {
+  if (!state.user) return;
+  if (!state.workouts || state.workouts.length < 6) {
+    // Need at least 6 total workouts (1 new + 5 baseline) to check meaningfully
+    return;
+  }
+
+  // Get the latest workout
+  const latest = state.workouts[state.workouts.length - 1];
+  if (!latest || !latest._dbId) return;
+
+  // Idempotency: skip if we've already checked this workout
+  const checkedKey = `stryxs_anomaly_checked_${state.user.id}`;
+  let checkedIds = [];
+  try {
+    const stored = localStorage.getItem(checkedKey);
+    if (stored) checkedIds = JSON.parse(stored);
+  } catch (_) { checkedIds = []; }
+
+  if (checkedIds.includes(latest._dbId)) {
+    console.log('[Stryxs] Anomaly check skipped — already checked workout', latest._dbId);
+    return;
+  }
+
+  // Rate limit: don't run more than every 30 min
+  const lastRunKey = `stryxs_anomaly_last_run_${state.user.id}`;
+  const lastRun = parseInt(localStorage.getItem(lastRunKey) || '0', 10);
+  if (Date.now() - lastRun < ANOMALY_CHECK_RATE_LIMIT_MS) {
+    console.log('[Stryxs] Anomaly check rate-limited (recent run within 30min)');
+    return;
+  }
+
+  try {
+    // Pull intake + recent baseline (last 20 workouts; baseline = all but the new one)
+    const { data: intake } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).maybeSingle();
+    if (!intake) return;
+
+    const { data: rawWorkouts } = await sb.from('workouts')
+      .select('*')
+      .eq('user_id', state.user.id)
+      .neq('activity_classification', 'daily_activity')
+      .order('created_at', { ascending: false })
+      .limit(20);
+
+    if (!rawWorkouts || rawWorkouts.length < 6) return;
+
+    // Find the latest workout's DB row + everything else as baseline
+    const newWorkoutRow = rawWorkouts.find(w => w.id === latest._dbId);
+    if (!newWorkoutRow) return;
+    const baseline = rawWorkouts.filter(w => w.id !== latest._dbId);
+
+    console.log('[Stryxs] Running anomaly check for workout', latest._dbId);
+
+    const result = await callCoach('check_anomalies', {
+      intake,
+      newWorkout: newWorkoutRow,
+      recentBaseline: baseline,
+    }, { timeoutMs: 35000 });
+
+    // Mark as checked regardless of result
+    checkedIds.push(latest._dbId);
+    if (checkedIds.length > 100) checkedIds = checkedIds.slice(-100);
+    localStorage.setItem(checkedKey, JSON.stringify(checkedIds));
+    localStorage.setItem(lastRunKey, String(Date.now()));
+
+    if (!result?.anomalies || result.anomalies.length === 0) {
+      console.log('[Stryxs] No anomalies detected');
+      return;
+    }
+
+    // Insert each anomaly as a training_insight row
+    const rows = result.anomalies.map(a => ({
+      user_id: state.user.id,
+      pattern_type: a.anomaly_type || 'anomaly',
+      severity: a.severity === 'urgent' ? 'urgent' : 'actionable',
+      category: 'load',
+      title: a.title || 'Anomaly detected',
+      finding: a.finding || '',
+      data_points: { workout_id: latest._dbId, source: 'realtime_anomaly_check' },
+      recommendation: a.recommendation || null,
+      status: 'active',
+    }));
+    await sb.from('training_insights').insert(rows);
+
+    console.log(`[Stryxs] ${rows.length} anomaly insight(s) saved`);
+
+    // For URGENT anomalies only, post a Coach chat message to alert the user
+    const urgent = result.anomalies.filter(a => a.severity === 'urgent');
+    if (urgent.length > 0) {
+      const top = urgent[0];
+      const messageContent = `🚨 **${top.title}**\n\n${top.finding}${top.recommendation ? `\n\n**What to do:** ${top.recommendation}` : ''}\n\n_Tap the Trends tab to see this and any other patterns._`;
+      try {
+        await sb.from('coach_messages').insert({
+          user_id: state.user.id,
+          role: 'coach',
+          content: messageContent,
+          context_type: 'anomaly_alert',
+        });
+        if (typeof setCoachUnread === 'function') setCoachUnread(true);
+      } catch (e) {
+        console.error('[Stryxs] Coach anomaly message insert failed:', e);
+      }
+    }
+
+    // Refresh the dashboard mini-card so the user sees the anomaly immediately if on dashboard
+    if (typeof renderInsightsMiniCard === 'function') {
+      await renderInsightsMiniCard();
+    }
+  } catch (err) {
+    console.error('[Stryxs] Anomaly check failed (non-fatal):', err);
   }
 }
 
@@ -12806,6 +12953,12 @@ async function syncStravaNow(btn) {
       toast(`Synced ${result.imported} new workout${result.imported === 1 ? '' : 's'}`);
       // Refresh state.workouts so dashboard reflects new data
       await loadWorkouts();
+      // Real-time anomaly check on the most recent imported workout (async, non-blocking)
+      setTimeout(() => {
+        if (typeof runAnomalyCheckIfNeeded === 'function') {
+          runAnomalyCheckIfNeeded().catch(err => console.error('[Stryxs] Anomaly check error:', err));
+        }
+      }, 1500);
     } else {
       toast('All caught up — no new workouts');
     }
