@@ -4404,11 +4404,13 @@ let state = {
   workouts: [],
 };
 
-function toast(msg) {
+function toast(msg, durationMs = 2800) {
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 2800);
+  // Clear any pending hide so longer messages aren't cut short by a previous timer
+  if (window._toastHideTimer) clearTimeout(window._toastHideTimer);
+  window._toastHideTimer = setTimeout(() => t.classList.remove('show'), durationMs);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -6081,64 +6083,95 @@ function renderSummaryWorkout(a) {
 
 // Re-analyze a Strava workout — fetches streams, runs analysis, updates the workout.
 // Called when user taps the "Re-analyze with heart rate data" button on summary cards.
+//
+// Robustness:
+// - Global lock (window._reanalyzingWorkouts) prevents double-clicks burning API quota
+// - try/finally guarantees button is always usable again (no infinite spinner)
+// - Re-renders via viewHistoryDetail() which is how the workout was originally displayed
+// - Inline status messages (not just toasts) so user sees the result clearly
+window._reanalyzingWorkouts = window._reanalyzingWorkouts || {};
+
 async function reanalyzeStravaWorkout(dbId) {
-  const btn = document.getElementById(`reanalyzeBtn-${dbId}`);
-  if (btn) {
-    btn.disabled = true;
-    btn.style.opacity = '0.6';
-    btn.innerHTML = '<span class="spinner" style="display: inline-block; width: 12px; height: 12px; border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: -2px; margin-right: 8px;"></span>Fetching heart rate data...';
+  // Block double-clicks per workout
+  if (window._reanalyzingWorkouts[dbId]) {
+    console.log('[Stryxs] Re-analysis already in progress for', dbId);
+    return;
   }
+  window._reanalyzingWorkouts[dbId] = true;
+
+  const btn = document.getElementById(`reanalyzeBtn-${dbId}`);
+  const setBtnState = (html, disabled = true) => {
+    if (btn && btn.parentElement) { // ensure button still in DOM
+      btn.disabled = disabled;
+      btn.style.opacity = disabled ? '0.6' : '1';
+      btn.innerHTML = html;
+    }
+  };
+
+  setBtnState('<span class="spinner" style="display: inline-block; width: 12px; height: 12px; border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: -2px; margin-right: 8px;"></span>Fetching heart rate data...', true);
+
+  // Helper: re-render the workout's full analysis view by calling the same path
+  // History uses (which navigates to the Upload page and renders into analysisOutput).
+  const rerenderWorkout = async () => {
+    await loadWorkouts();
+    const idx = state.workouts.findIndex(w => w._dbId === dbId);
+    if (idx >= 0 && typeof viewHistoryDetail === 'function') {
+      // Stay where we are — viewHistoryDetail re-renders cleanly
+      try { await viewHistoryDetail(idx); } catch (e) { console.warn('[Stryxs] Re-render failed:', e); }
+    }
+    // Also refresh today's-analyses if user is on the Analyze page
+    if (typeof renderTodaysAnalyses === 'function' && document.getElementById('page-upload')?.classList.contains('active')) {
+      renderTodaysAnalyses().catch(() => {});
+    }
+  };
+
   try {
     const result = await callStrava('reanalyze_activity', { workout_id: dbId });
+
     if (!result?.success) {
       throw new Error(result?.error || 'Re-analysis failed');
     }
 
-    // Three outcomes:
+    // SUCCESS — deep analysis available
     if (result.has_deep_analysis) {
-      // Deep analysis succeeded — reload workouts so all places update, then re-render
-      toast('✓ Deep analysis ready');
-      await loadWorkouts();
-      // Find the workout in state and re-render the appropriate detail view
-      const idx = state.workouts.findIndex(w => w._dbId === dbId);
-      if (idx >= 0) {
-        // Try to refresh whichever page is showing this workout
-        const historyDetail = document.getElementById(`historyDetail-${idx}`);
-        if (historyDetail && historyDetail.style.display !== 'none') {
-          historyDetail.innerHTML = renderAnalysis(state.workouts[idx]);
-        }
-        // Also refresh today's-analyses if active
-        if (typeof renderTodaysAnalyses === 'function' && document.getElementById('page-upload')?.classList.contains('active')) {
-          renderTodaysAnalyses().catch(() => {});
-        }
-      }
-    } else if (result.no_hr_data) {
-      toast('Activity has no heart rate data — wear a HR monitor next time');
-      // Reload + re-render so the message updates from "Re-analyze" to "no HR data"
-      await loadWorkouts();
-      const idx = state.workouts.findIndex(w => w._dbId === dbId);
-      if (idx >= 0) {
-        const historyDetail = document.getElementById(`historyDetail-${idx}`);
-        if (historyDetail && historyDetail.style.display !== 'none') {
-          historyDetail.innerHTML = renderAnalysis(state.workouts[idx]);
-        }
-      }
-    } else if (result.streams_failed || result.too_short) {
-      toast('Re-analysis didn\'t complete. Try again in a minute.');
-      if (btn) {
-        btn.disabled = false;
-        btn.style.opacity = '1';
-        btn.innerHTML = '🔄 Try again';
-      }
+      toast('✓ Deep analysis ready', 4000);
+      await rerenderWorkout();
+      return;
     }
+
+    // NO HR DATA — won't help to retry, show explanation
+    if (result.no_hr_data) {
+      toast('No heart rate data found in this activity. Wear a HR monitor next time.', 6000);
+      await rerenderWorkout();
+      return;
+    }
+
+    // UNSUPPORTED SPORT
+    if (result.unsupported) {
+      toast('Deep analysis is only available for runs and rides.', 5000);
+      await rerenderWorkout();
+      return;
+    }
+
+    // TRANSIENT FAILURE — button stays clickable for retry
+    if (result.streams_failed || result.too_short) {
+      toast('Couldn\'t fetch heart rate data right now. Try again in a minute.', 5000);
+      setBtnState('🔄 Try again', false);
+      return;
+    }
+
+    // Unknown result — surface it
+    console.warn('[Stryxs] Unexpected re-analysis result:', result);
+    toast('Re-analysis returned an unexpected result. Check console.', 5000);
+    setBtnState('🔄 Try again', false);
   } catch (err) {
     console.error('[Stryxs] Re-analysis failed:', err);
-    toast('Could not re-analyze: ' + (err.message || 'unknown error'));
-    if (btn) {
-      btn.disabled = false;
-      btn.style.opacity = '1';
-      btn.innerHTML = '🔄 Try again';
-    }
+    const msg = (err && err.message) ? err.message : 'unknown error';
+    toast('Could not re-analyze: ' + msg, 6000);
+    setBtnState('🔄 Try again', false);
+  } finally {
+    // Always clear the lock so user can try again later
+    delete window._reanalyzingWorkouts[dbId];
   }
 }
 
