@@ -3794,6 +3794,8 @@ body.on-auth .container {
 
   <div id="insightsContainer"></div>
 
+  <div id="trendInsightsCard"></div>
+
   <div class="stat-grid" id="statGrid"></div>
 
   <div id="progressContainer"></div>
@@ -5531,8 +5533,11 @@ async function renderDashboard() {
     }
   }
 
-  // Render any active Coach insights
+  // Render any active Coach insights (reactive plan-suggestion messages)
   await renderCoachInsights();
+
+  // Render the new TREND INSIGHTS mini-card (top pattern + link to Trends page)
+  await renderInsightsMiniCard();
 
   // Render streaks + progress section
   await renderProgress();
@@ -6179,6 +6184,21 @@ function renderTrends() {
   `;
 
   el.innerHTML = `
+    <!-- ═══ INSIGHTS SECTION (top of trends page) ═══ -->
+    <div id="insightsSection" style="margin-bottom: 22px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+        <div>
+          <div style="font-size: 18px; font-weight: 800; color: var(--text); letter-spacing: -0.2px;">💡 Insights</div>
+          <div style="font-size: 12px; color: var(--text-dim);">Patterns Coach has noticed in your training</div>
+        </div>
+        <button class="btn ghost" style="padding: 6px 12px; font-size: 12px;" onclick="refreshInsights()" id="refreshInsightsBtn">↻ Refresh</button>
+      </div>
+      <div id="insightsList">
+        <div class="loading"><div class="spinner"></div>Loading insights…</div>
+      </div>
+    </div>
+
+    <div style="font-size: 18px; font-weight: 800; color: var(--text); letter-spacing: -0.2px; margin-bottom: 12px;">📊 Trends</div>
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px;" class="trends-row">
       <div class="panel" style="padding: 18px;">
         <div class="panel-header" style="margin-bottom: 14px;">
@@ -6270,7 +6290,265 @@ function renderTrends() {
       `}
     </div>
   `;
+
+  // Async-load insights into the placeholder we just rendered
+  loadInsightsIntoTrends();
 }
+
+// ═══════════════════════════════════════════════════════════
+// INSIGHTS — loading, rendering, refresh
+// Insights are stored in `training_insights` table (one row per pattern).
+// We compute fresh insights weekly (auto on tab open if stale) or on manual refresh.
+// Manual refresh capped at once per week per user (prevents API cost spam).
+// ═══════════════════════════════════════════════════════════
+
+const INSIGHTS_REFRESH_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+async function loadInsightsIntoTrends(forceRefresh = false) {
+  const list = document.getElementById('insightsList');
+  if (!list || !state.user) return;
+
+  try {
+    // Check when insights were last generated for this user
+    const { data: intake } = await sb.from('athlete_intake')
+      .select('insights_last_generated_at')
+      .eq('user_id', state.user.id)
+      .maybeSingle();
+
+    const lastGen = intake?.insights_last_generated_at ? new Date(intake.insights_last_generated_at).getTime() : 0;
+    const ageMs = Date.now() - lastGen;
+    const isStale = ageMs > INSIGHTS_REFRESH_INTERVAL_MS;
+
+    if (forceRefresh || isStale || lastGen === 0) {
+      // Need to regenerate
+      await regenerateInsights();
+      return;
+    }
+
+    // Use cached insights from DB
+    await renderInsightsFromDb();
+  } catch (err) {
+    console.error('[Stryxs] loadInsightsIntoTrends failed:', err);
+    list.innerHTML = `<div style="padding: 16px; color: var(--text-dim); font-size: 13px;">Couldn't load insights right now. <button class="btn ghost" style="font-size: 12px; padding: 4px 10px;" onclick="loadInsightsIntoTrends(true)">Retry</button></div>`;
+  }
+}
+
+async function renderInsightsFromDb() {
+  const list = document.getElementById('insightsList');
+  if (!list) return;
+
+  const { data: insights } = await sb.from('training_insights')
+    .select('*')
+    .eq('user_id', state.user.id)
+    .eq('status', 'active')
+    .order('severity', { ascending: false })
+    .order('generated_at', { ascending: false });
+
+  if (!insights || insights.length === 0) {
+    list.innerHTML = `
+      <div class="panel" style="text-align: center;">
+        <div style="font-size: 32px; margin-bottom: 8px;">🪴</div>
+        <div style="font-size: 14px; font-weight: 600; margin-bottom: 4px;">No patterns to surface yet</div>
+        <div style="font-size: 12px; color: var(--text-dim); line-height: 1.55;">Coach needs at least 5 workouts logged to detect patterns. Keep training and check back.</div>
+      </div>
+    `;
+    return;
+  }
+
+  // Group: urgent first, then actionable, then info
+  const sevOrder = { urgent: 0, actionable: 1, info: 2 };
+  insights.sort((a, b) => (sevOrder[a.severity] || 3) - (sevOrder[b.severity] || 3));
+
+  list.innerHTML = insights.map(p => renderInsightCard(p)).join('');
+}
+
+function renderInsightCard(p) {
+  const sevStyle = {
+    urgent: { bg: 'rgba(239, 68, 68, 0.06)', border: 'rgba(239, 68, 68, 0.3)', icon: '🚨', label: 'URGENT', labelColor: '#ef4444' },
+    actionable: { bg: 'rgba(251, 191, 36, 0.04)', border: 'rgba(251, 191, 36, 0.3)', icon: '⚡', label: 'ACTIONABLE', labelColor: '#fbbf24' },
+    info: { bg: 'rgba(80, 130, 255, 0.04)', border: 'rgba(80, 130, 255, 0.25)', icon: '💡', label: 'INFO', labelColor: '#82a4ff' },
+  };
+  const s = sevStyle[p.severity] || sevStyle.info;
+  return `
+    <div style="background: ${s.bg}; border: 1px solid ${s.border}; border-radius: 14px; padding: 16px; margin-bottom: 10px;">
+      <div style="display: flex; gap: 10px; align-items: flex-start;">
+        <div style="font-size: 18px; flex-shrink: 0;">${s.icon}</div>
+        <div style="flex: 1; min-width: 0;">
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+            <span style="font-size: 10px; color: ${s.labelColor}; text-transform: uppercase; letter-spacing: 1px; font-weight: 800;">${s.label}</span>
+            ${p.category ? `<span style="font-size: 10px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.5px;">· ${p.category}</span>` : ''}
+          </div>
+          <div style="font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 6px;">${escapeHtml(p.title)}</div>
+          <div style="font-size: 13px; color: var(--text-dim); line-height: 1.55; margin-bottom: 8px;">${escapeHtml(p.finding)}</div>
+          ${p.data_points?.trend_summary ? `<div style="font-size: 11px; color: var(--text-mute); font-family: 'JetBrains Mono', monospace; padding: 6px 10px; background: rgba(0,0,0,0.2); border-radius: 6px; display: inline-block; margin-bottom: 8px;">${escapeHtml(p.data_points.trend_summary)}</div>` : ''}
+          ${p.recommendation ? `<div style="font-size: 13px; color: var(--text); line-height: 1.55; padding: 10px 12px; background: rgba(0, 229, 160, 0.06); border-left: 3px solid var(--accent); border-radius: 6px;"><strong style="color: var(--accent);">→ Recommendation:</strong> ${escapeHtml(p.recommendation)}</div>` : ''}
+          <div style="margin-top: 10px; display: flex; justify-content: flex-end;">
+            <button class="btn ghost" style="font-size: 11px; padding: 4px 10px; color: var(--text-mute);" onclick="dismissInsight('${p.id}')">Dismiss</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function regenerateInsights() {
+  const list = document.getElementById('insightsList');
+  if (!list) return;
+  list.innerHTML = `<div class="loading"><div class="spinner"></div>Coach is analyzing your training data…</div>`;
+
+  try {
+    // Pull all workouts (last 8 weeks worth — backend will filter further)
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 60);
+    const { data: rawWorkouts } = await sb.from('workouts')
+      .select('*')
+      .eq('user_id', state.user.id)
+      .gte('created_at', cutoff.toISOString())
+      .order('created_at', { ascending: true });
+
+    const { data: intake } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).single();
+
+    const result = await callCoach('analyze_patterns', {
+      intake,
+      allWorkouts: rawWorkouts || [],
+    }, { timeoutMs: 110000 });
+
+    // Mark old active insights as 'stale' so they fall off
+    await sb.from('training_insights')
+      .update({ status: 'stale' })
+      .eq('user_id', state.user.id)
+      .eq('status', 'active');
+
+    // Insert new ones
+    if (result?.patterns && Array.isArray(result.patterns) && result.patterns.length > 0) {
+      const rows = result.patterns.map(p => ({
+        user_id: state.user.id,
+        pattern_type: p.pattern_type || 'unknown',
+        severity: p.severity || 'info',
+        category: p.category || null,
+        title: p.title || 'Pattern detected',
+        finding: p.finding || '',
+        data_points: p.data_points || {},
+        recommendation: p.recommendation || null,
+        status: 'active',
+      }));
+      await sb.from('training_insights').insert(rows);
+    }
+
+    // Update the "last generated" timestamp on intake
+    await sb.from('athlete_intake')
+      .update({ insights_last_generated_at: new Date().toISOString() })
+      .eq('user_id', state.user.id);
+
+    await renderInsightsFromDb();
+  } catch (err) {
+    console.error('[Stryxs] regenerateInsights failed:', err);
+    list.innerHTML = `
+      <div style="padding: 16px; color: var(--text-dim); font-size: 13px; background: rgba(239, 68, 68, 0.04); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 12px;">
+        Couldn't generate insights: ${escapeHtml(err.message || 'unknown error')}
+        <button class="btn ghost" style="font-size: 12px; padding: 4px 10px; margin-left: 8px;" onclick="loadInsightsIntoTrends(true)">Retry</button>
+      </div>
+    `;
+  }
+}
+
+async function refreshInsights() {
+  const btn = document.getElementById('refreshInsightsBtn');
+  if (!state.user) return;
+
+  // Quota check: max 1 manual refresh per week per user
+  try {
+    const { data: intake } = await sb.from('athlete_intake')
+      .select('insights_last_generated_at')
+      .eq('user_id', state.user.id)
+      .maybeSingle();
+    const lastGen = intake?.insights_last_generated_at ? new Date(intake.insights_last_generated_at).getTime() : 0;
+    const ageMs = Date.now() - lastGen;
+    if (lastGen > 0 && ageMs < INSIGHTS_REFRESH_INTERVAL_MS) {
+      const daysLeft = Math.ceil((INSIGHTS_REFRESH_INTERVAL_MS - ageMs) / (24 * 60 * 60 * 1000));
+      toast(`Insights refresh once a week. Next refresh available in ${daysLeft} day${daysLeft === 1 ? '' : 's'}.`);
+      return;
+    }
+  } catch (e) {
+    console.warn('[Stryxs] refresh quota check failed:', e);
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '↻ Refreshing…';
+  }
+  await loadInsightsIntoTrends(true);
+  if (btn) {
+    btn.disabled = false;
+    btn.textContent = '↻ Refresh';
+  }
+}
+
+async function dismissInsight(insightId) {
+  try {
+    await sb.from('training_insights')
+      .update({ status: 'dismissed', dismissed_at: new Date().toISOString() })
+      .eq('id', insightId);
+    await renderInsightsFromDb();
+  } catch (err) {
+    toast('Could not dismiss: ' + err.message);
+  }
+}
+
+// Dashboard mini-card: shows the top 1-2 active insights + link to Trends page.
+// Pulls from training_insights table — does NOT trigger generation.
+async function renderInsightsMiniCard() {
+  const el = document.getElementById('trendInsightsCard');
+  if (!el || !state.user) {
+    if (el) el.innerHTML = '';
+    return;
+  }
+
+  try {
+    const { data: insights } = await sb.from('training_insights')
+      .select('*')
+      .eq('user_id', state.user.id)
+      .eq('status', 'active')
+      .order('severity', { ascending: false })
+      .order('generated_at', { ascending: false })
+      .limit(2);
+
+    if (!insights || insights.length === 0) {
+      el.innerHTML = '';
+      return;
+    }
+
+    // Sort: urgent → actionable → info
+    const sevOrder = { urgent: 0, actionable: 1, info: 2 };
+    insights.sort((a, b) => (sevOrder[a.severity] || 3) - (sevOrder[b.severity] || 3));
+
+    const top = insights[0];
+    const sevStyle = {
+      urgent: { bg: 'rgba(239, 68, 68, 0.06)', border: 'rgba(239, 68, 68, 0.3)', icon: '🚨', accentColor: '#ef4444' },
+      actionable: { bg: 'rgba(251, 191, 36, 0.04)', border: 'rgba(251, 191, 36, 0.3)', icon: '⚡', accentColor: '#fbbf24' },
+      info: { bg: 'rgba(80, 130, 255, 0.04)', border: 'rgba(80, 130, 255, 0.25)', icon: '💡', accentColor: '#82a4ff' },
+    };
+    const s = sevStyle[top.severity] || sevStyle.info;
+
+    el.innerHTML = `
+      <div style="background: ${s.bg}; border: 1px solid ${s.border}; border-radius: 14px; padding: 16px; margin-bottom: 16px; cursor: pointer; transition: all 0.15s;" onclick="navigate('trends')">
+        <div style="display: flex; gap: 12px; align-items: flex-start;">
+          <div style="font-size: 22px; flex-shrink: 0;">${s.icon}</div>
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-size: 10px; color: ${s.accentColor}; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 800; margin-bottom: 4px;">Coach noticed${insights.length > 1 ? ` · ${insights.length} insights` : ''}</div>
+            <div style="font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 4px;">${escapeHtml(top.title)}</div>
+            <div style="font-size: 12px; color: var(--text-dim); line-height: 1.5;">${escapeHtml((top.finding || '').slice(0, 140))}${(top.finding || '').length > 140 ? '…' : ''}</div>
+            <div style="margin-top: 10px; font-size: 12px; color: var(--accent); font-weight: 600;">View all insights →</div>
+          </div>
+        </div>
+      </div>
+    `;
+  } catch (err) {
+    console.error('[Stryxs] renderInsightsMiniCard failed:', err);
+    el.innerHTML = '';
+  }
+}
+
 
 function setTrendsDriftSport(sport) {
   state.trendsDriftSport = sport;
