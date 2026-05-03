@@ -1853,9 +1853,21 @@ select option {
   overflow: hidden;
 }
 @media (max-width: 720px) {
-  .coach-hero { padding: 16px; gap: 14px; border-radius: 14px; }
-  .coach-intro h2 { font-size: 19px !important; }
-  .coach-intro p { font-size: 13px !important; line-height: 1.45 !important; }
+  /* On mobile, the hero collapses into a single compact strip — chat is the main content, not the hero */
+  .coach-hero {
+    padding: 10px 14px;
+    gap: 10px;
+    border-radius: 10px;
+    margin-bottom: 10px;
+  }
+  .coach-avatar {
+    width: 36px !important; height: 36px !important;
+    font-size: 18px !important;
+    box-shadow: none !important;
+  }
+  .coach-intro h2 { font-size: 15px !important; margin-bottom: 0 !important; line-height: 1.2 !important; }
+  /* Hide the description paragraph on mobile — saves a lot of vertical space, the chat below explains itself */
+  .coach-intro p { display: none !important; }
 }
 .coach-intro {
   flex: 1;
@@ -1945,12 +1957,29 @@ select option {
   overflow: hidden;
 }
 @media (max-width: 720px) {
-  /* On mobile use most of the visible viewport so messages have proper room */
+  /* ═══ COACH MOBILE — EDGE-TO-EDGE CHAT ═══
+     The chat extends past the page padding to fill the entire phone width.
+     No bordered box, no rounded corners — chat IS the screen on mobile,
+     not a widget on the screen. Pattern matches ChatGPT/Claude/iMessage.
+  */
   .coach-chat {
-    height: calc(100vh - 220px);
-    min-height: 420px;
-    border-radius: 12px;
+    height: calc(100dvh - 200px);
+    min-height: 460px;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+    /* Negative horizontal margin to bleed past page padding (page-coach has 16px 14px on mobile) */
+    margin-left: -14px;
+    margin-right: -14px;
+    background: transparent;
   }
+
+  /* Persona badge: collapse to single-line summary on mobile, expand on tap */
+  .coach-persona-card { padding: 10px 14px !important; border-radius: 10px !important; }
+  .coach-persona-card .persona-mobile-summary { display: block !important; }
+  .coach-persona-card .persona-full-content { display: none; }
+  .coach-persona-card.persona-expanded .persona-mobile-summary { display: none !important; }
+  .coach-persona-card.persona-expanded .persona-full-content { display: block; }
 }
 
 .chat-messages {
@@ -1968,7 +1997,12 @@ select option {
 }
 .chat-messages::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.22); }
 @media (max-width: 720px) {
-  .chat-messages { padding: 14px 12px; gap: 12px; }
+  .chat-messages {
+    padding: 16px 14px 18px;
+    gap: 14px;
+    /* Solid background since the panel border was removed */
+    background: var(--bg-2);
+  }
 }
 
 .chat-msg {
@@ -1979,8 +2013,13 @@ select option {
 }
 .chat-msg.user { align-self: flex-end; flex-direction: row-reverse; }
 @media (max-width: 720px) {
-  /* On mobile we go close to full width — saves the squished feel */
-  .chat-msg { max-width: 96%; gap: 8px; }
+  /* On mobile we go close to full width — fills the edge-to-edge chat container */
+  .chat-msg { max-width: 96%; gap: 9px; }
+  /* Smaller avatar on phone — saves room for the bubble */
+  .chat-msg .msg-avatar {
+    width: 28px !important; height: 28px !important;
+    font-size: 13px !important;
+  }
 }
 
 .chat-msg .msg-avatar {
@@ -2008,9 +2047,11 @@ select option {
 }
 @media (max-width: 720px) {
   .chat-msg .msg-bubble {
-    padding: 10px 13px;
-    font-size: 14px;
-    line-height: 1.55;
+    /* Bigger text + more padding on mobile — matches ChatGPT/Claude/iMessage readability */
+    padding: 12px 14px;
+    font-size: 15px;
+    line-height: 1.6;
+    border-radius: 16px;
   }
 }
 
@@ -2034,7 +2075,10 @@ select option {
   align-items: flex-end;
 }
 @media (max-width: 720px) {
-  .chat-input-row { padding: 10px; gap: 6px; }
+  .chat-input-row { padding: 10px 12px 12px; gap: 8px; }
+  .chat-input-row textarea { font-size: 16px !important; padding: 12px 14px; }
+  /* iOS prevents auto-zoom on focus when font-size >= 16px */
+  .chat-input-row .btn { padding: 12px 16px; height: 46px; font-size: 14px; }
 }
 
 .chat-input-row textarea {
@@ -3526,10 +3570,6 @@ body.on-auth .container {
       <span class="nav-menu-icon">📈</span>
       <span class="nav-menu-label">Trends</span>
     </button>
-    <button class="nav-menu-item" data-page="help" onclick="navigateAndCloseMenu('help')">
-      <span class="nav-menu-icon">💡</span>
-      <span class="nav-menu-label">Help</span>
-    </button>
   </div>
 </div>
 
@@ -3541,6 +3581,10 @@ body.on-auth .container {
   <button class="avatar-menu-item" onclick="navigateAndCloseAvatarMenu('settings')">
     <span class="avatar-menu-icon">⚙</span>
     <span>Settings</span>
+  </button>
+  <button class="avatar-menu-item" onclick="navigateAndCloseAvatarMenu('help')">
+    <span class="avatar-menu-icon">💡</span>
+    <span>Help &amp; FAQ</span>
   </button>
   <div class="avatar-menu-divider"></div>
   <button class="avatar-menu-item danger" onclick="closeAvatarMenu(); confirmLogout();">
@@ -3919,8 +3963,12 @@ body.on-auth .container {
 <!-- UPLOAD -->
 <div class="page" id="page-upload">
   <div class="section-title">Analyze Workout</div>
-  <p class="section-sub">Connect Strava for auto-sync, or upload a CSV for deeper analysis.</p>
+  <p class="section-sub">Today's analyses at the top, sync & upload tools below.</p>
 
+  <!-- ═══ TODAY'S ANALYSES — populated dynamically with workouts logged today ═══ -->
+  <div id="todaysAnalyses" style="margin-bottom: 22px;"></div>
+
+  <!-- ═══ SYNC + UPLOAD TOOLS (moved below) ═══ -->
   <div class="source-tabs">
     <button class="source-tab active" data-source="connect">🔗 Auto-sync</button>
     <button class="source-tab" data-source="upload">📁 Upload CSV (deep analysis)</button>
@@ -4009,69 +4057,25 @@ body.on-auth .container {
 
 <!-- HELP -->
 <div class="page" id="page-help">
-  <div class="section-title">Help & Getting Started</div>
-  <p class="section-sub">Everything you need to get the most out of Stryxs.</p>
+  <div class="section-title">Help &amp; FAQ</div>
+  <p class="section-sub">Tap any question to expand. Search to find what you need fast.</p>
 
-  <div class="help-grid">
-    <div class="help-card">
-      <div class="panel-title" style="margin-bottom: 16px;">⌚ Exporting from Garmin</div>
-      <div class="help-step"><div class="step-num">1</div><div class="step-text">Go to <strong>connect.garmin.com</strong> on your computer.</div></div>
-      <div class="help-step"><div class="step-num">2</div><div class="step-text">Click <strong>Activities</strong>, then click any workout.</div></div>
-      <div class="help-step"><div class="step-num">3</div><div class="step-text">Click the <strong>⚙️ gear icon</strong> in the top right.</div></div>
-      <div class="help-step"><div class="step-num">4</div><div class="step-text">Click <strong>Export to CSV</strong>.</div></div>
-      <div class="help-step"><div class="step-num">5</div><div class="step-text">Upload that file in the <strong>Analyze</strong> tab.</div></div>
-    </div>
-
-    <div class="help-card">
-      <div class="panel-title" style="margin-bottom: 16px;">🍎 Exporting from Apple Watch</div>
-      <div class="help-step"><div class="step-num">1</div><div class="step-text">Open the <strong>Health app</strong> on your iPhone.</div></div>
-      <div class="help-step"><div class="step-num">2</div><div class="step-text">Tap your profile picture (top right) → <strong>Export All Health Data</strong>.</div></div>
-      <div class="help-step"><div class="step-num">3</div><div class="step-text">This exports a ZIP. For a simpler option, use a free app like <strong>HealthFit</strong> or <strong>RunGap</strong> to export individual workouts as CSV.</div></div>
-      <div class="help-step"><div class="step-num">4</div><div class="step-text">Upload the CSV in the <strong>Analyze</strong> tab.</div></div>
-      <p style="font-size: 12px; color: var(--text-mute); margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);">
-        Direct Apple Health integration coming soon.
-      </p>
-    </div>
-
-    <div class="help-card">
-      <div class="panel-title" style="margin-bottom: 16px;">⌚ Exporting from COROS</div>
-      <div class="help-step"><div class="step-num">1</div><div class="step-text">Go to <strong>trainingtoday.coros.com</strong> on your computer.</div></div>
-      <div class="help-step"><div class="step-num">2</div><div class="step-text">Click on any activity in your timeline.</div></div>
-      <div class="help-step"><div class="step-num">3</div><div class="step-text">Click the <strong>Export</strong> button and choose <strong>CSV</strong>.</div></div>
-      <div class="help-step"><div class="step-num">4</div><div class="step-text">Upload it in the <strong>Analyze</strong> tab.</div></div>
-    </div>
-
-    <div class="help-card">
-      <div class="panel-title" style="margin-bottom: 16px;">📱 Exporting from Samsung Galaxy Watch</div>
-      <div class="help-step"><div class="step-num">1</div><div class="step-text">Open <strong>Samsung Health</strong> app on your phone.</div></div>
-      <div class="help-step"><div class="step-num">2</div><div class="step-text">Tap the <strong>menu (☰)</strong> → <strong>Settings</strong> → <strong>Download personal data</strong>.</div></div>
-      <div class="help-step"><div class="step-num">3</div><div class="step-text">Confirm and wait for the email with your data ZIP.</div></div>
-      <div class="help-step"><div class="step-num">4</div><div class="step-text">For individual workouts, third-party apps like <strong>Strava</strong> (auto-syncs Samsung) or <strong>FITWatch Sync</strong> can export CSV.</div></div>
-      <p style="font-size: 12px; color: var(--text-mute); margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);">
-        Direct Samsung Health integration coming soon.
-      </p>
-    </div>
-
-    <div class="help-card">
-      <div class="panel-title" style="margin-bottom: 16px;">🎯 Finding your LTHR</div>
-      <p style="color: var(--text-dim); font-size: 14px; line-height: 1.6; margin-bottom: 14px;">
-        LTHR (Lactate Threshold Heart Rate) is the most important number for accurate zones.
-      </p>
-      <div class="help-step"><div class="step-num">1</div><div class="step-text">Warm up for <strong>15 minutes</strong>.</div></div>
-      <div class="help-step"><div class="step-num">2</div><div class="step-text">Do a <strong>30-minute solo time trial</strong> at the hardest pace you can sustain.</div></div>
-      <div class="help-step"><div class="step-num">3</div><div class="step-text">Your <strong>average HR for the last 20 minutes</strong> is your LTHR.</div></div>
-      <p style="color: var(--text-dim); font-size: 13px; margin-top: 12px;">Test run and bike separately. They differ by 5-10 bpm.</p>
-    </div>
+  <!-- Search box -->
+  <div style="margin-bottom: 18px; position: relative;">
+    <input type="text" id="helpSearch" placeholder="Search help…" oninput="filterHelpItems()" style="width: 100%; padding: 12px 14px 12px 40px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 12px; color: var(--text); font-family: inherit; font-size: 14px; outline: none;">
+    <div style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-mute); font-size: 16px; pointer-events: none;">🔍</div>
   </div>
 
-  <div style="margin-top: 40px;">
-    <div class="panel-title" style="margin-bottom: 16px;">Frequently asked questions</div>
-    <div class="faq-item"><div class="faq-q" onclick="toggleFaq(this)">What watches does Stryxs support?</div><div class="faq-a">Any watch that exports CSV, TCX, GPX, or FIT files — Garmin, Apple Watch, COROS, Polar, Suunto, Wahoo. Garmin is most common and best supported.</div></div>
-    <div class="faq-item"><div class="faq-q" onclick="toggleFaq(this)">Will you add automatic syncing?</div><div class="faq-a">Yes — Strava integration is coming first (covers most watches since Strava auto-syncs them). Direct Garmin and Apple Health integration will follow.</div></div>
-    <div class="faq-item"><div class="faq-q" onclick="toggleFaq(this)">Is my data private?</div><div class="faq-a">Yes. Your data is stored encrypted in our database. Only you can access it. We never share or sell training data.</div></div>
-    <div class="faq-item"><div class="faq-q" onclick="toggleFaq(this)">How accurate are the analyses?</div><div class="faq-a">Based on published sports science: Friel LTHR zones, cardiac drift research, acute:chronic workload models. Accuracy depends on YOUR inputs — especially your LTHR. Test it properly.</div></div>
-    <div class="faq-item"><div class="faq-q" onclick="toggleFaq(this)">What's the difference between Stryxs and Strava?</div><div class="faq-a">Strava is a social network for activities. Stryxs is a coaching analyzer. We turn data into coaching decisions. Strava doesn't.</div></div>
-    <div class="faq-item"><div class="faq-q" onclick="toggleFaq(this)">What does it cost?</div><div class="faq-a">Free tier: unlimited analyses, 7 days of history. Pro ($15/mo): unlimited history, trend analysis, race planning, auto platform sync. Elite ($29/mo): Pro + injury risk scoring, nutrition periodization, race-day planning.</div></div>
+  <!-- Helper text (no results) -->
+  <div id="helpNoResults" style="display: none; padding: 16px; text-align: center; color: var(--text-dim); font-size: 13px;">No matches. Try different words.</div>
+
+  <!-- Help categories rendered here -->
+  <div id="helpCategories"></div>
+
+  <!-- Footer: contact -->
+  <div style="margin-top: 32px; padding: 18px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px; text-align: center;">
+    <div style="font-size: 13px; color: var(--text); font-weight: 600; margin-bottom: 4px;">Still stuck?</div>
+    <div style="font-size: 12px; color: var(--text-dim); line-height: 1.5;">Contact us at <a href="mailto:coach@stryxs.com" style="color: var(--accent);">coach@stryxs.com</a> — we usually reply within a day.</div>
   </div>
 </div>
 
@@ -4281,6 +4285,10 @@ async function saveWorkout(workout) {
   setTimeout(() => {
     if (typeof runAnomalyCheckIfNeeded === 'function') {
       runAnomalyCheckIfNeeded().catch(err => console.error('[Stryxs] Anomaly check error:', err));
+    }
+    // Also refresh the today's-analyses section if user is on the Analyze page
+    if (typeof renderTodaysAnalyses === 'function' && document.getElementById('page-upload')?.classList.contains('active')) {
+      renderTodaysAnalyses().catch(() => {});
     }
   }, 1000);
 }
@@ -4619,7 +4627,11 @@ function navigate(page) {
   if (page === 'history') renderHistory();
   if (page === 'trends') renderTrends();
   if (page === 'settings') renderSettings();
-  if (page === 'upload') updateStravaConnectCard();
+  if (page === 'help') renderHelpCategories();
+  if (page === 'upload') {
+    updateStravaConnectCard();
+    renderTodaysAnalyses();
+  }
 
   // Re-trigger landing animations when navigating back to landing (fixes mobile reload bug)
   if (page === 'landing') {
@@ -4766,6 +4778,82 @@ document.querySelectorAll('.source-tab').forEach(tab => {
     if (src === 'connect') updateStravaConnectCard();
   });
 });
+
+// ═══════════════════════════════════════════════════════════
+// TODAY'S ANALYSES — top section of Analyze page.
+// Renders compact cards for every workout logged today (CSV upload OR Strava sync).
+// Auto-empties at midnight (workouts logged "today" filter by date, not upload time).
+// ═══════════════════════════════════════════════════════════
+async function renderTodaysAnalyses() {
+  const container = document.getElementById('todaysAnalyses');
+  if (!container || !state.user) return;
+
+  // Workouts where the WORKOUT DATE is today (not the upload date — what matters
+  // is when the activity actually happened). Fall back to created_at if no date field.
+  const today = new Date().toISOString().split('T')[0];
+  const todays = (state.workouts || []).filter(w => {
+    const workoutDate = (w.date || w.created_at || '').split('T')[0];
+    return workoutDate === today;
+  }).filter(w => w.activity_classification !== 'daily_activity');
+
+  if (todays.length === 0) {
+    container.innerHTML = `
+      <div style="padding: 16px; background: rgba(255, 255, 255, 0.02); border: 1px dashed var(--border); border-radius: 12px; text-align: center;">
+        <div style="font-size: 13px; color: var(--text-dim); line-height: 1.55;">
+          No workouts logged today yet. Sync from Strava or upload a CSV below — your analyses will appear here.
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  const sportEmojis = { run: '🏃', bike: '🚴', swim: '🏊', strength: '💪', mobility: '🧘', other: '⚡' };
+
+  container.innerHTML = `
+    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
+      <div style="font-size: 11px; color: var(--accent); text-transform: uppercase; letter-spacing: 1.5px; font-weight: 800;">Today's analyses</div>
+      <div style="flex: 1; height: 1px; background: var(--border);"></div>
+      <div style="font-size: 11px; color: var(--text-mute);">${todays.length} workout${todays.length === 1 ? '' : 's'}</div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      ${todays.map(w => renderTodaysAnalysisCard(w, sportEmojis)).join('')}
+    </div>
+  `;
+}
+
+function renderTodaysAnalysisCard(w, sportEmojis) {
+  const sport = normalizeSport(w.sport);
+  const emoji = sportEmojis[sport] || '⚡';
+  const distance = w.distance ? `${parseFloat(w.distance).toFixed(1)}km` : '';
+  // duration: try seconds, fall back to time string
+  let durationStr = '';
+  if (w.duration) {
+    const d = parseFloat(w.duration);
+    const secs = d > 600 ? d : d * 60;
+    const mins = Math.round(secs / 60);
+    durationStr = mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${mins}min`;
+  } else if (w.time && w.time !== 'N/A') {
+    durationStr = w.time;
+  }
+  const avgHr = w.avgHr || w.avg_hr;
+  const drift = w.drift !== null && w.drift !== undefined ? parseFloat(w.drift).toFixed(1) : null;
+  const isStrava = w.source === 'strava' || w._source === 'strava';
+  const meta = [durationStr, distance, avgHr ? `${avgHr} bpm` : '', drift ? `${drift}% drift` : ''].filter(Boolean).join(' · ');
+
+  return `
+    <div onclick="navigate('history')" style="display: flex; align-items: center; gap: 14px; padding: 14px 16px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 12px; cursor: pointer; transition: all 0.15s;">
+      <div style="font-size: 22px; flex-shrink: 0;">${emoji}</div>
+      <div style="flex: 1; min-width: 0;">
+        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 2px;">
+          <div style="font-weight: 600; color: var(--text); font-size: 14px; text-transform: capitalize;">${escapeHtml(sport || 'workout')}</div>
+          ${isStrava ? `<span style="font-size: 9px; padding: 2px 6px; background: rgba(252, 76, 2, 0.12); border: 1px solid rgba(252, 76, 2, 0.3); border-radius: 4px; color: #fc4c02; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Strava</span>` : ''}
+        </div>
+        ${meta ? `<div style="font-size: 12px; color: var(--text-dim); line-height: 1.4;">${escapeHtml(meta)}</div>` : ''}
+      </div>
+      <div style="color: var(--text-mute); font-size: 16px; flex-shrink: 0;">→</div>
+    </div>
+  `;
+}
 
 // Refresh the Strava card on the Analyze page based on connection status
 async function updateStravaConnectCard() {
@@ -5818,6 +5906,22 @@ async function renderDashRaceCountdown(intake) {
 }
 
 // Today card: shows the planned workout for today, or rest day, or "no plan yet"
+// Normalize sport names — Strava uses 'running'/'cycling'/'swimming' while plans use 'run'/'bike'/'swim'.
+// Returns canonical short form so sport-matching comparisons are reliable.
+function normalizeSport(sport) {
+  if (!sport) return '';
+  const s = String(sport).toLowerCase().trim();
+  const map = {
+    'running': 'run', 'run': 'run',
+    'cycling': 'bike', 'bike': 'bike', 'biking': 'bike', 'ride': 'bike',
+    'swimming': 'swim', 'swim': 'swim',
+    'strength': 'strength', 'gym': 'strength', 'weights': 'strength', 'weight_training': 'strength',
+    'mobility': 'mobility', 'stability': 'mobility', 'yoga': 'mobility', 'stretching': 'mobility',
+    'rest': 'rest',
+  };
+  return map[s] || s;
+}
+
 async function renderDashTodayCard(intake) {
   const card = document.getElementById('todayCard');
   if (!card) return;
@@ -5827,6 +5931,7 @@ async function renderDashTodayCard(intake) {
   // Pull today's planned workout if it exists
   let todaysPlanned = null;
   let alreadyCompleted = false;
+  let allTodaysPlanned = [];
   try {
     const { data: planned } = await sb.from('planned_workouts')
       .select('*')
@@ -5835,16 +5940,26 @@ async function renderDashTodayCard(intake) {
       .order('id', { ascending: true });
     if (planned && planned.length > 0) {
       todaysPlanned = planned[0]; // first one of the day (some days have brick = 2 workouts)
+      allTodaysPlanned = planned;
     }
-    // Check if user has logged a workout today
-    const { data: completedToday } = await sb.from('workouts')
-      .select('id, sport')
-      .eq('user_id', state.user.id)
-      .gte('created_at', today + 'T00:00:00')
-      .lte('created_at', today + 'T23:59:59')
-      .neq('activity_classification', 'daily_activity')
-      .limit(1);
-    alreadyCompleted = !!(completedToday && completedToday.length > 0);
+
+    // ═══ MATCH BY SPORT ═══
+    // Only mark "completed" if the user's logged workout matches one of the planned sports
+    // for today. Otherwise a swim upload would falsely mark today's planned run as done.
+    // Brick days have 2 planned sports — match either.
+    if (allTodaysPlanned.length > 0) {
+      const plannedSports = allTodaysPlanned.map(p => normalizeSport(p.sport));
+      const { data: completedToday } = await sb.from('workouts')
+        .select('id, sport')
+        .eq('user_id', state.user.id)
+        .gte('created_at', today + 'T00:00:00')
+        .lte('created_at', today + 'T23:59:59')
+        .neq('activity_classification', 'daily_activity');
+
+      const completedSports = (completedToday || []).map(w => normalizeSport(w.sport));
+      // Mark complete only if at least one completed workout matches a planned sport
+      alreadyCompleted = completedSports.some(cs => plannedSports.includes(cs));
+    }
   } catch (e) {
     console.warn('[Stryxs] todayCard query failed:', e);
   }
@@ -8843,20 +8958,31 @@ async function loadCoachPersonaBadge(intake) {
     console.log('[Stryxs] Persona received:', persona);
     if (!persona) return;
     badge.innerHTML = `
-      <div style="background: linear-gradient(135deg, rgba(0, 255, 163, 0.06), rgba(80, 130, 255, 0.04)); border: 1px solid rgba(0, 255, 163, 0.2); border-radius: 14px; padding: 16px 18px;">
-        <div style="display: flex; align-items: flex-start; gap: 12px; margin-bottom: 10px;">
-          <div style="font-size: 22px; line-height: 1; flex-shrink: 0;">🎯</div>
-          <div style="flex: 1; min-width: 0;">
-            <div style="font-size: 11px; color: var(--accent); text-transform: uppercase; letter-spacing: 1.5px; font-weight: 600; margin-bottom: 4px;">Coaching Style</div>
-            <div style="font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 2px;">${persona.label}</div>
-            <div style="font-size: 12px; color: var(--text-dim);">Methodology: <strong style="color: var(--text);">${persona.coach_brain}</strong></div>
+      <div class="coach-persona-card" style="background: linear-gradient(135deg, rgba(0, 255, 163, 0.06), rgba(80, 130, 255, 0.04)); border: 1px solid rgba(0, 255, 163, 0.2); border-radius: 14px; padding: 16px 18px;">
+        <div class="persona-mobile-summary" style="display: none;">
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            <span style="font-size: 14px;">🎯</span>
+            <span style="font-size: 11px; font-weight: 700; color: var(--text);">${escapeHtml(persona.label)}</span>
+            <span style="font-size: 10px; color: var(--text-mute);">·</span>
+            <span style="font-size: 10px; color: var(--text-dim);">${escapeHtml(persona.phase)}</span>
+            <button onclick="this.parentElement.parentElement.parentElement.classList.toggle('persona-expanded')" style="margin-left: auto; background: transparent; border: none; color: var(--text-mute); cursor: pointer; padding: 0; font-size: 11px;">ⓘ</button>
           </div>
         </div>
-        <div style="font-size: 12px; color: var(--text-dim); line-height: 1.55; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.05);">
-          ${persona.methodology_summary}
-        </div>
-        <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.05); font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px; font-weight: 600;">
-          Phase: <strong style="color: var(--accent); text-transform: none; letter-spacing: 0;">${persona.phase}</strong>
+        <div class="persona-full-content">
+          <div style="display: flex; align-items: flex-start; gap: 12px; margin-bottom: 10px;">
+            <div style="font-size: 22px; line-height: 1; flex-shrink: 0;">🎯</div>
+            <div style="flex: 1; min-width: 0;">
+              <div style="font-size: 11px; color: var(--accent); text-transform: uppercase; letter-spacing: 1.5px; font-weight: 600; margin-bottom: 4px;">Coaching Style</div>
+              <div style="font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 2px;">${escapeHtml(persona.label)}</div>
+              <div style="font-size: 12px; color: var(--text-dim);">Methodology: <strong style="color: var(--text);">${escapeHtml(persona.coach_brain)}</strong></div>
+            </div>
+          </div>
+          <div style="font-size: 12px; color: var(--text-dim); line-height: 1.55; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.05);">
+            ${escapeHtml(persona.methodology_summary)}
+          </div>
+          <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.05); font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px; font-weight: 600;">
+            Phase: <strong style="color: var(--accent); text-transform: none; letter-spacing: 0;">${escapeHtml(persona.phase)}</strong>
+          </div>
         </div>
       </div>
     `;
@@ -13755,6 +13881,14 @@ async function syncStravaNow(btn) {
         if (typeof runAnomalyCheckIfNeeded === 'function') {
           runAnomalyCheckIfNeeded().catch(err => console.error('[Stryxs] Anomaly check error:', err));
         }
+        // Refresh today's-analyses if user is on Analyze page
+        if (typeof renderTodaysAnalyses === 'function' && document.getElementById('page-upload')?.classList.contains('active')) {
+          renderTodaysAnalyses().catch(() => {});
+        }
+        // Refresh dashboard if user is on Dashboard
+        if (typeof renderDashboard === 'function' && document.getElementById('page-dashboard')?.classList.contains('active')) {
+          renderDashboard().catch(() => {});
+        }
       }, 1500);
     } else {
       toast('All caught up — no new workouts');
@@ -14434,6 +14568,183 @@ function initUpload() {
 
 // FAQ
 function toggleFaq(el) { el.parentElement.classList.toggle('open'); }
+
+// ═══════════════════════════════════════════════════════════
+// HELP / FAQ — categorized, accordion, searchable
+// ═══════════════════════════════════════════════════════════
+const HELP_CATEGORIES = [
+  {
+    title: 'Getting started',
+    icon: '🚀',
+    items: [
+      { q: 'How do I set up Stryxs for the first time?', a: 'After signing up, the Coach will walk you through a 2-minute intake — your goal event, race date, training experience, and known zones (LTHR, FTP, CSS). Once that\'s done, Coach builds your personalized plan automatically. You can connect Strava in Settings to auto-sync workouts.' },
+      { q: 'What are LTHR, FTP, and CSS?', a: 'LTHR = Lactate Threshold Heart Rate (your run/bike threshold HR). FTP = Functional Threshold Power (cycling, watts). CSS = Critical Swim Speed (your swim pace per 100m at threshold). These are the most accurate way to set personalized training zones. Stryxs uses them to compute Z1-Z5 zones for each sport individually.' },
+      { q: 'How do I find my LTHR?', a: 'Warm up 15 min, then run/bike a hard 30-min solo time trial at the hardest pace you can sustain. Your average HR over the LAST 20 MINUTES is your LTHR. Test running and cycling separately — they differ by 5-10 bpm typically.' },
+      { q: 'How do I find my CSS?', a: 'Swim 400m all-out then take 5 min easy, swim 200m all-out. CSS = (400m time - 200m time) / 200m. Or use a 1500m time trial: divide by 15 to get pace per 100m as a rough CSS.' },
+      { q: 'I don\'t know my zones yet — can I still use Stryxs?', a: 'Yes. Coach will give you a starter plan with general zones based on age and experience, then build a field-test workout into your first week so you can dial them in. Once you log the test, your zones auto-update.' },
+    ],
+  },
+  {
+    title: 'Strava & auto-sync',
+    icon: '🔗',
+    items: [
+      { q: 'How do I connect Strava?', a: 'Go to Settings → Connections → tap "Connect Strava". You\'ll be redirected to Strava to authorize. After approval, every new workout you do auto-syncs to Stryxs within seconds (via webhook). You can also manually sync the last 30 days at any time.' },
+      { q: 'Why aren\'t my Strava workouts showing up?', a: 'Three common causes: (1) the workout wasn\'t saved/published in Strava yet, (2) Strava classified it as private (Stryxs only sees public + friends-only activities), or (3) the webhook hasn\'t fired yet — open Settings → Connections → tap "Sync now" to pull manually. If still missing, check your Strava privacy settings.' },
+      { q: 'Strava sync vs CSV upload — what\'s the difference?', a: 'Strava sync gives you the basics: distance, duration, average HR, sport. CSV upload (from Garmin Connect, COROS, etc.) gives you the FULL data: per-lap splits, cardiac drift across the workout, zone distribution, intensity targets. Use CSV when you want deeper analysis on key sessions (long runs, threshold workouts).' },
+      { q: 'Can I disconnect Strava?', a: 'Yes — Settings → Connections → "Disconnect Strava". Your previously-synced workouts stay in Stryxs. New workouts won\'t auto-import after disconnecting.' },
+      { q: 'Will Strava sync drain my training data?', a: 'No. Strava sync only READS your activities. Stryxs never modifies your Strava data, posts on your behalf, or shares anything publicly.' },
+    ],
+  },
+  {
+    title: 'Coach & training plans',
+    icon: '🧠',
+    items: [
+      { q: 'How does Coach build my plan?', a: 'Coach uses one of 7 methodology playbooks based on your goal: Ironman (Friel-based), Half Ironman, short triathlon, marathon, half marathon, short run (5K/10K), or general fitness. Each playbook encodes phase progression, intensity distribution rules, and specific workout types. Coach personalizes that to your zones, weekly hours, and constraints.' },
+      { q: 'Can I import a plan I already have?', a: 'Yes. In the intake flow, choose "I already have a plan I want to keep." Paste it as text or attach a doc. Coach extracts the structure (weekly mapping, phases, key workouts) and builds your calendar from it. Multi-week plans auto-build week-by-week as time progresses.' },
+      { q: 'What if I miss a workout?', a: 'Don\'t double up the next day — that\'s a fast track to overtraining. Just move on. Coach\'s rule of thumb: a missed Tuesday is gone, not deferred. The plan is robust to occasional misses.' },
+      { q: 'How do I generate next week\'s plan?', a: 'Plan tab → tap "Generate next week" at the bottom. Coach pulls your latest training data and builds the next week with appropriate progression (or a recovery week if you\'re in a 3:1 build cycle).' },
+      { q: 'Can I edit individual planned workouts?', a: 'Tap any workout on the Plan tab → opens a detail view → edit duration, intensity, or notes. The change applies just to that workout.' },
+      { q: 'What\'s a "starter week" vs a periodized week?', a: 'When you first set up your plan, Coach gives you a starter week (today through next Sunday) with general workouts to ease you in while it field-tests your zones. The full periodized plan kicks in the following Monday once Coach has enough data.' },
+    ],
+  },
+  {
+    title: 'Race planner',
+    icon: '🏁',
+    items: [
+      { q: 'What does the race planner do?', a: 'Generates a complete race-day plan for any race you have coming up: pacing strategy (per leg for triathlon, per segment for single discipline), fueling schedule with hour-by-hour breakdown, hydration plan, equipment checklist, contingency plans for hot day / cramping / GI issues, race-morning timeline, and mental anchors.' },
+      { q: 'How accurate are the predicted finish times?', a: 'Predictions are grounded in your actual training data + your PBs. If your dashboard race projection has high or medium confidence, the race plan inherits that prediction. With limited training data, the plan flags low confidence and gives a wider range instead of a single number.' },
+      { q: 'Is there a limit on how many race plans I can create?', a: 'Yes — 10 race plans per month per user (soft cap to prevent accidental costs). Delete old plans to free up the quota or wait until next month.' },
+    ],
+  },
+  {
+    title: 'Insights & trends',
+    icon: '💡',
+    items: [
+      { q: 'How are insights generated?', a: 'Once a week (or on-demand from the Trends tab), Coach analyzes your last 8 weeks of training and surfaces 2-6 patterns: HR drift trends, pace-at-HR improvements, volume trends, adherence patterns, recovery effectiveness. Each pattern requires at least 3 data points trending the same direction — single-workout observations don\'t count.' },
+      { q: 'What\'s the difference between actionable, urgent, and info insights?', a: 'INFO = neutral or positive observation (fitness improving). ACTIONABLE = something you should adjust (drift creeping, distribution off). URGENT = injury / overtraining / illness red flag. Only actionable + urgent show "Apply to plan" buttons.' },
+      { q: 'What does "Apply to plan" actually do?', a: 'Coach modifies your upcoming week\'s planned workouts based on the recommendation: reduce volume for volume_jump patterns, add HR caps for drift, swap quality sessions for easy when fatigue signals fire. Changes are surgical (within ~20% adjustment), not full regenerations. You can undo within 24 hours.' },
+      { q: 'Why doesn\'t "Apply to plan" appear on some insights?', a: 'Some insights describe things only YOU can fix: missing HR data, equipment, behavioral changes (logging consistency, sleep). Coach can\'t fix those by adjusting workouts — the recommendation needs your direct action. The card will show "💬 Why?" instead so you can ask Coach for more context.' },
+    ],
+  },
+  {
+    title: 'Manual workout export (advanced)',
+    icon: '⌚',
+    items: [
+      { q: 'Exporting from Garmin Connect (CSV)', a: 'Go to connect.garmin.com → Activities → click any workout → tap the gear icon (⚙) top-right → Export to CSV. Upload that file in the Analyze tab.' },
+      { q: 'Exporting from COROS', a: 'trainingtoday.coros.com → click any activity → Export → choose CSV. Upload in Analyze tab.' },
+      { q: 'Exporting from Apple Watch', a: 'Open Health app on iPhone → tap profile picture (top right) → Export All Health Data. This is a full ZIP export. For individual workouts, use a free app like HealthFit or RunGap to export single workouts as CSV.' },
+      { q: 'Exporting from Samsung Galaxy Watch', a: 'Samsung Health → menu (☰) → Settings → Download personal data. Confirm and wait for the ZIP. For individual workouts, use Strava (which auto-syncs Samsung Health) and connect that to Stryxs instead.' },
+      { q: 'What file types does Stryxs accept?', a: 'CSV, TCX, GPX, and FIT files. CSV with per-lap data gives the most detailed analysis (cardiac drift, zone distribution).' },
+    ],
+  },
+  {
+    title: 'Settings & account',
+    icon: '⚙',
+    items: [
+      { q: 'How do I change my goal event or race date?', a: 'Settings → Profile → tap the goal field. After updating, Coach will rebuild upcoming weeks to align with the new goal/date.' },
+      { q: 'How do I update my LTHR or zones?', a: 'Settings → Zones section → enter values. Plan auto-rebuilds when you change zones for the relevant sport.' },
+      { q: 'Can I delete my account?', a: 'Yes — email coach@stryxs.com from the email tied to your account. We\'ll delete all your data within 7 days.' },
+      { q: 'How is my data stored?', a: 'Encrypted at rest in Supabase (Postgres). Only YOU can access it via your account. We never sell training data, never share it with advertisers.' },
+      { q: 'Is there a mobile app?', a: 'Stryxs is a progressive web app — install it from your browser to get an app-like experience. On iPhone: Safari → Share → Add to Home Screen. On Android: Chrome → menu (⋮) → Install app.' },
+    ],
+  },
+  {
+    title: 'Troubleshooting',
+    icon: '🔧',
+    items: [
+      { q: 'My plan didn\'t generate after intake — what now?', a: 'Refresh the page. If still missing, check Coach tab — sometimes the generation message is there with an error explanation. If you see "rate limited," wait a few minutes and try again. Most plan generation completes in 30-60 seconds.' },
+      { q: 'Coach chat says "timeout" or "unavailable"', a: 'Usually a transient API issue. Wait 30 seconds and re-send. If it persists, refresh the page. If still broken after a few minutes, email us — there may be a backend issue.' },
+      { q: 'My workouts uploaded but the dashboard hasn\'t refreshed', a: 'Pull down to refresh on mobile, or reload the page on desktop. State.workouts is loaded once on login — recent additions may need a refresh until the auto-reload kicks in.' },
+      { q: 'Insights say "log 5+ workouts" even though I have plenty', a: 'Most likely the workouts are being classified as "daily activity" (commutes, walks under 60 min) and filtered out of insight analysis. Tap "Generate insights" again to retry, or let it auto-regenerate weekly.' },
+      { q: 'I see weird formatting/text wrapping on my phone', a: 'Try refreshing the page. If a specific page looks broken, take a screenshot and email coach@stryxs.com — we ship UI fixes regularly.' },
+    ],
+  },
+];
+
+function renderHelpCategories() {
+  const container = document.getElementById('helpCategories');
+  if (!container) return;
+
+  container.innerHTML = HELP_CATEGORIES.map((cat, ci) => `
+    <div class="help-category" data-category-idx="${ci}" style="margin-bottom: 14px;">
+      <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1.5px; font-weight: 800; margin-bottom: 8px; padding: 0 4px;">
+        ${cat.icon} ${escapeHtml(cat.title)}
+      </div>
+      <div style="background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px; overflow: hidden;">
+        ${cat.items.map((item, ii) => `
+          <div class="help-item" data-q="${escapeHtml((item.q + ' ' + item.a).toLowerCase())}" style="border-bottom: 1px solid var(--border);">
+            <button class="help-item-q" onclick="toggleHelpItem(this)" style="width: 100%; padding: 14px 16px; background: transparent; border: none; color: var(--text); font-family: inherit; font-size: 14px; font-weight: 600; text-align: left; cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 12px; line-height: 1.4;">
+              <span style="flex: 1; min-width: 0;">${escapeHtml(item.q)}</span>
+              <span class="help-item-chevron" style="color: var(--text-mute); font-size: 14px; transition: transform 0.2s; flex-shrink: 0;">▾</span>
+            </button>
+            <div class="help-item-a" style="display: none; padding: 0 16px 14px; font-size: 13px; color: var(--text-dim); line-height: 1.65;">${escapeHtml(item.a)}</div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `).join('');
+
+  // Strip the last border-bottom of each category
+  container.querySelectorAll('.help-category').forEach(cat => {
+    const items = cat.querySelectorAll('.help-item');
+    if (items.length > 0) items[items.length - 1].style.borderBottom = 'none';
+  });
+}
+
+function toggleHelpItem(btn) {
+  const item = btn.parentElement;
+  const ans = item.querySelector('.help-item-a');
+  const chev = btn.querySelector('.help-item-chevron');
+  if (ans.style.display === 'none' || !ans.style.display) {
+    ans.style.display = 'block';
+    if (chev) chev.style.transform = 'rotate(180deg)';
+  } else {
+    ans.style.display = 'none';
+    if (chev) chev.style.transform = 'rotate(0deg)';
+  }
+}
+
+function filterHelpItems() {
+  const search = (document.getElementById('helpSearch')?.value || '').toLowerCase().trim();
+  const items = document.querySelectorAll('.help-item');
+  const categories = document.querySelectorAll('.help-category');
+  let totalVisible = 0;
+
+  if (!search) {
+    // Reset everything to default state
+    items.forEach(item => {
+      item.style.display = '';
+      const ans = item.querySelector('.help-item-a');
+      const chev = item.querySelector('.help-item-chevron');
+      if (ans) ans.style.display = 'none';
+      if (chev) chev.style.transform = 'rotate(0deg)';
+    });
+    categories.forEach(c => c.style.display = '');
+    totalVisible = items.length;
+  } else {
+    // Filter and auto-expand matches
+    items.forEach(item => {
+      const haystack = item.dataset.q || '';
+      const match = haystack.includes(search);
+      item.style.display = match ? '' : 'none';
+      if (match) {
+        totalVisible++;
+        const ans = item.querySelector('.help-item-a');
+        const chev = item.querySelector('.help-item-chevron');
+        if (ans) ans.style.display = 'block';
+        if (chev) chev.style.transform = 'rotate(180deg)';
+      }
+    });
+    // Hide categories with no visible items
+    categories.forEach(cat => {
+      const visibleInCat = cat.querySelectorAll('.help-item:not([style*="display: none"])').length;
+      cat.style.display = visibleInCat === 0 ? 'none' : '';
+    });
+  }
+
+  const noResults = document.getElementById('helpNoResults');
+  if (noResults) noResults.style.display = (search && totalVisible === 0) ? 'block' : 'none';
+}
 
 // SCROLL REVEALS + LIVE SHOWCASE ANIMATIONS
 function initReveals() {
