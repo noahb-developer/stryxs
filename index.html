@@ -8068,11 +8068,20 @@ async function regenerateInsights() {
       allWorkouts: rawWorkouts || [],
     }, { timeoutMs: 110000 });
 
-    // Mark old active insights as 'stale' so they fall off
+    // Mark old TREND insights as 'stale' — but leave anomaly insights alone.
+    // Anomalies are workout-specific signals that the user may still need to act on;
+    // they shouldn't disappear just because the user opened the Trends page.
+    // Trend pattern types that this fresh analysis is replacing:
+    const TREND_PATTERN_TYPES = [
+      'hr_zone_drift', 'pace_at_hr_improvement', 'volume_trend',
+      'adherence_pattern', 'long_progression', 'drift_signal',
+      'intensity_distribution', 'recovery_signal',
+    ];
     await sb.from('training_insights')
       .update({ status: 'stale' })
       .eq('user_id', state.user.id)
-      .eq('status', 'active');
+      .eq('status', 'active')
+      .in('pattern_type', TREND_PATTERN_TYPES);
 
     // Insert new ones
     if (result?.patterns && Array.isArray(result.patterns) && result.patterns.length > 0) {
@@ -10515,7 +10524,26 @@ async function sendChatMsg() {
       content: h.content,
     }));
 
-    const reply = await callCoach('chat', { messages, intake, recentWorkouts: recent, plannedWorkouts: plannedWorkouts || [], profile: state.profile });
+    // Round 1 audit fix: pass active insights into chat context so Coach is
+    // aware of patterns it has flagged. Without this, Coach gives generic
+    // answers to questions like "how am I doing?" while ignoring the very
+    // insights it generated. Filter to active only — backend further filters
+    // to urgent/actionable + positive signals before injection.
+    const { data: activeInsightsRaw } = await sb.from('training_insights')
+      .select('pattern_type, severity, title, finding, recommendation')
+      .eq('user_id', state.user.id)
+      .eq('status', 'active')
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    const reply = await callCoach('chat', {
+      messages,
+      intake,
+      recentWorkouts: recent,
+      plannedWorkouts: plannedWorkouts || [],
+      profile: state.profile,
+      activeInsights: activeInsightsRaw || [],
+    });
 
     // Remove thinking indicator
     const thinking = document.getElementById('thinkingMsg');
@@ -11239,88 +11267,19 @@ async function savePlanToDb(plan, userId, startDate = null) {
   return { success: true, planId: planRow?.id };
 }
 
-// ─── Smart Plan Adjustments — Pattern Analysis ───
+// ─── Smart Plan Adjustments — Pattern Analysis (REMOVED in Round 1 audit) ───
+// This function previously called callCoach('analyze_patterns') expecting an
+// {needs_adjustment, summary, suggested_action} response shape. The backend
+// handler for that action was upgraded to return {patterns: [...]} but this
+// function was never updated, so it silently early-returned and discarded
+// every API call (~$0.05 per CSV upload, zero benefit).
+//
+// Trend insights now generate ONLY when the user opens the Trends page (which
+// uses the correct shape via renderInsightsPage). Anomaly detection still fires
+// after every workout via runAnomalyCheckIfNeeded().
 async function analyzeTrainingPatterns() {
-  if (!state.user) return;
-
-  try {
-    // Get athlete intake
-    const { data: intake } = await sb.from('athlete_intake')
-      .select('*').eq('user_id', state.user.id).single();
-    if (!intake) return;
-
-    // Pull last 14 days of completed TRAINING workouts (exclude daily activities)
-    const fourteenDaysAgo = new Date();
-    fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
-    const { data: recentRaw } = await sb.from('workouts')
-      .select('*')
-      .eq('user_id', state.user.id)
-      .neq('activity_classification', 'daily_activity')
-      .gte('created_at', fourteenDaysAgo.toISOString())
-      .order('created_at', { ascending: false })
-      .limit(10);
-
-    // Need at least 2 workouts to detect patterns
-    if (!recentRaw || recentRaw.length < 2) return;
-
-    const recentWorkouts = recentRaw.map(w => {
-      const wd = w.workout_data || {};
-      return {
-        sport: w.sport,
-        type: wd.workout_type || wd.type || null,
-        distance: parseFloat(wd.distance || wd.distance_km || 0) || null,
-        avgHr: parseInt(wd.avgHr || wd.avg_hr || 0) || null,
-        drift: parseFloat(wd.drift || wd.cardiac_drift || 0) || null,
-      };
-    });
-
-    // Pull next 7 days of planned workouts
-    const today = new Date().toISOString().split('T')[0];
-    const sevenDaysOut = new Date();
-    sevenDaysOut.setDate(sevenDaysOut.getDate() + 7);
-    const { data: planned } = await sb.from('planned_workouts')
-      .select('*')
-      .eq('user_id', state.user.id)
-      .gte('scheduled_date', today)
-      .lte('scheduled_date', sevenDaysOut.toISOString().split('T')[0])
-      .order('scheduled_date', { ascending: true });
-
-    // Call Coach to analyze
-    const insight = await callCoach('analyze_patterns', {
-      intake,
-      recentWorkouts,
-      plannedWorkouts: planned || [],
-    });
-
-    // If no adjustment needed, don't bother saving an insight
-    if (!insight || !insight.needs_adjustment) return;
-
-    // Save insight to database
-    await sb.from('coach_insights').insert({
-      user_id: state.user.id,
-      severity: insight.severity || 'info',
-      title: insight.title || 'Coach insight',
-      summary: insight.summary || '',
-      recommendation: insight.recommendation || '',
-      suggested_action: insight.suggested_action || 'none',
-    });
-
-    // Also save as a chat message so user sees it in Coach chat
-    const chatContent = `**${insight.title}**\n\n${insight.summary}\n\n${insight.recommendation}`;
-    await sb.from('coach_messages').insert({
-      user_id: state.user.id,
-      role: 'coach',
-      content: chatContent,
-      context_type: 'pattern_insight',
-    });
-
-    // If user is currently on dashboard, refresh to show banner
-    const dashboardActive = document.getElementById('page-dashboard')?.classList.contains('active');
-    if (dashboardActive) renderDashboard();
-
-  } catch (err) {
-    console.error('Pattern analysis error:', err);
-  }
+  // No-op. Trend insight generation is exclusively triggered by user opening Trends.
+  return;
 }
 
 // Apply Coach's suggested adjustment to upcoming plan
