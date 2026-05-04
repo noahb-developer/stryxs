@@ -4400,6 +4400,22 @@ body.on-auth .container {
   </div>
 </div>
 
+<!-- Delete Account Modal — multi-step to prevent accidental deletion -->
+<div class="modal-backdrop" id="deleteAccountModal">
+  <div class="modal" style="max-width: 480px;">
+    <div class="modal-header">
+      <div class="modal-title" id="deleteAccountTitle" style="color: #f87171;">Delete your account?</div>
+      <button class="modal-close" onclick="closeDeleteAccountModal()">×</button>
+    </div>
+    <div class="modal-body" id="deleteAccountBody">
+      <!-- Body content swapped by JS based on current step -->
+    </div>
+    <div class="modal-actions" id="deleteAccountActions">
+      <!-- Buttons swapped by JS based on current step -->
+    </div>
+  </div>
+</div>
+
 </div>
 
 <script>
@@ -5280,6 +5296,180 @@ function confirmLogout() {
 
 function closeLogoutModal() {
   document.getElementById('logoutModal').classList.remove('open');
+}
+
+// ═══════════════════════════════════════════════════════════
+// DELETE ACCOUNT — multi-step modal
+// Step 1: warning + "I understand" checkbox + Continue button
+// Step 2: type your email + final confirm button
+// Step 3: in-flight loading state (no cancel)
+// ═══════════════════════════════════════════════════════════
+
+function openDeleteAccountModal() {
+  // Reset to step 1 every time it's opened
+  renderDeleteAccountStep(1);
+  document.getElementById('deleteAccountModal').classList.add('open');
+}
+
+function closeDeleteAccountModal() {
+  document.getElementById('deleteAccountModal').classList.remove('open');
+}
+
+function renderDeleteAccountStep(step) {
+  const body = document.getElementById('deleteAccountBody');
+  const actions = document.getElementById('deleteAccountActions');
+  const title = document.getElementById('deleteAccountTitle');
+  if (!body || !actions) return;
+
+  if (step === 1) {
+    title.textContent = 'Delete your account?';
+    body.innerHTML = `
+      <p style="font-size: 14px; color: var(--text-dim); line-height: 1.6; margin-bottom: 14px;">
+        This will permanently delete your account and <strong style="color: var(--text);">all data associated with it</strong>. This action cannot be undone.
+      </p>
+      <div style="padding: 12px 14px; background: rgba(239, 68, 68, 0.05); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 10px; margin-bottom: 14px;">
+        <div style="font-size: 12px; color: var(--text-dim); line-height: 1.7;">
+          We'll automatically:
+          <ul style="margin: 6px 0 0 18px; padding: 0;">
+            <li>Cancel your Pro subscription (if active)</li>
+            <li>Disconnect Strava</li>
+            <li>Delete workouts, plans, race plans, chat history</li>
+            <li>Delete your profile and avatar</li>
+          </ul>
+        </div>
+      </div>
+      <label style="display: flex; align-items: flex-start; gap: 10px; cursor: pointer; padding: 10px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px;">
+        <input type="checkbox" id="deleteAcctConfirmCheckbox" onchange="updateDeleteAcctContinueBtn()" style="margin-top: 2px; flex-shrink: 0;" />
+        <span style="font-size: 13px; color: var(--text); line-height: 1.5;">I understand this will permanently delete my account and all data, and cannot be undone.</span>
+      </label>
+    `;
+    actions.innerHTML = `
+      <button class="btn ghost" onclick="closeDeleteAccountModal()">Cancel</button>
+      <button class="btn" id="deleteAcctContinueBtn" disabled style="background: var(--danger); box-shadow: 0 4px 20px rgba(239, 68, 68, 0.25); opacity: 0.5; cursor: not-allowed;" onclick="renderDeleteAccountStep(2)">Continue</button>
+    `;
+  } else if (step === 2) {
+    const email = state.user?.email || '';
+    title.textContent = 'Confirm with your email';
+    body.innerHTML = `
+      <p style="font-size: 14px; color: var(--text-dim); line-height: 1.6; margin-bottom: 14px;">
+        To confirm deletion, type your account email below: <strong style="color: var(--text);">${escapeHtml(email)}</strong>
+      </p>
+      <input type="email" id="deleteAcctEmailInput" placeholder="${escapeHtml(email)}" autocomplete="off" oninput="updateDeleteAcctFinalBtn()" style="width: 100%; padding: 12px 14px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-size: 14px; outline: none; box-sizing: border-box;" />
+      <div id="deleteAcctEmailHint" style="margin-top: 8px; font-size: 12px; color: var(--text-mute); min-height: 18px;"></div>
+    `;
+    actions.innerHTML = `
+      <button class="btn ghost" onclick="closeDeleteAccountModal()">Cancel</button>
+      <button class="btn" id="deleteAcctFinalBtn" disabled style="background: var(--danger); box-shadow: 0 4px 20px rgba(239, 68, 68, 0.25); opacity: 0.5; cursor: not-allowed;" onclick="executeAccountDeletion()">Delete forever</button>
+    `;
+    // Focus the input so user can type immediately
+    setTimeout(() => document.getElementById('deleteAcctEmailInput')?.focus(), 100);
+  } else if (step === 3) {
+    title.textContent = 'Deleting your account...';
+    body.innerHTML = `
+      <div style="padding: 24px 14px; text-align: center;">
+        <div style="display: inline-block; width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: #f87171; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 14px;"></div>
+        <div id="deleteAcctProgressText" style="font-size: 13px; color: var(--text-dim); line-height: 1.6;">
+          Canceling subscription, revoking connections, wiping data...
+        </div>
+        <div style="font-size: 11px; color: var(--text-mute); margin-top: 8px;">This may take a few seconds.</div>
+      </div>
+    `;
+    actions.innerHTML = `<div style="font-size: 11px; color: var(--text-mute); padding: 0 12px;">Please don't close this window.</div>`;
+  }
+}
+
+function updateDeleteAcctContinueBtn() {
+  const checkbox = document.getElementById('deleteAcctConfirmCheckbox');
+  const btn = document.getElementById('deleteAcctContinueBtn');
+  if (!checkbox || !btn) return;
+  if (checkbox.checked) {
+    btn.disabled = false;
+    btn.style.opacity = '1';
+    btn.style.cursor = 'pointer';
+  } else {
+    btn.disabled = true;
+    btn.style.opacity = '0.5';
+    btn.style.cursor = 'not-allowed';
+  }
+}
+
+function updateDeleteAcctFinalBtn() {
+  const input = document.getElementById('deleteAcctEmailInput');
+  const btn = document.getElementById('deleteAcctFinalBtn');
+  const hint = document.getElementById('deleteAcctEmailHint');
+  if (!input || !btn) return;
+  const typed = (input.value || '').trim().toLowerCase();
+  const expected = (state.user?.email || '').toLowerCase();
+  const matches = typed && typed === expected;
+  if (matches) {
+    btn.disabled = false;
+    btn.style.opacity = '1';
+    btn.style.cursor = 'pointer';
+    if (hint) hint.innerHTML = '<span style="color: var(--accent);">✓ Match — you can proceed</span>';
+  } else {
+    btn.disabled = true;
+    btn.style.opacity = '0.5';
+    btn.style.cursor = 'not-allowed';
+    if (hint) hint.innerHTML = typed ? '<span style="color: var(--text-mute);">Email doesn\'t match</span>' : '';
+  }
+}
+
+const ACCOUNT_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/account`;
+
+async function executeAccountDeletion() {
+  if (!state.user) return;
+  const expectedEmail = (state.user.email || '').toLowerCase();
+  const typedEmail = (document.getElementById('deleteAcctEmailInput')?.value || '').trim().toLowerCase();
+  if (typedEmail !== expectedEmail) return; // shouldn't happen but defensive
+
+  // Switch to in-flight UI
+  renderDeleteAccountStep(3);
+
+  // Get the user's session token to authenticate the deletion request
+  let accessToken = null;
+  try {
+    const { data } = await sb.auth.getSession();
+    accessToken = data?.session?.access_token;
+  } catch (_) { /* fall through */ }
+  if (!accessToken) {
+    closeDeleteAccountModal();
+    toast('Session expired. Please sign in again and retry.', 6000);
+    return;
+  }
+
+  try {
+    const res = await fetch(ACCOUNT_FUNCTION_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        action: 'delete_account',
+        user_id: state.user.id,
+        confirm_email: typedEmail,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data?.error || `Deletion failed: ${res.status}`);
+    }
+
+    // Success — sign the user out locally and send them to the landing page
+    console.log('[Stryxs] Account deleted. Cleanup summary:', data?.cleanup);
+    try { await sb.auth.signOut(); } catch (_) { /* session is already invalidated */ }
+    state.user = null;
+    state.profile = { runLthr: null, bikeLthr: null, subscriptionTier: 'free' };
+    state.workouts = [];
+    closeDeleteAccountModal();
+    showLanding();
+    navigate('landing');
+    toast('Your account has been deleted. We\'re sorry to see you go.', 6000);
+  } catch (err) {
+    console.error('[Stryxs] Account deletion failed:', err);
+    closeDeleteAccountModal();
+    toast('Could not delete account: ' + (err.message || 'unknown error') + '. No changes were made — try again or email coach@stryxs.com.', 8000);
+  }
 }
 
 // Close menus on outside click
@@ -15012,6 +15202,42 @@ async function renderSettings() {
         <input type="number" id="settingsBikeLthr" value="${state.profile.bikeLthr || ''}" placeholder="e.g. 165" />
       </div>
       <div id="zonePreview"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Danger Zone — account deletion -->
+    <div class="settings-section" id="section-danger">
+      <div class="settings-section-header" onclick="toggleSettingsSection('danger')">
+        <div class="settings-section-header-left">
+          <div class="settings-section-icon" style="color: #f87171;">⚠</div>
+          <div class="settings-section-text">
+            <div class="settings-section-title" style="color: #f87171;">Danger zone</div>
+            <div class="settings-section-sub">Delete your account and all data</div>
+          </div>
+        </div>
+        <div class="settings-section-chevron">›</div>
+      </div>
+      <div class="settings-section-body">
+        <div class="settings-section-inner">
+          <div style="padding: 16px; background: rgba(239, 68, 68, 0.04); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 12px; line-height: 1.6;">
+            <div style="font-size: 14px; font-weight: 700; color: #f87171; margin-bottom: 10px;">Delete your account</div>
+            <div style="font-size: 13px; color: var(--text-dim); margin-bottom: 14px;">
+              This will permanently delete your account and all associated data. This action <strong style="color: var(--text);">cannot be undone</strong>.
+            </div>
+            <div style="font-size: 12px; color: var(--text-mute); margin-bottom: 14px;">
+              We'll automatically:
+              <ul style="margin: 6px 0 0 18px; padding: 0; line-height: 1.7;">
+                <li>Cancel your Pro subscription (if active)</li>
+                <li>Disconnect Strava (revokes our access)</li>
+                <li>Delete all workouts, plans, race plans, chat history, and intake answers</li>
+                <li>Remove your profile and avatar</li>
+              </ul>
+            </div>
+            <button class="btn ghost" onclick="openDeleteAccountModal()" style="color: #f87171; border-color: rgba(239, 68, 68, 0.35); width: 100%;">
+              Delete my account
+            </button>
+          </div>
         </div>
       </div>
     </div>
