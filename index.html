@@ -8075,7 +8075,7 @@ async function regenerateInsights() {
     const TREND_PATTERN_TYPES = [
       'hr_zone_drift', 'pace_at_hr_improvement', 'volume_trend',
       'adherence_pattern', 'long_progression', 'drift_signal',
-      'intensity_distribution', 'recovery_signal',
+      'intensity_distribution', 'recovery_signal', 'plan_adherence_positive',
     ];
     await sb.from('training_insights')
       .update({ status: 'stale' })
