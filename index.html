@@ -2769,6 +2769,16 @@ select option {
 .landing-v2 > .lv2-marquee,
 .landing-v2 > .lv2-footer { position: relative; z-index: 5; }
 
+/* Top nav must always render above grid/grain/blob overlays. The selector above
+   sets z-index: 5 generically — bump the nav specifically higher AND lock its
+   absolute positioning so it sits at the top of the viewport on every device,
+   including iPad where the parent rule's z-index: 5 was previously letting the
+   nav get visually buried behind background layers. */
+.landing-v2 > nav.lv2-nav {
+  position: absolute;
+  z-index: 100;
+}
+
 /* Landing-specific top nav */
 .lv2-nav {
   position: absolute; top: 0; left: 0; right: 0;
