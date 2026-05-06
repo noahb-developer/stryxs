@@ -3999,6 +3999,11 @@ body.on-auth .container {
 
     <footer class="lv2-footer">
       Stryxs &middot; Built for athletes
+      <div style="margin-top: 14px; font-size: 10px; letter-spacing: 0.5px; text-transform: none; font-family: 'Inter', sans-serif !important;">
+        <a href="/privacy" style="color: var(--lv2-text-mute); text-decoration: none; opacity: 0.7;">Privacy</a>
+        <span style="margin: 0 8px; opacity: 0.4;">·</span>
+        <a href="/terms" style="color: var(--lv2-text-mute); text-decoration: none; opacity: 0.7;">Terms</a>
+      </div>
     </footer>
   </div>
 </div>
@@ -4041,6 +4046,7 @@ body.on-auth .container {
         Create account
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
       </button>
+      <p style="font-size: 11px; color: var(--text-mute); margin-top: 12px; line-height: 1.5; text-align: center;">By creating an account you agree to our <a href="/terms" target="_blank" style="color: var(--text-dim); text-decoration: underline;">Terms</a> and <a href="/privacy" target="_blank" style="color: var(--text-dim); text-decoration: underline;">Privacy Policy</a>.</p>
       <p class="lv2-auth-switch">Already have an account? <a onclick="navigate('login')">Log in</a></p>
     </div>
   </div>
@@ -15389,6 +15395,41 @@ async function renderSettings() {
         <input type="number" id="settingsBikeLthr" value="${state.profile.bikeLthr || ''}" placeholder="e.g. 165" />
       </div>
       <div id="zonePreview"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Legal — privacy + terms links -->
+    <div class="settings-section" id="section-legal">
+      <div class="settings-section-header" onclick="toggleSettingsSection('legal')">
+        <div class="settings-section-header-left">
+          <div class="settings-section-icon">📄</div>
+          <div class="settings-section-text">
+            <div class="settings-section-title">Legal</div>
+            <div class="settings-section-sub">Privacy policy and terms of service</div>
+          </div>
+        </div>
+        <div class="settings-section-chevron">›</div>
+      </div>
+      <div class="settings-section-body">
+        <div class="settings-section-inner">
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <a href="/privacy" target="_blank" style="display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; background: var(--bg-elev); border: 1px solid var(--border); border-radius: 12px; color: var(--text); text-decoration: none; transition: border-color 0.15s;">
+              <div>
+                <div style="font-size: 14px; font-weight: 600;">Privacy Policy</div>
+                <div style="font-size: 12px; color: var(--text-dim); margin-top: 2px;">What data we collect and how we use it</div>
+              </div>
+              <div style="color: var(--text-mute); font-size: 18px;">↗</div>
+            </a>
+            <a href="/terms" target="_blank" style="display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; background: var(--bg-elev); border: 1px solid var(--border); border-radius: 12px; color: var(--text); text-decoration: none; transition: border-color 0.15s;">
+              <div>
+                <div style="font-size: 14px; font-weight: 600;">Terms of Service</div>
+                <div style="font-size: 12px; color: var(--text-dim); margin-top: 2px;">The rules of using Stryxs</div>
+              </div>
+              <div style="color: var(--text-mute); font-size: 18px;">↗</div>
+            </a>
+            <div style="font-size: 11px; color: var(--text-mute); margin-top: 6px; text-align: center; line-height: 1.6;">Questions? Email <a href="mailto:support@stryxs.com" style="color: var(--text-dim); text-decoration: underline;">support@stryxs.com</a></div>
+          </div>
         </div>
       </div>
     </div>
