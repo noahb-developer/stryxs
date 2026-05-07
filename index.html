@@ -16537,10 +16537,12 @@ function renderUpgradePage() {
 
   // Pre-built monthly + yearly price labels for the Pro card
   // (`data-billing-price` element swaps innerHTML based on toggle state)
+  // Math: $14.99 × 12 = $179.88, vs $149.99 = $29.89 saved = 17% off
+  // $149.99 / 12 = $12.50/mo equivalent when billed annually
   const monthlyPriceHtml = `$14.99<span style="font-size: 14px; color: var(--text-mute); font-weight: 600;">/mo</span>`;
-  const yearlyPriceHtml = `$129<span style="font-size: 14px; color: var(--text-mute); font-weight: 600;">/yr</span>`;
-  const monthlySubHtml = `or $129/year (save 28%)`;
-  const yearlySubHtml = `<span style="color: var(--accent);">$10.75/mo billed annually · save 28%</span>`;
+  const yearlyPriceHtml = `$149.99<span style="font-size: 14px; color: var(--text-mute); font-weight: 600;">/yr</span>`;
+  const monthlySubHtml = `or $149.99/year (save 17%)`;
+  const yearlySubHtml = `<span style="color: var(--accent);">$12.50/mo billed annually · save 17%</span>`;
 
   el.innerHTML = `
     <div class="section-title">Upgrade to Stryxs Pro</div>
@@ -17017,6 +17019,21 @@ function animateShowcase() {
     }
   }
 
+  // ─── Pre-auth check for Stripe return ───
+  // If user is returning from Stripe Checkout (cancel or success), give Supabase
+  // an extra moment to restore the session from localStorage / refresh tokens.
+  // Without this, users in privacy-mode browsers (Safari incognito, Firefox strict)
+  // can get bounced to landing because their session check runs before the
+  // tokens have a chance to refresh after the cross-site redirect.
+  const stripeReturnParam = queryParams.get('stripe_result');
+  if (stripeReturnParam) {
+    try {
+      // Force a session refresh attempt — this picks up any locally stored
+      // tokens that getSession() might not have validated yet
+      await sb.auth.refreshSession();
+    } catch (_) { /* refresh failed, will fall through to checkSession */ }
+  }
+
   const loggedIn = await checkSession();
   if (loggedIn) {
     showApp();
@@ -17040,14 +17057,24 @@ function animateShowcase() {
   }
   else {
     // Not logged in. If there's a Stripe redirect param (user got bounced to login
-    // because their session expired during checkout), stash it so the welcome toast
-    // fires after they re-authenticate.
+    // because their session expired during checkout — most often in privacy-mode
+    // browsers like Safari incognito), stash it so the welcome toast or cancel
+    // toast fires after they re-authenticate. We also show a friendlier landing
+    // so they know why they were "logged out."
     try {
-      const stripeParam = new URLSearchParams(window.location.search).get('stripe_result');
-      if (stripeParam) {
-        localStorage.setItem('stryxs_pending_stripe_result', stripeParam);
-        // Clean the URL so it doesn't double-fire
+      if (stripeReturnParam) {
+        localStorage.setItem('stryxs_pending_stripe_result', stripeReturnParam);
         history.replaceState({}, '', window.location.pathname);
+        // Soft notice so the user understands why they're back at landing
+        setTimeout(() => {
+          try {
+            if (stripeReturnParam === 'cancel') {
+              toast('Checkout canceled — sign back in to keep using Stryxs.', 6000);
+            } else {
+              toast('Sign back in to activate your Pro access.', 6000);
+            }
+          } catch (_) {}
+        }, 800);
       }
     } catch (_) { /* localStorage blocked */ }
     showLanding();
