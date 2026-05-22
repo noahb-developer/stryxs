@@ -268,6 +268,60 @@ body.on-landing #landingNav { display: none !important; }
 
 .app { position: relative; z-index: 1; min-height: 100vh; width: 100%; overflow-x: hidden; }
 
+/* ═══ Notifications: bell + red dot + slide-in panel (Strava-style) ═══ */
+.nav-bell-btn {
+  position: relative; background: none; border: 0; cursor: pointer;
+  width: 38px; height: 38px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-dim); transition: background 0.15s, color 0.15s;
+}
+.nav-bell-btn:hover { background: var(--bg-3); color: var(--text); }
+.nav-bell-dot {
+  position: absolute; top: 7px; right: 7px; width: 9px; height: 9px;
+  border-radius: 50%; background: #ef4444; border: 2px solid var(--bg);
+  display: none;
+}
+.nav-bell-dot.show { display: block; }
+.notif-backdrop {
+  position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5);
+  opacity: 0; pointer-events: none; transition: opacity 0.2s; z-index: 300;
+}
+.notif-backdrop.open { opacity: 1; pointer-events: auto; }
+.notif-panel {
+  position: fixed; top: 0; right: 0; bottom: 0; width: min(390px, 92vw);
+  background: var(--bg-2); border-left: 1px solid var(--border);
+  transform: translateX(100%); transition: transform 0.26s ease;
+  z-index: 301; display: flex; flex-direction: column;
+  padding-top: var(--safe-top);
+  box-shadow: -10px 0 44px rgba(0, 0, 0, 0.45);
+}
+.notif-panel.open { transform: translateX(0); }
+.notif-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 18px 14px; border-bottom: 1px solid var(--border);
+  font-size: 16px; font-weight: 700; flex-shrink: 0;
+}
+.notif-close { background: none; border: 0; color: var(--text-dim); font-size: 17px; cursor: pointer; padding: 4px 8px; }
+.notif-list { flex: 1; overflow-y: auto; padding: 6px; padding-bottom: calc(24px + var(--safe-bottom)); }
+.notif-item { display: flex; gap: 12px; padding: 14px 12px; border-radius: 12px; }
+.notif-item + .notif-item { border-top: 1px solid var(--border); }
+.notif-ico {
+  width: 38px; height: 38px; border-radius: 50%; background: var(--bg-3);
+  display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0;
+}
+.notif-item.unread .notif-ico { box-shadow: 0 0 0 2px var(--accent); }
+.notif-body { flex: 1; min-width: 0; }
+.notif-title { font-size: 13.5px; color: var(--text); font-weight: 600; line-height: 1.45; }
+.notif-sub { font-size: 12px; color: var(--text-dim); margin-top: 3px; line-height: 1.45; }
+.notif-time { font-size: 11px; color: var(--text-mute); margin-top: 5px; }
+.notif-actions { display: flex; gap: 6px; margin-top: 11px; flex-wrap: wrap; }
+.notif-actions button {
+  font-size: 12px; padding: 7px 13px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--bg-3); color: var(--text); font-family: inherit;
+}
+.notif-actions button.primary { background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 600; }
+.notif-empty { text-align: center; color: var(--text-mute); padding: 56px 24px; font-size: 13px; line-height: 1.7; }
+
 /* NAV */
 .nav {
   position: sticky; top: 0; z-index: 100;
@@ -4169,11 +4223,27 @@ body.on-auth .container {
     <div class="logo logo-wordmark-only" onclick="navigate('dashboard')">
       <span>Stryx<em>s</em></span>
     </div>
-    <button class="nav-user-btn" onclick="toggleAvatarMenu(event)" aria-label="Account menu">
-      <div class="user-avatar" id="navAvatar">A</div>
-    </button>
+    <div style="display: flex; align-items: center; gap: 4px;">
+      <button class="nav-bell-btn" id="navBellBtn" onclick="toggleNotifPanel()" aria-label="Notifications">
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        <span class="nav-bell-dot" id="navBellDot"></span>
+      </button>
+      <button class="nav-user-btn" onclick="toggleAvatarMenu(event)" aria-label="Account menu">
+        <div class="user-avatar" id="navAvatar">A</div>
+      </button>
+    </div>
   </div>
 </nav>
+
+<!-- Notifications slide-in panel (Strava-style) -->
+<div class="notif-backdrop" id="notifBackdrop" onclick="closeNotifPanel()"></div>
+<div class="notif-panel" id="notifPanel" aria-hidden="true">
+  <div class="notif-header">
+    <span>Notifications</span>
+    <button class="notif-close" onclick="closeNotifPanel()" aria-label="Close">✕</button>
+  </div>
+  <div class="notif-list" id="notifList"></div>
+</div>
 
 <!-- Slide-down nav menu panel -->
 <div class="nav-menu-backdrop" id="navMenuBackdrop" onclick="closeNavMenu()"></div>
@@ -5470,7 +5540,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v73',
+      app_version: 'v74',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -6169,6 +6239,8 @@ async function loadWorkouts() {
     const { data: intake } = await sb.from('athlete_intake').select('unit_preference').eq('user_id', state.user.id).maybeSingle();
     setUserUnits(intake?.unit_preference === 'imperial' ? 'imperial' : 'metric');
   } catch (_) {}
+  // Refresh the notifications bell (new/unclassified workouts) after data changes.
+  try { if (typeof refreshNotifBadge === 'function') refreshNotifBadge(); } catch (_) {}
 }
 
 async function saveWorkout(workout) {
@@ -6401,6 +6473,8 @@ function showApp() {
   document.getElementById('landingNav').style.display = 'none';
   // Show floating feedback widget for logged-in users
   showFeedbackWidget();
+  // Notifications bell badge (new / unclassified workouts).
+  try { if (typeof refreshNotifBadge === 'function') refreshNotifBadge(); } catch (_) {}
   const initial = (state.user.name || 'A')[0].toUpperCase();
   const avatarEl = document.getElementById('navAvatar');
   if (avatarEl) {
@@ -7346,6 +7420,7 @@ function navigate(page) {
     document.body.classList.remove('coach-chat-active');
     document.documentElement.classList.remove('coach-html-lock');
   }
+  try { if (typeof closeNotifPanel === 'function') closeNotifPanel(); } catch (_) {}
 
   // Hide old landingNav, auth pages now have their own embedded nav
   const landingNav = document.getElementById('landingNav');
@@ -7505,6 +7580,164 @@ function closeAvatarMenu() {
 function navigateAndCloseAvatarMenu(page) {
   closeAvatarMenu();
   navigate(page);
+}
+
+// ═══════════════════════════════════════════════════════════
+// NOTIFICATIONS (Strava-style bell + slide-in panel)
+// Derived live from the user's recent workouts — no extra table. Two kinds:
+//   • "clarify" — an unclassified workout we couldn't confidently bucket;
+//     actionable (Planned / Extra / Not training) right from the panel.
+//   • "logged" — informational, a recent workout was added.
+// Read-state is a per-user "last seen" timestamp in localStorage; the red dot
+// shows when something is newer than that, and clears when the panel is opened.
+// ═══════════════════════════════════════════════════════════
+function _notifSeenKey() { return state.user ? `stryxs_notif_seen_${state.user.id}` : null; }
+const _NOTIF_SPORT_EMOJI = { run: '🏃', running: '🏃', bike: '🚴', cycling: '🚴', swim: '🏊', swimming: '🏊', strength: '💪', gym: '💪', other: '⚡' };
+function _notifSportLabel(s) {
+  const m = { run: 'run', running: 'run', bike: 'ride', cycling: 'ride', swim: 'swim', swimming: 'swim', strength: 'gym session', gym: 'gym session' };
+  return m[(s || '').toLowerCase()] || (s || 'workout');
+}
+function _notifTimeAgo(iso) {
+  const t = new Date(iso).getTime();
+  if (isNaN(t)) return '';
+  const mins = Math.floor((Date.now() - t) / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+// Build the notification list from the last ~21 days of workouts.
+async function buildNotifications() {
+  if (!state.user) return [];
+  const out = [];
+  try {
+    const since = new Date(); since.setDate(since.getDate() - 21);
+    const { data: ws } = await sb.from('workouts')
+      .select('id, sport, created_at, activity_classification, workout_data')
+      .eq('user_id', state.user.id)
+      .gte('created_at', since.toISOString())
+      .order('created_at', { ascending: false })
+      .limit(40);
+    let loggedCount = 0;
+    for (const w of (ws || [])) {
+      const sport = (w.sport || w.workout_data?.sport || 'workout');
+      const cls = w.activity_classification || w.workout_data?.activity_classification || 'unclassified';
+      const dateStr = new Date(w.created_at).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+      const ico = _NOTIF_SPORT_EMOJI[sport.toLowerCase()] || '⚡';
+      if (cls === 'unclassified') {
+        out.push({
+          id: 'clarify_' + w.id, type: 'clarify', time: w.created_at, icon: ico, workoutId: String(w.id),
+          title: `Was your ${_notifSportLabel(sport)} on ${dateStr} planned or extra?`,
+          sub: "We logged it but couldn't tell if it was part of your plan. Tap one so Coach counts it right.",
+        });
+      } else if (cls !== 'daily_activity' && loggedCount < 10) {
+        loggedCount++;
+        out.push({
+          id: 'logged_' + w.id, type: 'logged', time: w.created_at, icon: ico,
+          title: `New ${_notifSportLabel(sport)} logged`,
+          sub: cls === 'plan' ? 'Counted toward your plan ✓' : 'Logged as extra training',
+        });
+      }
+    }
+  } catch (e) { console.warn('[Stryxs] buildNotifications failed:', e); }
+  // Newest first
+  out.sort((a, b) => new Date(b.time) - new Date(a.time));
+  return out;
+}
+
+async function refreshNotifBadge() {
+  const dot = document.getElementById('navBellDot');
+  if (!dot || !state.user) return;
+  try {
+    const notifs = await buildNotifications();
+    window._stryxsNotifs = notifs;
+    let lastSeen = 0;
+    try { lastSeen = parseInt(localStorage.getItem(_notifSeenKey()) || '0', 10) || 0; } catch (_) {}
+    const hasNew = notifs.some(n => new Date(n.time).getTime() > lastSeen);
+    dot.classList.toggle('show', hasNew);
+  } catch (_) {}
+}
+
+function toggleNotifPanel() {
+  const panel = document.getElementById('notifPanel');
+  if (!panel) return;
+  if (panel.classList.contains('open')) { closeNotifPanel(); return; }
+  closeAvatarMenu(); closeNavMenu();
+  renderNotifPanel();
+  panel.classList.add('open');
+  document.getElementById('notifBackdrop')?.classList.add('open');
+  panel.setAttribute('aria-hidden', 'false');
+}
+
+function closeNotifPanel() {
+  const panel = document.getElementById('notifPanel');
+  if (panel) { panel.classList.remove('open'); panel.setAttribute('aria-hidden', 'true'); }
+  document.getElementById('notifBackdrop')?.classList.remove('open');
+}
+
+async function renderNotifPanel() {
+  const list = document.getElementById('notifList');
+  if (!list) return;
+  list.innerHTML = '<div class="notif-empty">Loading…</div>';
+  const notifs = window._stryxsNotifs || await buildNotifications();
+  let lastSeen = 0;
+  try { lastSeen = parseInt(localStorage.getItem(_notifSeenKey()) || '0', 10) || 0; } catch (_) {}
+  if (!notifs.length) {
+    list.innerHTML = `<div class="notif-empty">🔔<br><br>You're all caught up.<br>Log or sync a workout and updates show up here.</div>`;
+  } else {
+    list.innerHTML = notifs.map(n => {
+      const unread = new Date(n.time).getTime() > lastSeen;
+      const actions = n.type === 'clarify' ? `
+        <div class="notif-actions">
+          <button class="primary" onclick="notifClassify(this, '${n.workoutId}', 'plan')">Planned</button>
+          <button onclick="notifClassify(this, '${n.workoutId}', 'extra_training')">Extra</button>
+          <button onclick="notifClassify(this, '${n.workoutId}', 'daily_activity')">Not training</button>
+        </div>` : '';
+      return `
+        <div class="notif-item ${unread ? 'unread' : ''}" data-notif="${n.id}">
+          <div class="notif-ico">${n.icon}</div>
+          <div class="notif-body">
+            <div class="notif-title">${escapeHtml(n.title)}</div>
+            ${n.sub ? `<div class="notif-sub">${escapeHtml(n.sub)}</div>` : ''}
+            <div class="notif-time">${_notifTimeAgo(n.time)}</div>
+            ${actions}
+          </div>
+        </div>`;
+    }).join('');
+  }
+  // Mark everything seen → clear the red dot.
+  try { localStorage.setItem(_notifSeenKey(), String(Date.now())); } catch (_) {}
+  document.getElementById('navBellDot')?.classList.remove('show');
+}
+
+// Clarify a workout straight from the notification (reuses classifyWorkout).
+async function notifClassify(btn, workoutId, classification) {
+  if (!state.user) return;
+  const item = btn.closest('.notif-item');
+  if (item) item.style.opacity = '0.55';
+  try {
+    await classifyWorkout(workoutId, classification);
+    if (item) {
+      const label = classification === 'plan' ? '✓ Marked as planned'
+        : classification === 'extra_training' ? '✓ Marked as extra training'
+        : '✓ Marked as not training';
+      const body = item.querySelector('.notif-body');
+      if (body) body.innerHTML = `<div class="notif-title" style="color: var(--accent);">${label}</div>`;
+      item.style.opacity = '1';
+    }
+    window._stryxsNotifs = null; // force rebuild next open
+    refreshNotifBadge();
+    // Repaint the dashboard week strip if it's on screen so the day updates.
+    if (typeof renderDashWeekStrip === 'function') { try { renderDashWeekStrip(); } catch (_) {} }
+  } catch (e) {
+    console.error('[Stryxs] notifClassify failed:', e);
+    toast('Could not update, try again.');
+    if (item) item.style.opacity = '1';
+  }
 }
 
 function confirmLogout() {
@@ -8108,19 +8341,19 @@ function renderManualEntryForm() {
         </div>
       </div>
 
-      <!-- Date + Duration row. min-width:0 on both cells stops the iOS date input
-           from forcing its column wide (which squeezed/blew out the duration box). -->
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-        <div style="min-width: 0;">
-          <label style="display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">${t('manual.date')}</label>
-          <input type="date" id="manualDate" value="${todayStr}" max="${todayStr}" style="width: 100%; min-width: 0; box-sizing: border-box; padding: 10px 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px;" />
-        </div>
-        <div style="min-width: 0;">
-          <label style="display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap;">${t('manual.duration')}</label>
-          <div style="display: flex; align-items: stretch; min-width: 0;">
-            <input type="number" id="manualDuration" min="1" step="1" inputmode="numeric" placeholder="45" style="flex: 1 1 0; min-width: 0; width: 100%; box-sizing: border-box; padding: 10px 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 8px 0 0 8px; border-right: none; color: var(--text); font-size: 14px;" />
-            <div style="flex-shrink: 0; display: flex; align-items: center; padding: 0 12px; background: var(--bg-4); border: 1px solid var(--border); border-radius: 0 8px 8px 0; color: var(--text-dim); font-size: 13px; font-weight: 600;">min</div>
-          </div>
+      <!-- Date + Duration, STACKED full-width. iOS date inputs don't honour
+           width:100% inside a grid cell (they size to their content), which made
+           the duration box look huge next to a shrunken date box. Stacking each
+           field full-width sidesteps that entirely and reads clean. -->
+      <div>
+        <label style="display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">${t('manual.date')}</label>
+        <input type="date" id="manualDate" value="${todayStr}" max="${todayStr}" style="width: 100%; box-sizing: border-box; padding: 11px 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px;" />
+      </div>
+      <div>
+        <label style="display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">${t('manual.duration')}</label>
+        <div style="display: flex; align-items: stretch; max-width: 200px;">
+          <input type="number" id="manualDuration" min="1" step="1" inputmode="numeric" placeholder="45" style="flex: 1 1 0; min-width: 0; box-sizing: border-box; padding: 11px 12px; background: var(--bg-3); border: 1px solid var(--border); border-right: none; border-radius: 8px 0 0 8px; color: var(--text); font-size: 14px;" />
+          <div style="flex-shrink: 0; display: flex; align-items: center; padding: 0 14px; background: var(--bg-4); border: 1px solid var(--border); border-radius: 0 8px 8px 0; color: var(--text-dim); font-size: 13px; font-weight: 600;">min</div>
         </div>
       </div>
 
@@ -18669,9 +18902,7 @@ async function renderPublicShare(token) {
     container.innerHTML = `
       <div style="max-width: 760px; margin: 0 auto; padding: 36px 20px 64px; position: relative;">
         <div style="display: flex; justify-content: center; margin-bottom: 36px;">
-          <a href="/" style="display: flex; align-items: center; gap: 4px; text-decoration: none; color: var(--text); font-weight: 400; font-family: 'Instrument Serif', serif; font-size: 30px; letter-spacing: -0.5px; -webkit-font-smoothing: antialiased;">
-            Stryx<em style="color: var(--accent); font-style: italic;">s</em>
-          </a>
+          <a href="/" style="text-decoration: none; color: var(--text); font-weight: 400; font-family: 'Instrument Serif', serif; font-size: 30px; letter-spacing: -0.5px; line-height: 1; -webkit-font-smoothing: antialiased;">Stryx<em style="color: var(--accent); font-style: italic; font-family: 'Instrument Serif', serif;">s</em></a>
         </div>
         ${headerHTML}
         ${weeksHTML}
