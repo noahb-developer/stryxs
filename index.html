@@ -5566,7 +5566,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v75',
+      app_version: 'v76',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -8439,19 +8439,20 @@ function renderManualEntryForm() {
         </div>
       </div>
 
-      <!-- Date + Duration SIDE BY SIDE. Date flexes to fill, Duration is a fixed
-           compact box (with a "min" suffix) so it never balloons. Using flex with
-           min-width:0 (not grid) keeps the iOS date input from blowing out. -->
+      <!-- Date + Duration SIDE BY SIDE. Both are single inputs with an explicit
+           44px height, so they're guaranteed the same height and stay aligned (the
+           old suffix-box version computed a slightly different height = misaligned).
+           "min" is overlaid INSIDE the duration input, not a separate box. -->
       <div style="display: flex; gap: 12px; align-items: flex-end;">
         <div style="flex: 1 1 auto; min-width: 0;">
           <label style="display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">${t('manual.date')}</label>
-          <input type="date" id="manualDate" value="${todayStr}" max="${todayStr}" style="width: 100%; box-sizing: border-box; padding: 11px 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px;" />
+          <input type="date" id="manualDate" value="${todayStr}" max="${todayStr}" style="width: 100%; height: 44px; box-sizing: border-box; padding: 0 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px;" />
         </div>
-        <div style="flex: 0 0 132px; width: 132px;">
+        <div style="flex: 0 0 122px; width: 122px;">
           <label style="display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap;">${t('manual.duration')}</label>
-          <div style="display: flex; align-items: stretch;">
-            <input type="number" id="manualDuration" min="1" step="1" inputmode="numeric" placeholder="45" style="flex: 1 1 0; min-width: 0; box-sizing: border-box; padding: 11px 0 11px 12px; background: var(--bg-3); border: 1px solid var(--border); border-right: none; border-radius: 8px 0 0 8px; color: var(--text); font-size: 14px;" />
-            <div style="flex-shrink: 0; display: flex; align-items: center; padding: 0 11px; background: var(--bg-4); border: 1px solid var(--border); border-radius: 0 8px 8px 0; color: var(--text-dim); font-size: 13px; font-weight: 600;">min</div>
+          <div style="position: relative;">
+            <input type="number" id="manualDuration" min="1" step="1" inputmode="numeric" placeholder="45" style="width: 100%; height: 44px; box-sizing: border-box; padding: 0 40px 0 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px;" />
+            <span style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--text-dim); font-size: 13px; font-weight: 600; pointer-events: none;">min</span>
           </div>
         </div>
       </div>
@@ -18649,53 +18650,22 @@ async function openShareModal() {
       return;
     }
 
-    // Group dates by ISO week (week starts Monday)
-    const weeks = {};
-    for (const p of planned) {
-      const d = new Date(p.scheduled_date + 'T12:00:00');
-      const day = d.getDay();
-      const mondayOffset = day === 0 ? -6 : 1 - day;
-      const monday = new Date(d);
-      monday.setDate(d.getDate() + mondayOffset);
-      const weekKey = monday.toISOString().split('T')[0];
-      if (!weeks[weekKey]) weeks[weekKey] = { start: weekKey, count: 0 };
-      weeks[weekKey].count++;
-    }
-    const weekList = Object.values(weeks).sort((a, b) => a.start.localeCompare(b.start));
-
-    // Pre-select weeks based on existing share, or all weeks if no existing share
-    const preSelected = existingShare?.weeks_to_share || weekList.map(w => w.start);
     const showProfilePref = existingShare ? existingShare.show_profile : true;
 
     body.innerHTML = `
       <p style="color: var(--text-dim); font-size: 14px; line-height: 1.55; margin-bottom: 18px;">Send a public read-only link to your coach, friends, or training partners. They won't need a Stryxs account.</p>
 
-      <div style="margin-bottom: 18px;">
-        <div style="font-size: 13px; color: var(--text); font-weight: 600; margin-bottom: 10px;">Which weeks to share?</div>
-        <div id="shareWeeksList" style="display: flex; flex-direction: column; gap: 8px; max-height: 200px; overflow-y: auto; padding: 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px;">
-          ${weekList.map(w => {
-            const startDate = new Date(w.start + 'T12:00:00');
-            const endDate = new Date(startDate);
-            endDate.setDate(startDate.getDate() + 6);
-            const label = `${startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
-            const checked = preSelected.includes(w.start) ? 'checked' : '';
-            return `
-              <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 6px 0; font-size: 14px;">
-                <input type="checkbox" class="share-week-cb" data-week="${w.start}" ${checked} style="width: 16px; height: 16px; accent-color: var(--accent);">
-                <span>${label}</span>
-                <span style="margin-left: auto; font-size: 12px; color: var(--text-dim);">${w.count} workout${w.count === 1 ? '' : 's'}</span>
-              </label>
-            `;
-          }).join('')}
-        </div>
+      <div style="margin-bottom: 18px; padding: 14px 16px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; font-size: 13px; color: var(--text-dim); line-height: 1.55;">
+        <div style="color: var(--text); font-weight: 600; margin-bottom: 4px;">📋 What they'll see</div>
+        How your plan is structured + your latest training week. It always shows your <strong style="color: var(--text);">current</strong> week, so you only share once.
       </div>
 
       <div style="margin-bottom: 20px; padding: 14px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px;">
         <label style="display: flex; align-items: flex-start; gap: 10px; cursor: pointer;">
           <input type="checkbox" id="shareShowProfile" ${showProfilePref ? 'checked' : ''} style="width: 16px; height: 16px; accent-color: var(--accent); margin-top: 2px; flex-shrink: 0;">
           <div>
-            <div style="font-size: 14px; color: var(--text); font-weight: 600;">Show my profile info</div>
-            <div style="font-size: 12px; color: var(--text-dim); margin-top: 2px; line-height: 1.4;">Includes your name, goal event, experience level, and LTHRs. Recommended for sharing with coaches.</div>
+            <div style="font-size: 14px; color: var(--text); font-weight: 600;">Show my name &amp; progress</div>
+            <div style="font-size: 12px; color: var(--text-dim); margin-top: 2px; line-height: 1.4;">Adds your name, goal, and how many weeks you've been training. Off = shared anonymously (plan + latest week only).</div>
           </div>
         </label>
       </div>
@@ -18728,13 +18698,7 @@ function closeShareModal() {
 async function saveShareSettings() {
   if (!state.user) return;
 
-  // Get selected weeks
-  const checkboxes = document.querySelectorAll('.share-week-cb:checked');
-  const weeks = Array.from(checkboxes).map(cb => cb.dataset.week);
-  if (weeks.length === 0) {
-    toast('Pick at least one week to share');
-    return;
-  }
+  // No week-picker anymore — the public page always renders the latest week live.
   const showProfile = document.getElementById('shareShowProfile').checked;
 
   try {
@@ -18750,7 +18714,6 @@ async function saveShareSettings() {
     if (existing) {
       // Update existing share
       await sb.from('shared_plans').update({
-        weeks_to_share: weeks,
         show_profile: showProfile,
       }).eq('id', existing.id);
       toast('Share settings updated');
@@ -18759,10 +18722,11 @@ async function saveShareSettings() {
       const token = Array.from(crypto.getRandomValues(new Uint8Array(12)))
         .map(b => b.toString(36).padStart(2, '0')).join('').slice(0, 16);
 
+      // weeks_to_share kept as [] for back-compat with the column (NOT NULL safety).
       await sb.from('shared_plans').insert({
         user_id: state.user.id,
         share_token: token,
-        weeks_to_share: weeks,
+        weeks_to_share: [],
         show_profile: showProfile,
         active: true,
       });
@@ -18829,38 +18793,37 @@ async function renderPublicShare(token) {
 
     const userId = share.user_id;
     const showProfile = share.show_profile;
-    const weeksToShare = share.weeks_to_share || [];
 
-    // Fetch profile + intake (only if show_profile is true)
+    // Always fetch intake for the plan explainer (goal/methodology = plan info, not
+    // personal). Profile (name, LTHRs) only when the athlete opted to show it.
     let profile = null, intake = null;
-    if (showProfile) {
-      const { data: p } = await sb.from('profiles').select('*').eq('id', userId).maybeSingle();
-      const { data: i } = await sb.from('athlete_intake').select('*').eq('user_id', userId).maybeSingle();
-      profile = p;
+    {
+      const { data: i } = await sb.from('athlete_intake').select('goal_event, race_date, experience_level').eq('user_id', userId).maybeSingle();
       intake = i;
     }
+    if (showProfile) {
+      const { data: p } = await sb.from('profiles').select('*').eq('id', userId).maybeSingle();
+      profile = p;
+    }
 
-    // Calculate date ranges from selected weeks
-    const dateRanges = weeksToShare.map(weekStart => {
-      const start = new Date(weekStart + 'T12:00:00');
-      const end = new Date(start);
-      end.setDate(start.getDate() + 6);
-      return { start: weekStart, end: end.toISOString().split('T')[0] };
-    });
-
-    // Fetch planned workouts within those date ranges
+    // ── Latest training week(s), computed live (no week-picker). We show the most
+    //    recent week that's already underway/finished — the share always reflects
+    //    where the athlete is now, instead of a frozen hand-picked list. ──
+    const todayYMD = new Date().toISOString().split('T')[0];
+    const winStart = new Date(); winStart.setDate(winStart.getDate() - 16);
+    const winEnd = new Date(); winEnd.setDate(winEnd.getDate() + 8);
     let allWorkouts = [];
-    for (const range of dateRanges) {
+    {
       const { data: ws } = await sb.from('planned_workouts')
         .select('*')
         .eq('user_id', userId)
-        .gte('scheduled_date', range.start)
-        .lte('scheduled_date', range.end)
+        .gte('scheduled_date', winStart.toISOString().split('T')[0])
+        .lte('scheduled_date', winEnd.toISOString().split('T')[0])
         .order('scheduled_date', { ascending: true });
-      if (ws) allWorkouts = allWorkouts.concat(ws);
+      allWorkouts = ws || [];
     }
 
-    // Group by week
+    // Group by week (Mon start)
     const weekMap = {};
     for (const w of allWorkouts) {
       const d = new Date(w.scheduled_date + 'T12:00:00');
@@ -18871,6 +18834,13 @@ async function renderPublicShare(token) {
       const weekKey = monday.toISOString().split('T')[0];
       if (!weekMap[weekKey]) weekMap[weekKey] = [];
       weekMap[weekKey].push(w);
+    }
+    // Keep only the most recent 2 weeks that have already started (Monday ≤ today);
+    // for a brand-new plan that hasn't begun, fall back to the first 2 weeks.
+    {
+      const started = Object.keys(weekMap).filter(k => k <= todayYMD).sort();
+      const finalKeys = started.length ? started.slice(-2) : Object.keys(weekMap).sort().slice(0, 2);
+      for (const k of Object.keys(weekMap)) { if (!finalKeys.includes(k)) delete weekMap[k]; }
     }
 
     const sportEmoji = { run: '🏃', bike: '🚴', swim: '🏊', strength: '💪', rest: '😴' };
@@ -18939,7 +18909,7 @@ async function renderPublicShare(token) {
     let weeksHTML = '';
     const sortedWeeks = Object.keys(weekMap).sort();
     if (sortedWeeks.length === 0) {
-      weeksHTML = '<div style="text-align: center; padding: 40px 20px; color: var(--text-dim);">No workouts in the selected weeks.</div>';
+      weeksHTML = '<div style="text-align: center; padding: 40px 20px; color: var(--text-dim);">This plan hasn\'t started yet, check back once training is underway.</div>';
     } else {
       for (const weekKey of sortedWeeks) {
         const weekWorkouts = weekMap[weekKey];
@@ -18998,12 +18968,44 @@ async function renderPublicShare(token) {
       }
     }
 
+    // ── Plan-structure explainer (how this plan works), keyed by goal ──
+    const planExplainers = {
+      ironman:       { method: 'Joe Friel methodology', text: 'A polarized base: one long endurance session a week, 2–3 quality workouts (threshold, tempo, VO2), strength 2–3×, and ~80% of the volume kept genuinely easy.' },
+      ironman_70_3:  { method: 'Friel + Sutton', text: 'Balanced swim / bike / run with a long brick-style session, two quality workouts, strength, and most volume aerobic.' },
+      '70_3':        { method: 'Friel + Sutton', text: 'Balanced swim / bike / run with a long brick-style session, two quality workouts, strength, and most volume aerobic.' },
+      olympic_tri:   { method: 'Friel multisport', text: 'Swim / bike / run balance with sharper intervals as race day nears, plus easy aerobic support.' },
+      sprint_tri:    { method: 'Friel multisport', text: 'Short, sharp sessions across all three sports with easy support volume.' },
+      marathon:      { method: 'Pfitzinger + Daniels', text: 'A weekly long run, one to two quality sessions (tempo, intervals), easy mileage to build the aerobic engine, and a deload every few weeks.' },
+      half_marathon: { method: 'Daniels + Pfitzinger', text: 'A weekly long run, tempo and interval work, and easy aerobic mileage between the hard days.' },
+      '10k':         { method: 'Daniels VDOT', text: 'Sharpening intervals and threshold work on top of a steady aerobic base.' },
+      '5k':          { method: 'Daniels VDOT', text: 'Speed and threshold sessions supported by easy aerobic runs.' },
+      short_run:     { method: 'Daniels VDOT', text: 'Speed and threshold sessions supported by easy aerobic runs.' },
+      general:       { method: 'Attia + Seiler', text: 'A Zone-2 aerobic base, a couple of harder weekly efforts, and regular strength for long-term health.' },
+    };
+    const ex = planExplainers[intake?.goal_event] || planExplainers.general;
+    const explainerHTML = `
+      <div style="margin-bottom: 28px; padding: 22px 24px; background: rgba(20, 26, 38, 0.6); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 18px;">
+        <div style="font-size: 11px; color: var(--accent); text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; margin-bottom: 10px;">How this plan works</div>
+        <div style="font-size: 14.5px; color: rgba(232, 237, 245, 0.9); line-height: 1.65; margin-bottom: 14px;">Built on <strong style="color: var(--text);">${ex.method}</strong>. ${ex.text}</div>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+          <span style="font-size: 12px; color: var(--text-dim); padding: 6px 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 999px;">🎯 Adapts to your data</span>
+          <span style="font-size: 12px; color: var(--text-dim); padding: 6px 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 999px;">📈 Progressive build</span>
+          <span style="font-size: 12px; color: var(--text-dim); padding: 6px 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 999px;">💚 Easy days stay easy</span>
+        </div>
+      </div>
+    `;
+    const weeksHeadingHTML = Object.keys(weekMap).length
+      ? `<div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; margin-bottom: 14px;">Latest training</div>`
+      : '';
+
     container.innerHTML = `
       <div style="max-width: 760px; margin: 0 auto; padding: 36px 20px 64px; position: relative;">
         <div style="display: flex; justify-content: center; margin-bottom: 36px;">
           <a href="/" style="text-decoration: none; color: var(--text); font-weight: 400; font-family: 'Instrument Serif', serif; font-size: 30px; letter-spacing: -0.5px; line-height: 1; -webkit-font-smoothing: antialiased;">Stryx<em style="color: var(--accent); font-style: italic; font-family: 'Instrument Serif', serif;">s</em></a>
         </div>
         ${headerHTML}
+        ${explainerHTML}
+        ${weeksHeadingHTML}
         ${weeksHTML}
 
         <div style="margin-top: 48px; padding: 32px 28px; background: linear-gradient(135deg, rgba(0, 255, 163, 0.08), rgba(80, 130, 255, 0.05)); border: 1px solid rgba(0, 255, 163, 0.2); border-radius: 20px; text-align: center; position: relative; overflow: hidden;">
