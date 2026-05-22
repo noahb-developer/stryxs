@@ -190,7 +190,8 @@ body.app-loading #appSplash {
   position: fixed; inset: 0;
   background: var(--bg);
   z-index: 10000;
-  padding-top: var(--safe-top);
+  /* No safe-area padding here, it pushed the mark down and off-centre. The mark
+     sits in the middle of the viewport, nowhere near the notch. */
 }
 #appSplash .splash-mark {
   font-family: 'Instrument Serif', serif;
@@ -4652,6 +4653,11 @@ body.on-auth .container {
       <span class="analyze-toggle-label" data-i18n="analyze.toggle.upload">Upload file</span>
       <span class="analyze-toggle-chev">▾</span>
     </button>
+    <button class="analyze-toggle" id="toggleFromHistory" onclick="navigate('history')">
+      <span class="analyze-toggle-icon">📂</span>
+      <span class="analyze-toggle-label" data-i18n="analyze.toggle.history">From history</span>
+      <span class="analyze-toggle-chev">→</span>
+    </button>
   </div>
 
   <!-- ═══ AUTO-SYNC PANEL (collapsed by default) ═══ -->
@@ -5079,6 +5085,7 @@ const I18N = {
     'analyze.toggle.autosync': 'Auto-sync',
     'analyze.toggle.manual': 'Log manually',
     'analyze.toggle.upload': 'Upload file',
+    'analyze.toggle.history': 'From history',
     'manual.header': 'Log a workout by hand.',
     'manual.header_sub': "Useful if you don't want to use Strava or just want to log something quick. Coach reads these like any other workout.",
     'manual.sport': 'Sport',
@@ -5463,7 +5470,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v72',
+      app_version: 'v73',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -8101,17 +8108,18 @@ function renderManualEntryForm() {
         </div>
       </div>
 
-      <!-- Date + Duration row -->
+      <!-- Date + Duration row. min-width:0 on both cells stops the iOS date input
+           from forcing its column wide (which squeezed/blew out the duration box). -->
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-        <div>
+        <div style="min-width: 0;">
           <label style="display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">${t('manual.date')}</label>
-          <input type="date" id="manualDate" value="${todayStr}" max="${todayStr}" style="width: 100%; padding: 10px 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px;" />
+          <input type="date" id="manualDate" value="${todayStr}" max="${todayStr}" style="width: 100%; min-width: 0; box-sizing: border-box; padding: 10px 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px;" />
         </div>
-        <div>
+        <div style="min-width: 0;">
           <label style="display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap;">${t('manual.duration')}</label>
-          <div style="display: flex; align-items: stretch;">
-            <input type="number" id="manualDuration" min="1" step="1" inputmode="numeric" placeholder="45" style="flex: 1; min-width: 0; padding: 10px 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 8px 0 0 8px; border-right: none; color: var(--text); font-size: 14px;" />
-            <div style="display: flex; align-items: center; padding: 0 12px; background: var(--bg-4); border: 1px solid var(--border); border-radius: 0 8px 8px 0; color: var(--text-dim); font-size: 13px; font-weight: 600;">min</div>
+          <div style="display: flex; align-items: stretch; min-width: 0;">
+            <input type="number" id="manualDuration" min="1" step="1" inputmode="numeric" placeholder="45" style="flex: 1 1 0; min-width: 0; width: 100%; box-sizing: border-box; padding: 10px 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 8px 0 0 8px; border-right: none; color: var(--text); font-size: 14px;" />
+            <div style="flex-shrink: 0; display: flex; align-items: center; padding: 0 12px; background: var(--bg-4); border: 1px solid var(--border); border-radius: 0 8px 8px 0; color: var(--text-dim); font-size: 13px; font-weight: 600;">min</div>
           </div>
         </div>
       </div>
@@ -9396,6 +9404,10 @@ function _stryxsAttachChartHover(chartId) {
   const data = window._stryxsChartData[chartId];
   if (!data) return;
   svg.dataset.bound = '1';
+  // On touch, dragging across the chart should scrub the crosshair WITHOUT also
+  // scrolling the page (you couldn't control both). touch-action:none makes the
+  // chart own the gesture; scroll the page by touching above/below it instead.
+  svg.style.touchAction = 'none';
   const wrap = document.getElementById(chartId + '_wrap');
   if (!wrap) return;
   const cursor = svg.querySelector('.stryxs-cursor');
@@ -11027,7 +11039,7 @@ async function renderDashTodayCard(intake) {
     : '';
 
   card.innerHTML = `
-    <div class="panel" style="margin-bottom: 14px; background: linear-gradient(135deg, rgba(0, 229, 160, 0.04), transparent); border-color: rgba(0, 229, 160, 0.2); cursor: pointer;" onclick="navigate('plan')">
+    <div class="panel" style="margin-bottom: 14px; background: linear-gradient(135deg, rgba(0, 229, 160, 0.04), transparent); border-color: rgba(0, 229, 160, 0.2); cursor: pointer;" onclick="openPlanWorkout('${today}')">
       <div style="display: flex; align-items: center; gap: 14px;">
         <div style="font-size: 32px; flex-shrink: 0;">${sportEmoji}</div>
         <div style="flex: 1; min-width: 0;">
@@ -11088,20 +11100,32 @@ async function renderDashWeekStrip() {
     console.warn('[Stryxs] week strip query failed:', e);
   }
 
-  // Map: dateStr → { hasPlanned: bool, hasCompleted: bool }
+  // Map each day → planned sports + completed sports, so we can tell whether a
+  // logged workout actually MATCHES the planned session (a gym + bike day does
+  // NOT complete a planned run — that's "extra", not "done").
   const dayMap = {};
-  for (const d of days) dayMap[d.dateStr] = { hasPlanned: false, hasCompleted: false, hasSkipped: false };
+  for (const d of days) dayMap[d.dateStr] = { hasPlanned: false, hasSkipped: false, plannedSports: [], completedSports: [] };
   for (const p of planned) {
-    if (dayMap[p.scheduled_date]) {
-      dayMap[p.scheduled_date].hasPlanned = true;
-      if (p.skipped) dayMap[p.scheduled_date].hasSkipped = true;
-    }
+    const dm = dayMap[p.scheduled_date];
+    if (!dm) continue;
+    dm.hasPlanned = true;
+    if (p.skipped) dm.hasSkipped = true;
+    if (p.sport && p.sport !== 'rest') dm.plannedSports.push(normalizeSport(p.sport));
   }
   for (const c of completed) {
     // Bucket by LOCAL day (was previously taking the UTC date out of the
     // ISO string, which mis-bucketed late-night workouts by one day).
     const d = c.created_at ? toLocalYMD(new Date(c.created_at)) : null;
-    if (d && dayMap[d]) dayMap[d].hasCompleted = true;
+    if (d && dayMap[d] && c.sport) dayMap[d].completedSports.push(normalizeSport(c.sport));
+  }
+  for (const k in dayMap) {
+    const dm = dayMap[k];
+    dm.trained = dm.completedSports.length > 0;
+    dm.matched = dm.trained && dm.completedSports.some(cs => dm.plannedSports.includes(cs));
+    // "Did the plan" if a matching sport was logged, OR they trained on a day
+    // with nothing planned (bonus training). Mismatched-on-a-planned-day = extra.
+    dm.didPlan = dm.matched || (dm.trained && !dm.hasPlanned);
+    dm.isExtra = dm.trained && !dm.didPlan;
   }
 
   card.innerHTML = `
@@ -11116,9 +11140,15 @@ async function renderDashWeekStrip() {
           let dotColor = 'rgba(255, 255, 255, 0.08)';
           let dotLabel = '';
           let darkText = false;
-          if (dm.hasCompleted) {
+          if (dm.didPlan) {
+            // Did the planned session (matching sport), or trained on a free day.
             dotColor = 'var(--accent)';
             dotLabel = '✓';
+            darkText = true;
+          } else if (dm.isExtra) {
+            // Trained, but it didn't match the planned session → "extra", not done.
+            dotColor = 'rgba(167, 139, 250, 0.9)';
+            dotLabel = '+';
             darkText = true;
           } else if (dm.hasSkipped) {
             // Excused skip (sick/injured/etc.) gets its own amber state, NOT "missed".
@@ -11143,6 +11173,7 @@ async function renderDashWeekStrip() {
       </div>
       <div style="display: flex; gap: 14px; margin-top: 10px; font-size: 10px; color: var(--text-mute); flex-wrap: wrap;">
         <div style="display: flex; align-items: center; gap: 4px;"><div style="width: 8px; height: 8px; border-radius: 50%; background: var(--accent);"></div>Done</div>
+        <div style="display: flex; align-items: center; gap: 4px;"><div style="width: 8px; height: 8px; border-radius: 50%; background: rgba(167, 139, 250, 0.9);"></div>Extra</div>
         <div style="display: flex; align-items: center; gap: 4px;"><div style="width: 8px; height: 8px; border-radius: 50%; background: rgba(80, 130, 255, 0.6);"></div>Planned</div>
         <div style="display: flex; align-items: center; gap: 4px;"><div style="width: 8px; height: 8px; border-radius: 50%; background: rgba(255, 196, 0, 0.9);"></div>Skipped</div>
         <div style="display: flex; align-items: center; gap: 4px;"><div style="width: 8px; height: 8px; border-radius: 50%; background: rgba(239, 68, 68, 0.6);"></div>Missed</div>
@@ -18521,6 +18552,28 @@ async function renderPublicShare(token) {
     const goalText = intake?.goal_event ? (goalLabels[intake.goal_event] || intake.goal_event) : '';
     const raceDate = intake?.race_date ? new Date(intake.race_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : '';
 
+    // How long they've been following the program — a warmer, more motivational
+    // stat than LTHR/level for a public share. Computed from their first planned day.
+    let journeyLabel = '';
+    try {
+      const { data: firstPw } = await sb.from('planned_workouts')
+        .select('scheduled_date')
+        .eq('user_id', userId)
+        .order('scheduled_date', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (firstPw?.scheduled_date) {
+        const start = new Date(firstPw.scheduled_date + 'T12:00:00');
+        const days = Math.floor((Date.now() - start.getTime()) / (24 * 60 * 60 * 1000));
+        if (days >= 7) {
+          const weeks = Math.floor(days / 7) + 1;
+          journeyLabel = `Week ${weeks} of the journey`;
+        } else if (days >= 0) {
+          journeyLabel = 'Just getting started';
+        }
+      }
+    } catch (_) {}
+
     let headerHTML = '';
     if (showProfile && profile) {
       const name = profile.display_name || profile.name || 'Athlete';
@@ -18530,26 +18583,12 @@ async function renderPublicShare(token) {
           <div style="font-size: 12px; color: var(--accent); text-transform: uppercase; letter-spacing: 2px; font-weight: 600; margin-bottom: 10px;">Training Plan</div>
           <h1 style="font-size: 36px; font-weight: 400; margin-bottom: 10px; font-family: 'Instrument Serif', serif; line-height: 1.1; letter-spacing: -0.5px;">${name}'s <em style="color: var(--accent); font-style: italic;">journey</em></h1>
           ${goalText ? `<div style="color: var(--text-dim); font-size: 16px; margin-top: 14px;">Building toward <strong style="color: var(--text); font-weight: 600;">${goalText}</strong>${raceDate ? `<br><span style="font-size: 13px; color: var(--text-mute);">${raceDate}</span>` : ''}</div>` : ''}
-          ${intake?.experience_level || profile.run_lthr || profile.bike_lthr ? `
-            <div style="display: flex; gap: 24px; justify-content: center; margin-top: 22px; flex-wrap: wrap; padding-top: 22px; border-top: 1px solid rgba(255, 255, 255, 0.06);">
-              ${intake?.experience_level ? `
-                <div style="text-align: center;">
-                  <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px;">Level</div>
-                  <div style="font-size: 14px; font-weight: 600; color: var(--text); text-transform: capitalize;">${intake.experience_level}</div>
-                </div>
-              ` : ''}
-              ${profile.run_lthr ? `
-                <div style="text-align: center;">
-                  <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px;">Run LTHR</div>
-                  <div style="font-size: 14px; font-weight: 600; color: var(--text); font-family: 'JetBrains Mono', monospace;">${profile.run_lthr} <span style="font-size: 11px; color: var(--text-dim); font-weight: 400;">bpm</span></div>
-                </div>
-              ` : ''}
-              ${profile.bike_lthr ? `
-                <div style="text-align: center;">
-                  <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px;">Bike LTHR</div>
-                  <div style="font-size: 14px; font-weight: 600; color: var(--text); font-family: 'JetBrains Mono', monospace;">${profile.bike_lthr} <span style="font-size: 11px; color: var(--text-dim); font-weight: 400;">bpm</span></div>
-                </div>
-              ` : ''}
+          ${journeyLabel ? `
+            <div style="margin-top: 22px; padding-top: 22px; border-top: 1px solid rgba(255, 255, 255, 0.06);">
+              <div style="display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; background: rgba(0, 229, 160, 0.1); border: 1px solid rgba(0, 229, 160, 0.25); border-radius: 999px;">
+                <span style="font-size: 15px;">🔥</span>
+                <span style="font-size: 14px; font-weight: 700; color: var(--accent);">${journeyLabel}</span>
+              </div>
             </div>
           ` : ''}
         </div>
@@ -18606,7 +18645,7 @@ async function renderPublicShare(token) {
                 const isRest = w.sport === 'rest' || (w.duration_minutes === 0 && (!w.distance_km || w.distance_km === 0));
                 const isLast = i === weekWorkouts.length - 1;
                 return `
-                  <div style="padding: 16px 22px; ${!isLast ? 'border-bottom: 1px solid rgba(255, 255, 255, 0.04);' : ''} display: flex; gap: 16px; align-items: flex-start; ${isRest ? 'opacity: 0.55;' : ''}">
+                  <div style="padding: 16px 22px; ${!isLast ? 'border-bottom: 1px solid rgba(255, 255, 255, 0.04);' : ''} display: flex; gap: 16px; align-items: flex-start; ${isRest ? 'opacity: 0.82;' : ''}">
                     <div style="font-size: 26px; flex-shrink: 0; width: 40px; text-align: center; line-height: 1.2;">${sportEmoji[w.sport] || '🏃'}</div>
                     <div style="flex: 1; min-width: 0;">
                       <div style="display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; margin-bottom: 6px;">
@@ -18615,7 +18654,7 @@ async function renderPublicShare(token) {
                         <span style="font-size: 11px; color: var(--accent); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; padding: 2px 8px; background: rgba(0, 255, 163, 0.08); border-radius: 4px;">${w.workout_type || w.sport}</span>
                         ${!isRest ? `<span style="font-size: 12px; color: var(--text-dim); font-family: 'JetBrains Mono', monospace;">${w.duration_minutes ? `${w.duration_minutes}min` : '—min'}${w.distance_km ? ` · ${parseFloat(w.distance_km).toFixed(1)}km` : (w.sport !== 'strength' && w.sport !== 'rest' ? ' · —km' : '')}</span>` : ''}
                       </div>
-                      <div style="font-size: 13.5px; color: var(--text-dim); line-height: 1.55;">${w.description || ''}</div>
+                      <div style="font-size: 14px; color: rgba(232, 237, 245, 0.78); line-height: 1.6;">${w.description || ''}</div>
                       ${w.intensity_target ? `<div style="font-size: 11px; color: var(--accent); margin-top: 6px; font-weight: 600;">→ ${w.intensity_target}</div>` : ''}
                     </div>
                   </div>
@@ -18630,7 +18669,7 @@ async function renderPublicShare(token) {
     container.innerHTML = `
       <div style="max-width: 760px; margin: 0 auto; padding: 36px 20px 64px; position: relative;">
         <div style="display: flex; justify-content: center; margin-bottom: 36px;">
-          <a href="/" style="display: flex; align-items: center; gap: 4px; text-decoration: none; color: var(--text); font-weight: 700; font-family: 'Instrument Serif', serif; font-size: 26px; letter-spacing: -0.5px;">
+          <a href="/" style="display: flex; align-items: center; gap: 4px; text-decoration: none; color: var(--text); font-weight: 400; font-family: 'Instrument Serif', serif; font-size: 30px; letter-spacing: -0.5px; -webkit-font-smoothing: antialiased;">
             Stryx<em style="color: var(--accent); font-style: italic;">s</em>
           </a>
         </div>
@@ -19850,6 +19889,23 @@ function renderCalendarGrid(plannedWorkouts) {
   }
 
   grid.innerHTML = html;
+}
+
+// Open the Plan tab AND pop the workout-detail panel for a given date (used by
+// the dashboard "today" card so a tap goes straight to the session, not just the
+// calendar). Sets the calendar to that month, then waits for the grid to populate.
+function openPlanWorkout(dateStr) {
+  try { const m = new Date(dateStr + 'T12:00:00'); m.setDate(1); calMonth = m; } catch (_) {}
+  navigate('plan');
+  let tries = 0;
+  const tryOpen = () => {
+    if (typeof currentPlannedWorkouts !== 'undefined' && currentPlannedWorkouts[dateStr] && currentPlannedWorkouts[dateStr].length) {
+      openWorkoutPanel(dateStr);
+    } else if (tries++ < 25) {
+      setTimeout(tryOpen, 100);
+    }
+  };
+  setTimeout(tryOpen, 200);
 }
 
 function openWorkoutPanel(dateStr) {
