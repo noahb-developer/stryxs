@@ -298,10 +298,23 @@ body.on-landing #landingNav { display: none !important; }
 .notif-panel.open { transform: translateX(0); }
 .notif-header {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 18px 18px 14px; border-bottom: 1px solid var(--border);
-  font-size: 16px; font-weight: 700; flex-shrink: 0;
+  padding: 12px 14px; border-bottom: 1px solid var(--border); flex-shrink: 0;
 }
-.notif-close { background: none; border: 0; color: var(--text-dim); font-size: 17px; cursor: pointer; padding: 4px 8px; }
+.notif-title { font-size: 16px; font-weight: 700; color: var(--text); }
+.notif-back {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: none; border: 0; color: var(--text); cursor: pointer;
+  font-size: 16px; font-weight: 600; font-family: inherit;
+  padding: 8px 10px 8px 6px; border-radius: 10px; margin: -4px 0;
+}
+.notif-back:hover { background: var(--bg-3); }
+.notif-back svg { flex-shrink: 0; }
+/* Full-screen on phones, drawer on larger screens. */
+@media (max-width: 720px) {
+  .notif-panel { width: 100vw; max-width: 100vw; border-left: none; }
+  .notif-header { padding: 14px 12px; }
+  .notif-back { font-size: 17px; }
+}
 .notif-list { flex: 1; overflow-y: auto; padding: 6px; padding-bottom: calc(24px + var(--safe-bottom)); }
 .notif-item { display: flex; gap: 12px; padding: 14px 12px; border-radius: 12px; }
 .notif-item + .notif-item { border-top: 1px solid var(--border); }
@@ -347,6 +360,16 @@ body.on-landing #landingNav { display: none !important; }
   max-width: 1200px; margin: 0 auto;
   display: flex; align-items: center; justify-content: space-between; gap: 16px;
 }
+/* App nav: 3-column grid so the wordmark stays dead-centre even though the right
+   side (bell + avatar) is wider than the left (hamburger). */
+#mainNav .nav-inner {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 8px;
+}
+#mainNav .nav-inner > :first-child { justify-self: start; }
+#mainNav .nav-inner > .logo { justify-self: center; }
+#mainNav .nav-inner > :last-child { justify-self: end; }
 
 .logo {
   display: flex; align-items: center; gap: 10px;
@@ -4239,8 +4262,11 @@ body.on-auth .container {
 <div class="notif-backdrop" id="notifBackdrop" onclick="closeNotifPanel()"></div>
 <div class="notif-panel" id="notifPanel" aria-hidden="true">
   <div class="notif-header">
-    <span>Notifications</span>
-    <button class="notif-close" onclick="closeNotifPanel()" aria-label="Close">✕</button>
+    <button class="notif-back" onclick="closeNotifPanel()" aria-label="Back">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+      <span>Back</span>
+    </button>
+    <span class="notif-title">Notifications</span>
   </div>
   <div class="notif-list" id="notifList"></div>
 </div>
@@ -5540,7 +5566,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v74',
+      app_version: 'v75',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -7610,43 +7636,113 @@ function _notifTimeAgo(iso) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-// Build the notification list from the last ~21 days of workouts.
+// Build the notification feed (last ~21 days), merged from several sources:
+// workouts (auto-decided confirmations / clarify asks / done), skipped sessions,
+// new Coach messages, new plans, and a one-time welcome. Each item carries an
+// actionKind so tapping it jumps to the right place (notifGo).
 async function buildNotifications() {
   if (!state.user) return [];
   const out = [];
+  const uid = state.user.id;
+  const since = new Date(); since.setDate(since.getDate() - 21);
+  const sinceISO = since.toISOString();
+  const fmtDay = (iso) => new Date(iso).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  const fmtDate = (ymd) => new Date(ymd + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+
   try {
-    const since = new Date(); since.setDate(since.getDate() - 21);
+    // ── Workouts: auto-decided confirmations, clarify asks, and "done" ──
     const { data: ws } = await sb.from('workouts')
       .select('id, sport, created_at, activity_classification, workout_data')
-      .eq('user_id', state.user.id)
-      .gte('created_at', since.toISOString())
-      .order('created_at', { ascending: false })
-      .limit(40);
-    let loggedCount = 0;
+      .eq('user_id', uid).gte('created_at', sinceISO)
+      .order('created_at', { ascending: false }).limit(40);
+    let doneCount = 0;
     for (const w of (ws || [])) {
       const sport = (w.sport || w.workout_data?.sport || 'workout');
       const cls = w.activity_classification || w.workout_data?.activity_classification || 'unclassified';
-      const dateStr = new Date(w.created_at).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
       const ico = _NOTIF_SPORT_EMOJI[sport.toLowerCase()] || '⚡';
+      const wid = String(w.id);
+      const src = w.workout_data?.source;
       if (cls === 'unclassified') {
-        out.push({
-          id: 'clarify_' + w.id, type: 'clarify', time: w.created_at, icon: ico, workoutId: String(w.id),
-          title: `Was your ${_notifSportLabel(sport)} on ${dateStr} planned or extra?`,
-          sub: "We logged it but couldn't tell if it was part of your plan. Tap one so Coach counts it right.",
-        });
-      } else if (cls !== 'daily_activity' && loggedCount < 10) {
-        loggedCount++;
-        out.push({
-          id: 'logged_' + w.id, type: 'logged', time: w.created_at, icon: ico,
-          title: `New ${_notifSportLabel(sport)} logged`,
-          sub: cls === 'plan' ? 'Counted toward your plan ✓' : 'Logged as extra training',
-        });
+        // Genuinely unsure → ASK.
+        out.push({ id: 'clarify_' + wid, type: 'clarify', time: w.created_at, icon: ico, workoutId: wid,
+          actionKind: 'workout', actionId: wid,
+          title: `Was your ${_notifSportLabel(sport)} on ${fmtDay(w.created_at)} planned or extra?`,
+          sub: "We couldn't tell if this was part of your plan. Tap one so Coach counts it right." });
+      } else if ((cls === 'extra_training' || cls === 'daily_activity') && src !== 'manual' && src !== 'photo') {
+        // We auto-decided — let them confirm or change. (Manual/photo logs were the
+        // athlete's own choice, no need to second-guess those.)
+        const label = cls === 'extra_training' ? 'extra training' : 'a daily activity (not training)';
+        out.push({ id: 'auto_' + wid, type: 'auto', time: w.created_at, icon: ico, workoutId: wid,
+          actionKind: 'workout', actionId: wid,
+          title: `We logged your ${_notifSportLabel(sport)} on ${fmtDay(w.created_at)} as ${label}.`,
+          sub: "Looks right? Tap to change the category if not." });
+      } else if (cls === 'plan' && doneCount < 6) {
+        doneCount++;
+        out.push({ id: 'done_' + wid, type: 'logged', time: w.created_at, icon: ico,
+          actionKind: 'workout', actionId: wid,
+          title: `Nice — ${_notifSportLabel(sport)} done ✓`, sub: 'Counted toward your plan.' });
       }
     }
+
+    // ── Skipped sessions ──
+    try {
+      const { data: skips } = await sb.from('planned_workouts')
+        .select('id, sport, scheduled_date, skip_reason, skipped_at')
+        .eq('user_id', uid).eq('skipped', true).gte('skipped_at', sinceISO)
+        .order('skipped_at', { ascending: false }).limit(5);
+      for (const s of (skips || [])) {
+        out.push({ id: 'skip_' + s.id, type: 'skip', time: s.skipped_at, icon: '⏭️',
+          actionKind: 'plan',
+          title: `You skipped ${fmtDate(s.scheduled_date)}'s ${_notifSportLabel(s.sport)}.`,
+          sub: s.skip_reason ? `Reason: ${s.skip_reason}. Coach is adjusting around it.` : 'Coach has noted it.' });
+      }
+    } catch (_) {}
+
+    // ── Newest Coach message ──
+    try {
+      const { data: cm } = await sb.from('coach_messages')
+        .select('id, created_at').eq('user_id', uid).eq('role', 'coach')
+        .gte('created_at', sinceISO).order('created_at', { ascending: false }).limit(1);
+      if (cm && cm[0]) {
+        out.push({ id: 'coach_' + cm[0].id, type: 'coach', time: cm[0].created_at, icon: '🧠',
+          actionKind: 'coach', title: 'Coach sent you a message.', sub: 'Tap to go read it.' });
+      }
+    } catch (_) {}
+
+    // ── New plan ──
+    try {
+      const { data: tp } = await sb.from('training_plans')
+        .select('id, created_at').eq('user_id', uid)
+        .gte('created_at', sinceISO).order('created_at', { ascending: false }).limit(1);
+      if (tp && tp[0]) {
+        out.push({ id: 'plan_' + tp[0].id, type: 'plan', time: tp[0].created_at, icon: '📅',
+          actionKind: 'plan', title: 'Your training plan is ready.', sub: 'Tap to see your week laid out.' });
+      }
+    } catch (_) {}
+
+    // ── One-time welcome (first ~14 days, anchored to first view) ──
+    try {
+      const wkey = `stryxs_welcomed_at_${uid}`;
+      let wat = localStorage.getItem(wkey);
+      if (!wat) { wat = new Date().toISOString(); localStorage.setItem(wkey, wat); }
+      if (Date.now() - new Date(wat).getTime() < 14 * 24 * 60 * 60 * 1000) {
+        out.push({ id: 'welcome', type: 'welcome', time: wat, icon: '👋', actionKind: 'coach',
+          title: 'Welcome to Stryxs! 🎉',
+          sub: "You're all set up. Log or sync your workouts and chat with Coach anytime. Need a hand? Email coach@stryxs.com." });
+      }
+    } catch (_) {}
   } catch (e) { console.warn('[Stryxs] buildNotifications failed:', e); }
-  // Newest first
+
   out.sort((a, b) => new Date(b.time) - new Date(a.time));
   return out;
+}
+
+// Tapping a notification jumps to the relevant place.
+function notifGo(kind, id) {
+  closeNotifPanel();
+  if (kind === 'workout' && id) { try { viewHistoryDetail(id); } catch (_) { navigate('history'); } }
+  else if (kind === 'coach') navigate('coach');
+  else if (kind === 'plan') navigate('plan');
 }
 
 async function refreshNotifBadge() {
@@ -7693,12 +7789,14 @@ async function renderNotifPanel() {
       const unread = new Date(n.time).getTime() > lastSeen;
       const actions = n.type === 'clarify' ? `
         <div class="notif-actions">
-          <button class="primary" onclick="notifClassify(this, '${n.workoutId}', 'plan')">Planned</button>
-          <button onclick="notifClassify(this, '${n.workoutId}', 'extra_training')">Extra</button>
-          <button onclick="notifClassify(this, '${n.workoutId}', 'daily_activity')">Not training</button>
+          <button class="primary" onclick="event.stopPropagation(); notifClassify(this, '${n.workoutId}', 'plan')">Planned</button>
+          <button onclick="event.stopPropagation(); notifClassify(this, '${n.workoutId}', 'extra_training')">Extra</button>
+          <button onclick="event.stopPropagation(); notifClassify(this, '${n.workoutId}', 'daily_activity')">Not training</button>
         </div>` : '';
+      const clickable = n.actionKind && n.actionKind !== 'none';
+      const onclick = clickable ? ` onclick="notifGo('${n.actionKind}', '${n.actionId || ''}')" style="cursor: pointer;"` : '';
       return `
-        <div class="notif-item ${unread ? 'unread' : ''}" data-notif="${n.id}">
+        <div class="notif-item ${unread ? 'unread' : ''}" data-notif="${n.id}"${onclick}>
           <div class="notif-ico">${n.icon}</div>
           <div class="notif-body">
             <div class="notif-title">${escapeHtml(n.title)}</div>
@@ -8341,19 +8439,20 @@ function renderManualEntryForm() {
         </div>
       </div>
 
-      <!-- Date + Duration, STACKED full-width. iOS date inputs don't honour
-           width:100% inside a grid cell (they size to their content), which made
-           the duration box look huge next to a shrunken date box. Stacking each
-           field full-width sidesteps that entirely and reads clean. -->
-      <div>
-        <label style="display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">${t('manual.date')}</label>
-        <input type="date" id="manualDate" value="${todayStr}" max="${todayStr}" style="width: 100%; box-sizing: border-box; padding: 11px 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px;" />
-      </div>
-      <div>
-        <label style="display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">${t('manual.duration')}</label>
-        <div style="display: flex; align-items: stretch; max-width: 200px;">
-          <input type="number" id="manualDuration" min="1" step="1" inputmode="numeric" placeholder="45" style="flex: 1 1 0; min-width: 0; box-sizing: border-box; padding: 11px 12px; background: var(--bg-3); border: 1px solid var(--border); border-right: none; border-radius: 8px 0 0 8px; color: var(--text); font-size: 14px;" />
-          <div style="flex-shrink: 0; display: flex; align-items: center; padding: 0 14px; background: var(--bg-4); border: 1px solid var(--border); border-radius: 0 8px 8px 0; color: var(--text-dim); font-size: 13px; font-weight: 600;">min</div>
+      <!-- Date + Duration SIDE BY SIDE. Date flexes to fill, Duration is a fixed
+           compact box (with a "min" suffix) so it never balloons. Using flex with
+           min-width:0 (not grid) keeps the iOS date input from blowing out. -->
+      <div style="display: flex; gap: 12px; align-items: flex-end;">
+        <div style="flex: 1 1 auto; min-width: 0;">
+          <label style="display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">${t('manual.date')}</label>
+          <input type="date" id="manualDate" value="${todayStr}" max="${todayStr}" style="width: 100%; box-sizing: border-box; padding: 11px 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px;" />
+        </div>
+        <div style="flex: 0 0 132px; width: 132px;">
+          <label style="display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap;">${t('manual.duration')}</label>
+          <div style="display: flex; align-items: stretch;">
+            <input type="number" id="manualDuration" min="1" step="1" inputmode="numeric" placeholder="45" style="flex: 1 1 0; min-width: 0; box-sizing: border-box; padding: 11px 0 11px 12px; background: var(--bg-3); border: 1px solid var(--border); border-right: none; border-radius: 8px 0 0 8px; color: var(--text); font-size: 14px;" />
+            <div style="flex-shrink: 0; display: flex; align-items: center; padding: 0 11px; background: var(--bg-4); border: 1px solid var(--border); border-radius: 0 8px 8px 0; color: var(--text-dim); font-size: 13px; font-weight: 600;">min</div>
+          </div>
         </div>
       </div>
 
