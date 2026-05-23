@@ -1352,6 +1352,21 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   text-overflow: ellipsis;
 }
 
+/* iOS Safari renders <input type="date"> with its OWN intrinsic appearance: it
+   ignores our explicit height:44px and inflates the value text, so the Date box
+   ends up noticeably taller and bigger than the Duration box beside it (looks
+   like they overlap / are oversized). Forcing -webkit-appearance:none makes iOS
+   treat it as a normal text box that respects our height + font, so Date and
+   Duration line up cleanly. The native wheel picker still opens on tap. */
+#manualDate {
+  -webkit-appearance: none;
+  appearance: none;
+  text-align: left;
+}
+#manualDate::-webkit-date-and-time-value { text-align: left; margin: 0; }
+#manualDate::-webkit-datetime-edit { padding: 0; }
+#manualDate::-webkit-calendar-picker-indicator { opacity: 0.5; cursor: pointer; }
+
 .auth-switch {
   text-align: center; margin-top: 20px; color: var(--text-dim); font-size: 13px;
 }
@@ -5566,7 +5581,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v76',
+      app_version: 'v77',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -11532,14 +11547,28 @@ async function renderDashRaceProjectionMini(intake) {
   // Inner render, pulls latest from cache and paints. Called initially, then again
   // after async fetch completes if the cache was empty on first paint.
   const paintMini = () => {
-    let projTime = '—';
+    let projTime = null;
     let confidence = null;
     if (typeof _projectionsCache !== 'undefined' && _projectionsCache?.proj?.primary_projection) {
       const p = _projectionsCache.proj.primary_projection;
-      projTime = p.predicted_time || p.time || '—';
-      confidence = _projectionsCache.proj.data_sufficiency || p.confidence || null;
+      const t = p.predicted_time || p.time;
+      if (t && t !== '—') { projTime = t; confidence = _projectionsCache.proj.data_sufficiency || p.confidence || null; }
     }
     const eventName = formatGoal(intake.goal_event) || 'race';
+
+    // No projection yet: show live progress (X/N workouts) instead of a bare "—"
+    // so the athlete knows WHY it's empty and what unlocks it. Matches the gate
+    // on the Race Planner.
+    let valueBlock;
+    if (projTime) {
+      valueBlock = `
+              <div style="font-size: 18px; font-weight: 800; color: var(--accent); font-family: 'JetBrains Mono', monospace;">${escapeHtml(projTime)}</div>
+              ${confidence ? `<div style="font-size: 10px; color: var(--text-mute); text-transform: uppercase;">${escapeHtml(confidence)} confidence</div>` : ''}`;
+    } else {
+      const g = (typeof _projGateInfo !== 'undefined' && _projGateInfo) ? _projGateInfo : null;
+      const progressTxt = g ? `${g.have}/${g.need} workouts logged` : 'Keep logging to unlock';
+      valueBlock = `<div style="font-size: 13px; font-weight: 600; color: var(--text-dim);">${escapeHtml(progressTxt)}</div>`;
+    }
 
     card.innerHTML = `
       <div class="panel" style="margin-bottom: 14px; cursor: pointer;" onclick="navigate('race-planner')">
@@ -11548,8 +11577,7 @@ async function renderDashRaceProjectionMini(intake) {
           <div style="flex: 1; min-width: 0;">
             <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; font-weight: 700; margin-bottom: 2px;">Projected ${escapeHtml(eventName)}</div>
             <div style="display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;">
-              <div style="font-size: 18px; font-weight: 800; color: var(--accent); font-family: 'JetBrains Mono', monospace;">${escapeHtml(projTime)}</div>
-              ${confidence ? `<div style="font-size: 10px; color: var(--text-mute); text-transform: uppercase;">${escapeHtml(confidence)} confidence</div>` : ''}
+              ${valueBlock}
             </div>
           </div>
           <div style="font-size: 12px; color: var(--accent); font-weight: 600; flex-shrink: 0;">View more →</div>
@@ -11948,6 +11976,13 @@ async function classifyWorkout(ref, newClassification) {
 
     if (idx >= 0) state.workouts[idx].activity_classification = newClassification;
     toast(newClassification === 'plan' ? 'Marked as planned training' : newClassification === 'daily_activity' ? 'Tagged as daily activity' : 'Marked as extra training');
+
+    // Keep the notifications/Messages panel in sync. Classifying from the
+    // analyze-page banner (not just the inline notif buttons) must drop the
+    // stale "clarify" item, otherwise reopening Messages keeps asking. Clearing
+    // the cache forces a rebuild from the now-updated DB row.
+    window._stryxsNotifs = null;
+    if (typeof refreshNotifBadge === 'function') { try { refreshNotifBadge(); } catch (_) {} }
 
     // Re-render the detail view with updated classification (by stable _dbId)
     viewHistoryDetail(w._dbId);
@@ -16895,6 +16930,10 @@ let _projectionsCache = null;
 let _projectionsCacheTime = 0;
 let _projectionsRenderToken = 0;
 let _projectionsInflight = false;
+// Live "not enough data yet" status, kept OUTSIDE the week-long projection cache
+// so the workout count updates every time the user logs/classifies. Read by the
+// dashboard mini + race-planner gate. { have, need, hasPb, unclassified }.
+let _projGateInfo = null;
 const PROJECTIONS_CACHE_TTL = 7 * 24 * 60 * 60 * 1000; // 1 week, projections refresh weekly to save tokens
 
 // Try to restore cache from localStorage on page load
@@ -17060,6 +17099,34 @@ async function renderProjections(forceRefresh = false) {
       };
     });
 
+    // ── Not enough confirmed training yet? Show the live gate and STOP here. ──
+    // We do NOT call Coach (saves tokens) and do NOT cache (so the count updates
+    // live as the athlete logs/classifies more — the old code cached the "0/5"
+    // state for a full week, which is why it looked permanently stuck). We also
+    // count workouts we couldn't auto-classify so we can nudge the user to
+    // confirm them (those are excluded above and don't count toward projections).
+    const MIN_PROJ_WORKOUTS = 5;
+    if (recentWorkouts.length < MIN_PROJ_WORKOUTS) {
+      let unclassifiedCount = 0;
+      try {
+        const { count } = await sb.from('workouts')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', state.user.id)
+          .or('activity_classification.is.null,activity_classification.eq.unclassified')
+          .gte('created_at', cutoffIso);
+        unclassifiedCount = count || 0;
+      } catch (_) {}
+      if (myToken !== _projectionsRenderToken) { _projectionsInflight = false; return; }
+      _projectionsCache = null; _projectionsCacheTime = 0;
+      try { localStorage.removeItem(getProjectionsCacheKey()); } catch (_) {}
+      _projGateInfo = { have: recentWorkouts.length, need: MIN_PROJ_WORKOUTS,
+        hasPb: !!(intake.pb_5k || intake.pb_10k || intake.pb_half || intake.pb_marathon || intake.last_race),
+        unclassified: unclassifiedCount };
+      renderProjGate(container, intake);
+      _projectionsInflight = false;
+      return;
+    }
+
     // Pull active insights, race projections can lean toward better/worse end of range based on patterns
     const { data: activeInsights } = await sb.from('training_insights')
       .select('*')
@@ -17071,10 +17138,21 @@ async function renderProjections(forceRefresh = false) {
     const proj = await callCoach('race_projections', { intake, recentWorkouts, activeInsights: activeInsights || [] });
     if (myToken !== _projectionsRenderToken) { _projectionsInflight = false; return; }
 
-    // Cache the result
-    _projectionsCache = { intake, recentWorkouts, proj };
-    _projectionsCacheTime = Date.now();
-    persistProjectionsCache();
+    // Only cache a REAL projection for the week. If Coach still reports low data
+    // (sparse/odd workouts even with 5+), keep it live so it can recover, and
+    // record the gate status for the dashboard mini.
+    if (proj && proj.primary_projection && proj.data_sufficiency !== 'low') {
+      _projGateInfo = null;
+      _projectionsCache = { intake, recentWorkouts, proj };
+      _projectionsCacheTime = Date.now();
+      persistProjectionsCache();
+    } else {
+      _projectionsCache = null; _projectionsCacheTime = 0;
+      try { localStorage.removeItem(getProjectionsCacheKey()); } catch (_) {}
+      _projGateInfo = { have: recentWorkouts.length, need: MIN_PROJ_WORKOUTS,
+        hasPb: !!(intake.pb_5k || intake.pb_10k || intake.pb_half || intake.pb_marathon || intake.last_race),
+        unclassified: (_projGateInfo && _projGateInfo.unclassified) || 0 };
+    }
 
     renderProjectionsFromData(container, intake, recentWorkouts, proj);
   } catch (err) {
@@ -17100,32 +17178,33 @@ async function renderProjections(forceRefresh = false) {
   }
 }
 
-function renderProjectionsFromData(container, intake, recentWorkouts, proj) {
-  // Defensive defaults, never throw on bad input
+// Shared "not enough data yet" gate for Race Projections. Rendered LIVE (no
+// Coach call, never cached) so the workout count updates as the athlete logs or
+// classifies. Reads _projGateInfo for the live counts. Also surfaces workouts we
+// couldn't auto-classify, since those are the usual reason the count looks stuck
+// (Strava commutes/walks default to unclassified and don't count for projections).
+function renderProjGate(container, intake) {
+  if (!container) return;
   intake = intake || {};
-  recentWorkouts = Array.isArray(recentWorkouts) ? recentWorkouts : [];
-  if (!proj) {
-    proj = { data_sufficiency: 'low', primary_projection: null };
-  }
+  const g = _projGateInfo || { have: 0, need: 5, hasPb: false, unclassified: 0 };
+  const have = g.have || 0;
+  const need = g.need || 5;
+  const hasPb = !!g.hasPb;
+  const unclassified = g.unclassified || 0;
+  const neededForBasic = Math.max(0, need - have);
+  const enough = have >= need;
 
-  if (proj.data_sufficiency === 'low' || !proj.primary_projection) {
-    const MIN_WORKOUTS = 5;
-    const HIGH_QUALITY_WORKOUTS = 8;
-    const haveWorkouts = recentWorkouts.length;
-    const neededForBasic = Math.max(0, MIN_WORKOUTS - haveWorkouts);
-    const hasPb = !!(intake.pb_5k || intake.pb_10k || intake.pb_half || intake.pb_marathon || intake.last_race);
+  let subtitle;
+  if (!enough) subtitle = `Log ${neededForBasic} more workout${neededForBasic === 1 ? '' : 's'} to unlock`;
+  else if (!hasPb) subtitle = `Add a recent PB for sharper projections (optional)`;
+  else subtitle = `Generating in the background, check back shortly`;
 
-    // Compute what's actually missing for clearer messaging
-    let subtitle;
-    if (haveWorkouts < MIN_WORKOUTS) {
-      subtitle = `Need ${neededForBasic} more workout${neededForBasic === 1 ? '' : 's'} for projections`;
-    } else if (!hasPb) {
-      subtitle = `Add a recent PB for sharper projections (optional)`;
-    } else {
-      subtitle = `Generating in the background, check back shortly`;
-    }
+  const unclassifiedNudge = unclassified > 0 ? `
+        <div style="margin-top: 6px; padding: 10px 12px; background: rgba(80, 130, 255, 0.06); border: 1px solid rgba(80, 130, 255, 0.18); border-radius: 10px; font-size: 12px; color: var(--text-dim); line-height: 1.5;">
+          ${unclassified} workout${unclassified === 1 ? '' : 's'} ${unclassified === 1 ? "isn't" : "aren't"} counted yet because we couldn't tell if ${unclassified === 1 ? 'it was' : 'they were'} training. Open the bell (top right) to confirm ${unclassified === 1 ? 'it' : 'them'} as planned or extra, then ${unclassified === 1 ? 'it counts' : 'they count'} toward projections.
+        </div>` : '';
 
-    container.innerHTML = `
+  container.innerHTML = `
       <div class="panel" style="margin-bottom: 20px; border-color: rgba(255, 209, 102, 0.2); background: rgba(255, 209, 102, 0.04);">
         <div class="panel-header">
           <div>
@@ -17135,19 +17214,55 @@ function renderProjectionsFromData(container, intake, recentWorkouts, proj) {
         </div>
         <div style="display: flex; flex-direction: column; gap: 10px; font-size: 13px; color: var(--text-dim); line-height: 1.55;">
           <div style="display: flex; align-items: center; gap: 10px;">
-            <span style="font-size: 16px;">${haveWorkouts >= MIN_WORKOUTS ? '✓' : '⏳'}</span>
-            <span>${haveWorkouts}/${MIN_WORKOUTS} workouts logged ${haveWorkouts >= MIN_WORKOUTS ? '<span style="color: #4ade80; font-weight: 600;">✓</span>' : `<span style="color: var(--text-mute);">(${neededForBasic} more needed)</span>`}</span>
+            <span style="font-size: 16px;">${enough ? '✓' : '⏳'}</span>
+            <span>${have}/${need} training workouts logged ${enough ? '<span style="color: #4ade80; font-weight: 600;">✓</span>' : `<span style="color: var(--text-mute);">(${neededForBasic} more needed)</span>`}</span>
           </div>
           <div style="display: flex; align-items: center; gap: 10px;">
             <span style="font-size: 16px;">${hasPb ? '✓' : '○'}</span>
             <span>${hasPb ? 'PB/race result on file <span style="color: #4ade80; font-weight: 600;">✓</span>' : 'Recent PB (optional but improves accuracy) '} ${!hasPb ? '<a style="color: var(--accent); cursor: pointer; text-decoration: underline; margin-left: 6px;" onclick="navigate(\'settings\')">add in Settings</a>' : ''}</span>
           </div>
+          ${unclassifiedNudge}
           <div style="margin-top: 4px; padding: 8px 0 0; font-size: 11px; color: var(--text-mute); line-height: 1.5;">
-            Coach uses your actual training data to project times. Once you've logged a few workouts, projections appear automatically and refresh weekly.
+            Coach projects times from your actual training. Only confirmed plan or extra-training workouts count. Once you've logged enough, projections appear automatically and refresh weekly. <a style="color: var(--accent); cursor: pointer; text-decoration: underline;" onclick="refreshProjectionsView()">Refresh now</a>
           </div>
         </div>
       </div>
     `;
+}
+
+// Force a projections refresh and re-render whichever surface is on screen.
+async function refreshProjectionsView() {
+  await forceRefreshProjections();
+  try {
+    if (document.getElementById('page-race-planner')?.classList.contains('active') && typeof renderRacePlannerProjections === 'function') {
+      await renderRacePlannerProjections();
+    }
+  } catch (_) {}
+  try {
+    if (document.getElementById('page-dashboard')?.classList.contains('active') && typeof renderDashRaceProjectionMini === 'function' && state.user) {
+      const { data: intake } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).maybeSingle();
+      if (intake) renderDashRaceProjectionMini(intake);
+    }
+  } catch (_) {}
+}
+
+function renderProjectionsFromData(container, intake, recentWorkouts, proj) {
+  // Defensive defaults, never throw on bad input
+  intake = intake || {};
+  recentWorkouts = Array.isArray(recentWorkouts) ? recentWorkouts : [];
+  if (!proj) {
+    proj = { data_sufficiency: 'low', primary_projection: null };
+  }
+
+  if (proj.data_sufficiency === 'low' || !proj.primary_projection) {
+    // Keep the gate status fresh so the dashboard mini matches this view.
+    _projGateInfo = {
+      have: recentWorkouts.length,
+      need: 5,
+      hasPb: !!(intake.pb_5k || intake.pb_10k || intake.pb_half || intake.pb_marathon || intake.last_race),
+      unclassified: (_projGateInfo && _projGateInfo.unclassified) || 0,
+    };
+    renderProjGate(container, intake);
     return;
   }
 
@@ -19245,18 +19360,23 @@ async function renderRacePlannerProjections() {
     }
   }
 
-  // Render with whatever's now in cache
+  // Render with whatever's now available. renderProjections() writes into the
+  // hidden #projectionsContainer, so we re-render the right thing here.
   if (_projectionsCache?.proj && _projectionsCache?.intake && Array.isArray(_projectionsCache?.recentWorkouts)) {
-    // Use the existing rich renderer, writes the full panel into the container
+    // Real projection cached, use the rich renderer.
     renderProjectionsFromData(container, _projectionsCache.intake, _projectionsCache.recentWorkouts, _projectionsCache.proj);
-  } else if (!container.innerHTML.includes('spinner')) {
-    // Fetch failed and we don't have cache, show error
+  } else if (_projGateInfo) {
+    // Not enough confirmed training yet, show the live progress gate (with the
+    // unclassified-workout nudge) instead of a dead-end "unavailable" message.
+    renderProjGate(container, intake);
+  } else {
+    // Genuinely couldn't compute (e.g. Coach unreachable), offer a retry.
     container.innerHTML = `
       <div class="panel">
         <div style="text-align: center; padding: 4px;">
           <div style="font-size: 14px; font-weight: 600; margin-bottom: 4px;">Projections unavailable</div>
-          <div style="font-size: 12px; color: var(--text-dim); line-height: 1.5; margin-bottom: 12px;">Need a few more workouts logged before Coach can project times accurately.</div>
-          <button class="btn ghost" style="font-size: 12px; padding: 6px 14px;" onclick="forceRefreshProjections().then(() => renderRacePlannerProjections())">↻ Try again</button>
+          <div style="font-size: 12px; color: var(--text-dim); line-height: 1.5; margin-bottom: 12px;">Couldn't reach Coach just now. Try again in a moment.</div>
+          <button class="btn ghost" style="font-size: 12px; padding: 6px 14px;" onclick="refreshProjectionsView()">↻ Try again</button>
         </div>
       </div>
     `;
