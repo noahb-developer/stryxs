@@ -5581,7 +5581,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v77',
+      app_version: 'v78',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -7493,6 +7493,14 @@ function navigate(page) {
   if (page === 'upload') {
     updateStravaConnectCard();
     renderTodaysAnalyses();
+    // Clear any previously-opened single workout from #analysisOutput so only
+    // TODAY's workouts persist in this view (those live in "Today's analyses"
+    // above). Opening a workout from History/notifications calls viewHistoryDetail,
+    // which re-navigates here and writes #analysisOutput AFTER this runs — so
+    // opening still works, but leaving and coming back drops the transient detail.
+    // Older workouts are always reachable from the History page.
+    const ao = document.getElementById('analysisOutput');
+    if (ao) ao.innerHTML = '';
   }
 
   // Re-translate any data-i18n elements on the newly-active page. Render
@@ -7833,7 +7841,10 @@ async function notifClassify(btn, workoutId, classification) {
   const item = btn.closest('.notif-item');
   if (item) item.style.opacity = '0.55';
   try {
-    await classifyWorkout(workoutId, classification);
+    // Only collapse the item to "✓ Marked" if the DB write actually landed.
+    // Otherwise the item would look done but reopen still asking to classify.
+    const ok = await classifyWorkout(workoutId, classification);
+    if (!ok) { if (item) item.style.opacity = '1'; return; }
     if (item) {
       const label = classification === 'plan' ? '✓ Marked as planned'
         : classification === 'extra_training' ? '✓ Marked as extra training'
@@ -11957,38 +11968,54 @@ function showClassificationOptions(ref) {
   document.body.appendChild(menu);
 }
 
-// Update a workout's activity classification (called from history detail banner)
+// Update a workout's activity classification (called from history detail banner
+// AND from notifications). Returns true only if the DB row actually changed, so
+// callers can trust the result. State-independent: notifications pass the raw DB
+// uuid, and the referenced workout may not be in state.workouts — in that case we
+// still update by id directly, otherwise the write silently no-ops and the
+// notification keeps asking to classify.
 async function classifyWorkout(ref, newClassification) {
   const { w, idx } = _resolveWorkoutRef(ref);
-  if (!w || !w._dbId) return;
+  // Prefer the resolved row's _dbId; fall back to the ref itself when it's a uuid.
+  const dbId = (w && w._dbId) ? w._dbId
+    : (typeof ref === 'string' && !/^\d+$/.test(ref) ? ref : null);
+  if (!dbId) { toast('Could not find that workout, try refreshing.'); return false; }
 
   try {
-    // Update both the column AND inside workout_data so it survives even if column is later removed
-    const updatedWd = { ...w, activity_classification: newClassification };
-    delete updatedWd._dbId;
-    delete updatedWd.activity_classification; // we'll set this explicitly via column
-    updatedWd.activity_classification = newClassification;
+    const update = { activity_classification: newClassification };
+    // Mirror into workout_data when we have the full row (survives a column drop).
+    // The column is the source of truth either way.
+    if (w) {
+      const updatedWd = { ...w, activity_classification: newClassification };
+      delete updatedWd._dbId;
+      updatedWd.activity_classification = newClassification;
+      update.workout_data = updatedWd;
+    }
 
-    await sb.from('workouts').update({
-      activity_classification: newClassification,
-      workout_data: updatedWd,
-    }).eq('id', w._dbId);
+    // .select() so we can VERIFY a row changed. Supabase .update() returns
+    // error:null even when 0 rows match (e.g. a stale/foreign id), which would
+    // leave the workout unclassified and the notification asking forever.
+    const { data: updated, error } = await sb.from('workouts')
+      .update(update).eq('id', dbId).select('id');
+    if (error) throw error;
+    if (!updated || updated.length === 0) { toast('Could not update, try refreshing.'); return false; }
 
     if (idx >= 0) state.workouts[idx].activity_classification = newClassification;
     toast(newClassification === 'plan' ? 'Marked as planned training' : newClassification === 'daily_activity' ? 'Tagged as daily activity' : 'Marked as extra training');
 
     // Keep the notifications/Messages panel in sync. Classifying from the
     // analyze-page banner (not just the inline notif buttons) must drop the
-    // stale "clarify" item, otherwise reopening Messages keeps asking. Clearing
-    // the cache forces a rebuild from the now-updated DB row.
+    // stale "clarify" item, so force a rebuild from the now-updated DB row.
     window._stryxsNotifs = null;
     if (typeof refreshNotifBadge === 'function') { try { refreshNotifBadge(); } catch (_) {} }
 
-    // Re-render the detail view with updated classification (by stable _dbId)
-    viewHistoryDetail(w._dbId);
+    // Re-render the detail view only if this workout is the one on screen.
+    if (w && w._dbId) { try { viewHistoryDetail(w._dbId); } catch (_) {} }
+    return true;
   } catch (err) {
     console.error('Classify failed:', err);
-    toast('Failed to update: ' + err.message);
+    toast('Failed to update: ' + (err.message || 'unknown'));
+    return false;
   }
 }
 
