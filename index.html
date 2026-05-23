@@ -5581,7 +5581,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v78',
+      app_version: 'v79',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -6272,6 +6272,7 @@ async function loadWorkouts() {
   if (data) state.workouts = data.map(w => ({
     ...w.workout_data,
     _dbId: w.id,
+    created_at: w.created_at,
     activity_classification: w.activity_classification || w.workout_data?.activity_classification || 'unclassified',
   }));
   // Load unit preference into memory cache so formatDistance/formatPace can read it sync.
@@ -11599,16 +11600,14 @@ async function renderDashRaceProjectionMini(intake) {
 
   paintMini();
 
-  // Trigger projection refresh in background if cache is empty (don't await, non-blocking).
-  // After fetch completes, re-paint the entire mini-card with the fresh data.
-  if (typeof _projectionsCache === 'undefined' || !_projectionsCache?.proj) {
+  // Trigger a projection refresh in the background whenever we don't have a REAL
+  // projection cached (don't await, non-blocking). Recomputes the live count too,
+  // so the mini updates as the athlete logs/classifies. Re-paints when done.
+  if (typeof renderProjections === 'function' && !_hasRealProjection()) {
     setTimeout(() => {
-      if (typeof renderProjections === 'function') {
-        renderProjections().then(() => {
-          // After fetch, re-render the whole mini-card with the fresh cache
-          paintMini();
-        }).catch(() => {});
-      }
+      renderProjections().then(() => {
+        paintMini();
+      }).catch(() => {});
     }, 500);
   }
 }
@@ -16970,17 +16969,29 @@ function getProjectionsCacheKey() {
   return `stryxs_projections_cache_${uid}`;
 }
 
+// A cache entry is only usable if it holds a REAL projection (an actual
+// predicted time). Low-data / "0/5" states must NEVER be served from cache or
+// they freeze for a week even as the athlete logs and classifies workouts.
+function _hasRealProjection() {
+  return !!(_projectionsCache && _projectionsCache.proj
+    && _projectionsCache.proj.primary_projection
+    && _projectionsCache.proj.data_sufficiency !== 'low');
+}
+
 function loadProjectionsCacheFromStorage() {
   try {
     const stored = localStorage.getItem(getProjectionsCacheKey());
     if (stored) {
       const parsed = JSON.parse(stored);
-      // Validate cache: must have time, must be fresh, AND must include the right user_id
-      if (parsed && parsed.time && parsed.user_id === state.user?.id && (Date.now() - parsed.time < PROJECTIONS_CACHE_TTL)) {
+      // Must be fresh, the right user, AND a real projection. A stale low-data
+      // cache (e.g. an old "0/5" written before this guard existed) is discarded
+      // so the count recomputes live.
+      const real = parsed?.data?.proj?.primary_projection && parsed.data.proj.data_sufficiency !== 'low';
+      if (parsed && parsed.time && parsed.user_id === state.user?.id && (Date.now() - parsed.time < PROJECTIONS_CACHE_TTL) && real) {
         _projectionsCache = parsed.data;
         _projectionsCacheTime = parsed.time;
       } else {
-        // Stale or wrong user, wipe it
+        // Stale, wrong user, or not a real projection, wipe it
         localStorage.removeItem(getProjectionsCacheKey());
       }
     }
@@ -17011,9 +17022,11 @@ async function renderProjections(forceRefresh = false) {
   const container = document.getElementById('projectionsContainer');
   if (!container) return;
 
-  // If cache exists and is fresh, render from cache and DON'T touch network
+  // If a REAL projection is cached and fresh, render it and DON'T touch the
+  // network. Low-data states are never cached (see below), so this only
+  // short-circuits when we genuinely have a predicted time.
   const now = Date.now();
-  const cacheValid = _projectionsCache && (now - _projectionsCacheTime < PROJECTIONS_CACHE_TTL);
+  const cacheValid = _hasRealProjection() && (now - _projectionsCacheTime < PROJECTIONS_CACHE_TTL);
 
   if (!forceRefresh && cacheValid) {
     renderProjectionsFromData(container, _projectionsCache.intake, _projectionsCache.recentWorkouts, _projectionsCache.proj);
@@ -17085,32 +17098,24 @@ async function renderProjections(forceRefresh = false) {
       return;
     }
 
-    // Find when the active plan was created, only count workouts AFTER plan start
-    const { data: activePlanRow } = await sb.from('training_plans')
-      .select('created_at')
-      .eq('user_id', state.user.id)
-      .eq('active', true)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    // Count confirmed training from the last ~6 weeks. We deliberately do NOT
+    // restrict to "since the current plan started": regenerating a plan would
+    // otherwise reset the count to 0 even though the athlete's recent training is
+    // unchanged (that's what kept this stuck at 0/5 on a test account). 42 days
+    // is recent enough to reflect current fitness.
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 42);
+    const cutoffIso = cutoff.toISOString();
 
-    const planStartIso = activePlanRow?.created_at || null;
-    // Also bound to last 30 days regardless
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const cutoffIso = planStartIso && new Date(planStartIso) > thirtyDaysAgo
-      ? planStartIso
-      : thirtyDaysAgo.toISOString();
-
-    // Get last 14 TRAINING workouts (only plan + extra_training, since plan started, in last 30 days)
-    // We exclude unclassified entirely from projections, Coach should only project from confirmed training
+    // Get the most recent TRAINING workouts (plan + extra_training, last 6 weeks).
+    // Unclassified are excluded, Coach should only project from confirmed training.
     const { data: recentRaw } = await sb.from('workouts')
       .select('sport, workout_data, created_at, activity_classification')
       .eq('user_id', state.user.id)
       .in('activity_classification', ['plan', 'extra_training'])
       .gte('created_at', cutoffIso)
       .order('created_at', { ascending: false })
-      .limit(14);
+      .limit(20);
 
     if (myToken !== _projectionsRenderToken) { _projectionsInflight = false; return; }
 
@@ -19370,8 +19375,9 @@ async function renderRacePlannerProjections() {
     return;
   }
 
-  // If no cache, show loading + trigger fetch
-  if (!_projectionsCache?.proj) {
+  // If we don't have a REAL projection cached, show loading + trigger a fetch
+  // (which recomputes the live count and may render the progress gate).
+  if (!_hasRealProjection()) {
     container.innerHTML = `
       <div class="panel">
         <div style="display: flex; align-items: center; gap: 12px; padding: 4px;">
@@ -19389,7 +19395,7 @@ async function renderRacePlannerProjections() {
 
   // Render with whatever's now available. renderProjections() writes into the
   // hidden #projectionsContainer, so we re-render the right thing here.
-  if (_projectionsCache?.proj && _projectionsCache?.intake && Array.isArray(_projectionsCache?.recentWorkouts)) {
+  if (_hasRealProjection() && _projectionsCache?.intake && Array.isArray(_projectionsCache?.recentWorkouts)) {
     // Real projection cached, use the rich renderer.
     renderProjectionsFromData(container, _projectionsCache.intake, _projectionsCache.recentWorkouts, _projectionsCache.proj);
   } else if (_projGateInfo) {
@@ -19628,7 +19634,7 @@ async function submitRacePlanForm() {
     // Pass it to the backend so race plan uses it as the predicted finish (no
     // contradiction between dashboard "you'll run 21:00" and race plan "you'll run 23:15").
     let cachedProjection = null;
-    if (typeof _projectionsCache !== 'undefined' && _projectionsCache?.proj) {
+    if (typeof _hasRealProjection === 'function' && _hasRealProjection()) {
       cachedProjection = _projectionsCache.proj;
       console.log('[Stryxs] Using cached dashboard projection for race plan grounding');
     }
@@ -20326,6 +20332,50 @@ async function renderPlan() {
 
 let currentPlannedWorkouts = {};
 
+// Find the completed workout that fulfils a planned session, so the Plan view can
+// show ACTUAL vs PLANNED. Matches by date + sport against the workouts already in
+// memory. Daily activities (commutes/walks) never count. Extra training done on
+// the side does NOT get pulled into a planned slot unless it's the same sport on
+// the same day with no better 'plan'-classified match — extras stay separate (they
+// live in History / Today's analyses and count as "extra", not as the plan).
+function _findActualForPlanned(pw) {
+  if (!pw || pw.sport === 'rest' || !pw.scheduled_date) return null;
+  const target = String(pw.scheduled_date).split('T')[0];
+  const psport = normalizeSport(pw.sport);
+  const candidates = (state.workouts || []).filter(w => {
+    if (w.activity_classification === 'daily_activity') return false;
+    const wdate = (w.date || w.created_at || '').split('T')[0];
+    return wdate === target && normalizeSport(w.sport) === psport;
+  });
+  if (!candidates.length) return null;
+  // Prefer a confirmed 'plan' workout; tiebreak by longest (the main session).
+  candidates.sort((a, b) => {
+    const ap = a.activity_classification === 'plan' ? 1 : 0;
+    const bp = b.activity_classification === 'plan' ? 1 : 0;
+    if (ap !== bp) return bp - ap;
+    return (parseFloat(b.duration) || 0) - (parseFloat(a.duration) || 0);
+  });
+  const w = candidates[0];
+  // Normalize duration to minutes. Manual entries store minutes; Strava stores
+  // seconds. Same heuristic used by the Today's-analysis cards (>600 ⇒ seconds).
+  let durMin = null;
+  if (w.duration != null) {
+    const d = parseFloat(w.duration);
+    if (!isNaN(d)) durMin = d > 600 ? Math.round(d / 60) : Math.round(d);
+  }
+  const dist = (w.distance != null && !isNaN(parseFloat(w.distance))) ? parseFloat(w.distance) : null;
+  return {
+    _dbId: w._dbId,
+    durationMin: durMin,
+    distanceKm: dist,
+    avgHr: w.avgHr || w.avg_hr || null,
+    maxHr: w.maxHr || w.max_hr || null,
+    classification: w.activity_classification,
+    source: w.source || w._source || null,
+    extraCount: candidates.length - 1, // other same-sport sessions that day
+  };
+}
+
 function renderCalendarGrid(plannedWorkouts) {
   const grid = document.getElementById('calGrid');
   if (!grid) return;
@@ -20338,9 +20388,13 @@ function renderCalendarGrid(plannedWorkouts) {
   const today = new Date();
   const isToday = (d) => d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth() && d.getDate() === today.getDate();
 
-  // Map planned workouts by date + store in memory for panel lookup
+  // Map planned workouts by date + store in memory for panel lookup. Attach the
+  // matching completed workout (actual vs planned) so the calendar shows the
+  // session as done and the detail panel can fill in real numbers.
   currentPlannedWorkouts = {};
   plannedWorkouts.forEach(pw => {
+    try { pw._actual = _findActualForPlanned(pw); } catch (_) { pw._actual = null; }
+    if (pw._actual) pw.completed = true; // drives the calendar line-through + panel header
     if (!currentPlannedWorkouts[pw.scheduled_date]) currentPlannedWorkouts[pw.scheduled_date] = [];
     currentPlannedWorkouts[pw.scheduled_date].push(pw);
   });
@@ -20404,13 +20458,57 @@ function openWorkoutPanel(dateStr) {
     <div style="margin-bottom: 20px;">
       <div style="color: var(--text-dim); font-size: 12px; text-transform: uppercase; letter-spacing: 0.8px; font-weight: 600;">${dateLabel}</div>
     </div>
-    ${workouts.map(w => `
+    ${workouts.map(w => {
+      const act = w._actual;
+      const done = !!act;
+      const isRest = w.sport === 'rest';
+      const isStrength = w.sport === 'strength';
+
+      // Duration: show ACTUAL when completed, with the planned target as subtext
+      // when it differs (so "did 2h instead of 45min" reads honestly as both).
+      let durCell, durHint = '';
+      if (act && act.durationMin != null) {
+        const sub = (w.duration_minutes && Math.abs(w.duration_minutes - act.durationMin) >= 1)
+          ? `<div style="font-size: 11px; color: var(--text-mute); margin-top: 2px;">planned ${w.duration_minutes} min</div>` : '';
+        durCell = `<div class="metric-value">${act.durationMin}<span style="font-size: 13px; color: var(--text-dim);"> min</span></div>${sub}`;
+      } else if (w.duration_minutes) {
+        durCell = `<div class="metric-value">${w.duration_minutes}<span style="font-size: 13px; color: var(--text-dim);"> min</span></div>`;
+      } else if (isRest) {
+        durCell = `<div class="metric-value">0<span style="font-size: 13px; color: var(--text-dim);"> min</span></div>`;
+      } else {
+        durCell = `<div class="metric-value"><span style="color: var(--text-dim);">—</span></div>`;
+        durHint = ' <span style="font-size: 10px; color: var(--text-mute); font-weight: 400; text-transform: none;">(fills in after you do it)</span>';
+      }
+
+      // Distance: same actual-vs-planned treatment.
+      let distCell, distHint = '';
+      if (act && act.distanceKm != null && act.distanceKm > 0) {
+        const sub = (w.distance_km && Math.abs(parseFloat(w.distance_km) - act.distanceKm) >= 0.1)
+          ? `<div style="font-size: 11px; color: var(--text-mute); margin-top: 2px;">planned ${parseFloat(w.distance_km).toFixed(1)} km</div>` : '';
+        distCell = `<div class="metric-value">${act.distanceKm.toFixed(1)}<span style="font-size: 13px; color: var(--text-dim);"> km</span></div>${sub}`;
+      } else if (w.distance_km) {
+        distCell = `<div class="metric-value">${parseFloat(w.distance_km).toFixed(1)}<span style="font-size: 13px; color: var(--text-dim);"> km</span></div>`;
+      } else {
+        distCell = `<div class="metric-value"><span style="color: var(--text-dim);">—</span></div>`;
+        distHint = (!done && !isRest && !isStrength) ? ' <span style="font-size: 10px; color: var(--text-mute); font-weight: 400; text-transform: none;">(fills in after you do it)</span>' : '';
+      }
+
+      const hrCell = (act && (act.avgHr || act.maxHr)) ? `
+          <div class="metric">
+            <div class="metric-label">Heart rate</div>
+            <div class="metric-value" style="font-size: 16px;">${act.avgHr ? `${act.avgHr}<span style="font-size: 12px; color: var(--text-dim);"> avg</span>` : ''}${act.avgHr && act.maxHr ? ' · ' : ''}${act.maxHr ? `${act.maxHr}<span style="font-size: 12px; color: var(--text-dim);"> max</span>` : ''}</div>
+          </div>` : '';
+
+      const extraNote = (act && act.extraCount > 0) ? `
+        <div style="margin-top: 10px; font-size: 11px; color: var(--text-mute); line-height: 1.5;">+ ${act.extraCount} more ${(sportLabels[w.sport] || w.sport).toLowerCase()} session${act.extraCount === 1 ? '' : 's'} that day, tracked separately as extra training.</div>` : '';
+
+      return `
       <div class="panel" style="margin-bottom: 14px;">
         <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 14px;">
           <div style="font-size: 32px;">${sportEmojis[w.sport] || '⚡'}</div>
           <div>
             <div style="font-size: 18px; font-weight: 700; letter-spacing: -0.3px;">${sportLabels[w.sport] || w.sport}</div>
-            <div style="font-size: 13px; color: var(--text-dim); text-transform: capitalize;">${w.workout_type || ''}${w.completed ? ' · ✓ completed' : ''}</div>
+            <div style="font-size: 13px; color: ${done ? 'var(--accent)' : 'var(--text-dim)'}; text-transform: capitalize;">${w.workout_type || ''}${done ? ' · ✓ completed' : ''}</div>
           </div>
         </div>
 
@@ -20423,13 +20521,14 @@ function openWorkoutPanel(dateStr) {
 
         <div class="metrics" style="margin-top: 14px;">
           <div class="metric">
-            <div class="metric-label">Duration ${(!w.duration_minutes || w.duration_minutes === 0) && w.sport !== 'rest' ? '<span style="font-size: 10px; color: var(--text-mute); font-weight: 400; text-transform: none;">(fills in after upload)</span>' : ''}</div>
-            <div class="metric-value">${w.duration_minutes ? `${w.duration_minutes}<span style="font-size: 13px; color: var(--text-dim);"> min</span>` : (w.sport === 'rest' ? '0<span style="font-size: 13px; color: var(--text-dim);"> min</span>' : '<span style="color: var(--text-dim);">—</span>')}</div>
+            <div class="metric-label">Duration${durHint}</div>
+            ${durCell}
           </div>
           <div class="metric">
-            <div class="metric-label">Distance ${(!w.distance_km || w.distance_km === 0) && w.sport !== 'rest' && w.sport !== 'strength' ? '<span style="font-size: 10px; color: var(--text-mute); font-weight: 400; text-transform: none;">(fills in after upload)</span>' : ''}</div>
-            <div class="metric-value">${w.distance_km ? `${parseFloat(w.distance_km).toFixed(1)}<span style="font-size: 13px; color: var(--text-dim);"> km</span>` : ((w.sport === 'rest' || w.sport === 'strength') ? '<span style="color: var(--text-dim);">—</span>' : '<span style="color: var(--text-dim);">—</span>')}</div>
+            <div class="metric-label">Distance${distHint}</div>
+            ${distCell}
           </div>
+          ${hrCell}
           ${w.intensity_target ? `
             <div class="metric" style="grid-column: 1 / -1;">
               <div class="metric-label">Intensity Target</div>
@@ -20437,24 +20536,31 @@ function openWorkoutPanel(dateStr) {
             </div>
           ` : ''}
         </div>
+        ${extraNote}
 
-        <button class="btn" style="width: 100%; margin-top: 16px;" onclick="askCoachAboutWorkout('${w.id}')">💬 Ask Coach about this workout</button>
-        ${w.completed ? '' : w.skipped ? `
-          <div style="margin-top: 12px; padding: 10px 12px; background: rgba(255, 196, 0, 0.08); border: 1px solid rgba(255, 196, 0, 0.25); border-radius: 10px; font-size: 12px; color: var(--text-dim); display: flex; align-items: center; justify-content: space-between; gap: 10px;">
-            <div>
-              <div style="font-weight: 600; color: var(--text);">Marked as skipped</div>
-              ${w.skip_reason ? `<div style="margin-top: 2px; font-size: 11px;">Reason: ${escapeHtml(w.skip_reason)}</div>` : ''}
-            </div>
-            <button onclick="undoSkipWorkout('${w.id}')" style="background: transparent; border: 1px solid var(--border); color: var(--text-dim); font-size: 11px; padding: 5px 10px; border-radius: 8px; cursor: pointer; flex-shrink: 0;">Undo</button>
-          </div>
+        ${done ? `
+          <button class="btn" style="width: 100%; margin-top: 16px;" onclick="closeWorkoutPanel(); viewHistoryDetail('${act._dbId}')">📊 View full analysis</button>
+          <button class="btn ghost" style="width: 100%; margin-top: 8px;" onclick="askCoachAboutWorkout('${w.id}')">💬 Ask Coach about this workout</button>
         ` : `
-          <div style="display: flex; gap: 8px; margin-top: 10px;">
-            <button onclick="openSkipWorkoutMenu('${w.id}')" class="btn ghost" style="flex: 1; font-size: 12px; padding: 9px; border-color: var(--border);">⏭️ Skip / didn't do</button>
-            <button onclick="openSwapWorkoutMenu('${w.id}', '${dateStr}')" class="btn ghost" style="flex: 1; font-size: 12px; padding: 9px; border-color: var(--border);">📅 Move</button>
-          </div>
+          <button class="btn" style="width: 100%; margin-top: 16px;" onclick="askCoachAboutWorkout('${w.id}')">💬 Ask Coach about this workout</button>
+          ${w.skipped ? `
+            <div style="margin-top: 12px; padding: 10px 12px; background: rgba(255, 196, 0, 0.08); border: 1px solid rgba(255, 196, 0, 0.25); border-radius: 10px; font-size: 12px; color: var(--text-dim); display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+              <div>
+                <div style="font-weight: 600; color: var(--text);">Marked as skipped</div>
+                ${w.skip_reason ? `<div style="margin-top: 2px; font-size: 11px;">Reason: ${escapeHtml(w.skip_reason)}</div>` : ''}
+              </div>
+              <button onclick="undoSkipWorkout('${w.id}')" style="background: transparent; border: 1px solid var(--border); color: var(--text-dim); font-size: 11px; padding: 5px 10px; border-radius: 8px; cursor: pointer; flex-shrink: 0;">Undo</button>
+            </div>
+          ` : `
+            <div style="display: flex; gap: 8px; margin-top: 10px;">
+              <button onclick="openSkipWorkoutMenu('${w.id}')" class="btn ghost" style="flex: 1; font-size: 12px; padding: 9px; border-color: var(--border);">⏭️ Skip / didn't do</button>
+              <button onclick="openSwapWorkoutMenu('${w.id}', '${dateStr}')" class="btn ghost" style="flex: 1; font-size: 12px; padding: 9px; border-color: var(--border);">📅 Move</button>
+            </div>
+          `}
         `}
       </div>
-    `).join('')}
+    `;
+    }).join('')}
   `;
 
   panel.classList.add('open');
