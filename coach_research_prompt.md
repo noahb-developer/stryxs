@@ -60,3 +60,35 @@ Produce these sections:
 - Given a goal time + weeks-to-race + current fitness, how to judge whether the goal is realistic, and the minimum training (weekly volume, number of weeks, longest sessions) a given goal requires.
 
 FORMAT: clear headers and bullets. Use TABLES for anything numeric (zone %, phase durations, hours→sessions maps, confidence thresholds). Give explicit numbers and rules I can turn into code, not general advice. Mark every Ironman-vs-70.3 difference. Be thorough but dense — no filler, no motivational fluff.
+
+---
+
+# Round 2 follow-up (paste into the SAME conversation as round 1)
+
+That reference is excellent and I have already encoded the periodization, the R1-R10 guardrails, the zones, and the progression caps into the app. Now I want to go deeper and make sure we are not missing anything, because for this app the quality of the coach is everything. Keep covering BOTH Ironman (140.6) and Half-Ironman (70.3), mark every difference, stay dense and numeric.
+
+Two asks first:
+
+A) REVIEW AND EXTEND your own reference. Re-read what you wrote and add anything you left out, glossed over, or could make more precise or more codeable. Same style.
+
+B) Give me YOUR expert opinion on what a truly great AI triathlon coach should have that I did not think to ask for. Do not hold back. If there is a whole topic we are missing, add it.
+
+Then go deep on these specific areas. For each, give hard numbers, formulas, tables, and at least one worked numeric example:
+
+1. ADAPTIVE ADJUSTMENT (the most important gap). Given a completed week of real data (HR drift per session, actual pace/power vs target, sessions completed vs missed, RPE and how it felt: easy/hard/sore/sick, and the trend over 2-3 weeks), give explicit rules for how to adjust NEXT week. For example: "if cardiac drift > X% on most aerobic runs, cut volume Y%"; "if the key long ride was missed, do not add it on top, do Z"; "if RPE is consistently high or the athlete logs sore/sick, trigger an early deload"; plus overtraining / under-recovery red flags and the response to each. This is how the coach tracks the athlete, so be thorough.
+
+2. IN-SESSION STRUCTURE. For each session type per sport, a warmup / main set / cooldown template with durations and targets, so a workout description is concrete and prescriptive instead of vague.
+
+3. KEY-SESSION PLACEMENT across the week. Exact rules for spacing hard sessions: what counts as the same energy system, the minimum gap between two hard same-system sessions, and ready-to-use 7-day weekly templates for 5-, 6-, and 7-day availability, for IM and HALF, in Base / Build / Peak, showing where rest and deload sit.
+
+4. PROJECTION ENGINE, worked end to end. Take a concrete athlete (5K PB 21:12, bike FTP ~210 W or avg ~26 km/h, swim CSS 1:56/100m, 12 weeks consistent) and project a full IM and a full 70.3 finish step by step: swim split, T1, bike split (show how you get bike speed and time from FTP / NP), T2, run split (show the open-marathon prediction and the tri fatigue factor applied), and total. Then show how to phrase a one-line, data-grounded "why" for each leg's target pace, and how the confidence label and range come out for that data.
+
+5. RECOVERY AND READINESS. How to read fatigue from resting HR / HRV / sleep / mood when available, and from training data when not; concrete thresholds for inserting unplanned rest or pulling back.
+
+6. ENVIRONMENT AND LOGISTICS. Heat / altitude / travel adjustments, hilly-course pacing, and a race-week plus race-morning checklist.
+
+7. STRENGTH PROGRESSION across a season (sets / reps / load by phase), and the injury-prevention and mobility essentials per sport.
+
+8. PROACTIVE COACHING. The specific situations a good coach should NOTICE and message the athlete about unprompted (for example: missed 3 swims in a row, easy runs creeping into Z3, two weeks of high drift), each with the trigger condition and the intent of the message.
+
+Format: dense, hard numbers, tables, formulas, worked examples, IM-vs-HALF marked, no filler. Give me everything; if in doubt, include it.
