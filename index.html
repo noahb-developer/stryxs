@@ -4706,6 +4706,9 @@ body.on-auth .container {
   <!-- ═══ RACE PROJECTION MINI ═══ -->
   <div id="raceProjectionMini"></div>
 
+  <!-- ═══ TRAINING LOAD & FORM (fitness / fatigue / form, ACWR) ═══ -->
+  <div id="loadFormCard"></div>
+
   <!-- ═══ RECENT WORKOUTS (kept at bottom) ═══ -->
   <div class="panel">
     <div class="panel-header">
@@ -5581,7 +5584,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v83',
+      app_version: 'v84',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -11137,6 +11140,9 @@ async function renderDashboard() {
   // ═══ STEP 6: Race projection MINI (single line) ═══
   await renderDashRaceProjectionMini(intake);
 
+  // ═══ STEP 6b: Training Load & Form (fitness/fatigue/form + ACWR) ═══
+  try { renderLoadFormCard(); } catch (e) { console.warn('[Stryxs] load card failed:', e); }
+
   // ═══ STEP 7: Recent workouts (existing logic, kept) ═══
   if (!state.dashRecentRange) state.dashRecentRange = 'week';
   const rangePicker = document.getElementById('recentRangePicker');
@@ -11570,6 +11576,107 @@ async function renderDashWeekStrip() {
 }
 
 // Compact race projection mini, single line, links to Race Plan tab
+// ═══ TRAINING LOAD MODEL (PMC) — fitness / fatigue / form + ACWR ═══
+// Approximates TrainingPeaks-style CTL (42-day) / ATL (7-day) / TSB (form) from
+// logged workouts. Per-session load = hrTSS (durationH × (avgHR/LTHR)^2 × 100)
+// when HR + LTHR exist, else a duration-based aerobic fallback. Directionally
+// correct; sharpens as the athlete logs HR. Stored on window for the coach to read.
+function computeLoadModel() {
+  const profile = state.profile || {};
+  const runLthr = parseInt(profile.runLthr) || 175;
+  const bikeLthr = parseInt(profile.bikeLthr) || 165;
+  const DAYS = 60;
+  const todayStr = (typeof getClientToday === 'function') ? getClientToday() : new Date().toISOString().split('T')[0];
+  const today = new Date(todayStr + 'T12:00:00');
+  const daily = new Array(DAYS).fill(0);
+  let counted = 0;
+  for (const w of (state.workouts || [])) {
+    if (w.activity_classification === 'daily_activity') continue; // commutes/walks don't count
+    const dStr = (w.date || w.created_at || '').split('T')[0];
+    if (!dStr) continue;
+    const d = new Date(dStr + 'T12:00:00');
+    if (isNaN(d)) continue;
+    const ago = Math.round((today - d) / 86400000);
+    if (ago < 0 || ago >= DAYS) continue;
+    let durMin = null;
+    if (w.duration != null) { const x = parseFloat(w.duration); if (!isNaN(x) && x > 0) durMin = x > 600 ? x / 60 : x; }
+    if (!durMin) continue;
+    const durH = durMin / 60;
+    const sport = (typeof normalizeSport === 'function') ? normalizeSport(w.sport) : (w.sport || '');
+    const hr = w.avgHr || w.avg_hr;
+    const lthr = sport === 'bike' ? bikeLthr : runLthr;
+    let load = (hr && lthr) ? durH * (hr / lthr) * (hr / lthr) * 100 : durH * 50;
+    load = Math.max(0, Math.min(load, 400)); // clamp one session to something sane
+    daily[DAYS - 1 - ago] += load;
+    counted++;
+  }
+  // EWMA (TrainingPeaks: today = yesterday + (load - yesterday)/timeConstant)
+  let ctl = 0, atl = 0, formYesterday = 0;
+  for (let i = 0; i < DAYS; i++) {
+    formYesterday = ctl - atl; // form heading INTO day i (before that day's load)
+    ctl = ctl + (daily[i] - ctl) / 42;
+    atl = atl + (daily[i] - atl) / 7;
+  }
+  let acute = 0, chronic = 0;
+  for (let i = DAYS - 7; i < DAYS; i++) acute += daily[i];
+  for (let i = DAYS - 28; i < DAYS; i++) chronic += daily[i];
+  chronic = chronic / 4;
+  const acwr = chronic > 0 ? acute / chronic : null;
+  const model = {
+    ctl: Math.round(ctl), atl: Math.round(atl), tsb: Math.round(formYesterday),
+    acwr: acwr != null ? Math.round(acwr * 100) / 100 : null, counted,
+  };
+  window._stryxsLoadModel = model;
+  return model;
+}
+
+function _formStatus(tsb) {
+  if (tsb >= 15) return { label: 'Fresh', color: '#4ade80', note: 'Tapered and race-ready.' };
+  if (tsb >= 5) return { label: 'Recovered', color: '#34d399', note: 'Rested, good time to load up.' };
+  if (tsb >= -10) return { label: 'Productive', color: '#facc15', note: 'Healthy training balance.' };
+  if (tsb >= -30) return { label: 'Overloaded', color: '#fb923c', note: 'Deep in a hard block, watch recovery and fuel.' };
+  return { label: 'Very fatigued', color: '#f87171', note: 'Back off and prioritize recovery before you dig a hole.' };
+}
+
+function renderLoadFormCard() {
+  const card = document.getElementById('loadFormCard');
+  if (!card) return;
+  const m = computeLoadModel();
+  if (!m || m.counted < 6) { card.innerHTML = ''; return; } // not enough data to be meaningful
+  const st = _formStatus(m.tsb);
+  const acwrColor = m.acwr == null ? 'var(--text-mute)' : m.acwr > 1.5 ? '#f87171' : m.acwr < 0.8 ? '#facc15' : '#4ade80';
+  const acwrNote = m.acwr == null ? '' : m.acwr > 1.5 ? 'high injury risk, cap next week' : m.acwr < 0.8 ? 'detrained, ramp gently' : 'safe loading zone';
+  card.innerHTML = `
+    <div class="panel" style="margin-bottom: 14px;">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">📈 Training load & form</div>
+          <div class="panel-sub">How fit, how fatigued, and how fresh you are right now</div>
+        </div>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px;">
+        <div style="background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; padding: 12px;">
+          <div style="font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.8px; font-weight: 700;">Fitness</div>
+          <div style="font-size: 22px; font-weight: 800; font-family: 'JetBrains Mono', monospace; margin-top: 2px;">${m.ctl}</div>
+          <div style="font-size: 10px; color: var(--text-mute);">42-day</div>
+        </div>
+        <div style="background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; padding: 12px;">
+          <div style="font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.8px; font-weight: 700;">Fatigue</div>
+          <div style="font-size: 22px; font-weight: 800; font-family: 'JetBrains Mono', monospace; margin-top: 2px;">${m.atl}</div>
+          <div style="font-size: 10px; color: var(--text-mute);">7-day</div>
+        </div>
+        <div style="background: var(--bg-3); border: 1px solid ${st.color}55; border-radius: 10px; padding: 12px;">
+          <div style="font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.8px; font-weight: 700;">Form</div>
+          <div style="font-size: 22px; font-weight: 800; font-family: 'JetBrains Mono', monospace; margin-top: 2px; color: ${st.color};">${m.tsb > 0 ? '+' : ''}${m.tsb}</div>
+          <div style="font-size: 10px; color: ${st.color};">${st.label}</div>
+        </div>
+      </div>
+      <div style="font-size: 12px; color: var(--text-dim); line-height: 1.5;">${st.note}${m.acwr != null ? ` · <span style="color: ${acwrColor};">load ratio ${m.acwr.toFixed(2)}</span> (${acwrNote})` : ''}</div>
+      <div style="font-size: 10px; color: var(--text-mute); margin-top: 8px; line-height: 1.45;">Estimated from your logged workouts and heart rate. The more you sync with HR, the sharper this gets.</div>
+    </div>
+  `;
+}
+
 async function renderDashRaceProjectionMini(intake) {
   const card = document.getElementById('raceProjectionMini');
   if (!card) return;
@@ -14595,6 +14702,15 @@ async function callCoach(action, payload, options = {}) {
   // English (e.g. a quick "ok" or "thx"). Backend prefers explicit
   // userLocale over inferring from message content.
   const enrichedPayload = { ...(payload || {}), userLocale: state.locale || 'en' };
+  // Inject the training-load model (fitness/fatigue/form + ACWR) so Coach can
+  // reason about readiness, taper, and adaptive adjustments. Computed client-side
+  // from full workout history; cheap to attach. Skip if not yet computed.
+  try {
+    if (typeof window._stryxsLoadModel === 'undefined' || !window._stryxsLoadModel) {
+      if (typeof computeLoadModel === 'function' && state.workouts && state.workouts.length) computeLoadModel();
+    }
+    if (window._stryxsLoadModel && window._stryxsLoadModel.counted >= 6) enrichedPayload.loadModel = window._stryxsLoadModel;
+  } catch (_) {}
 
   try {
     const res = await fetch(`${SUPABASE_URL}/functions/v1/coach`, {
