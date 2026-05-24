@@ -5581,7 +5581,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v82',
+      app_version: 'v83',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -17396,15 +17396,17 @@ function renderRaceDayPlan(intake, paces) {
     // (Ironman / 70.3) is all about not overcooking the bike; short course (sprint/
     // olympic) can be raced harder. These are strategy notes, not data claims.
     const isLong = goal.includes('ironman') || goal.includes('70');
-    const whySwim = isLong
+    // Prefer the data-grounded "why" the projection engine computed for THIS
+    // athlete (paces.*_why); fall back to the static strategic note otherwise.
+    const whySwim = paces.swim_why || (isLong
       ? "Smallest slice of your day. Swim relaxed and aerobic, don't burn matches before the bike."
-      : "Strong but controlled. Don't redline before T1.";
-    const whyBike = isLong
+      : "Strong but controlled. Don't redline before T1.");
+    const whyBike = paces.bike_why || (isLong
       ? "Hold steady, even effort. Going too hard here is the number one reason the run falls apart."
-      : "Firm, sustainable effort. Stay aero and keep it smooth.";
-    const whyRun = isLong
+      : "Firm, sustainable effort. Stay aero and keep it smooth.");
+    const whyRun = paces.run_why || (isLong
       ? "Start easy off the bike, your legs are pre-fatigued. Build in, and negative-split if you feel good."
-      : "Settle into goal pace fast, then hold. Empty the tank in the final third.";
+      : "Settle into goal pace fast, then hold. Empty the tank in the final third.");
 
     return `
       <div>
