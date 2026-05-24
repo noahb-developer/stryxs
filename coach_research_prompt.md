@@ -92,3 +92,35 @@ Then go deep on these specific areas. For each, give hard numbers, formulas, tab
 8. PROACTIVE COACHING. The specific situations a good coach should NOTICE and message the athlete about unprompted (for example: missed 3 swims in a row, easy runs creeping into Z3, two weeks of high drift), each with the trigger condition and the intent of the message.
 
 Format: dense, hard numbers, tables, formulas, worked examples, IM-vs-HALF marked, no filler. Give me everything; if in doubt, include it.
+
+---
+
+# COACH PAIR 2 — Marathon + Half-Marathon (round 1; new conversation)
+
+You are a world-class distance-running coach and exercise physiologist specializing in the Marathon (42.2 km) and Half-Marathon (21.1 km). I am building an AI coaching app that (a) generates personalized, periodized training plans and (b) predicts race finish times from an athlete's real training data. I need a rigorous, structured reference I can encode directly into the app's rules.
+
+Cover BOTH the Marathon and the Half-Marathon. Whenever they differ, mark it [MAR vs HALF]. Be specific and quantitative: numbers, ranges, formulas, tables, not vague philosophy. Ground it in the established methodologies and cite which one (Jack Daniels / VDOT, Pete Pfitzinger / Advanced Marathoning, Hal Higdon, Renato Canova, Stephen Seiler / polarized, Pete Riegel / endurance time model). Every rule should map to a constant, lookup, or validator.
+
+Produce these sections:
+
+1. PERIODIZATION MODEL — phase structure (Base/foundation -> Build/specific -> Peak/sharpen -> Taper -> Race); typical phase durations and how they scale with weeks-to-race (table for 12, 16, 18, 24 weeks); how to set phase boundaries from time-to-race; minimum viable build.
+
+2. WEEKLY STRUCTURE & PROGRESSION (most important, hard numbers): max safe weekly MILEAGE increase (% per week) by experience; cutback/down-week cadence and how much to cut; rest/recovery days per week by level; when doubles are appropriate for runners; how a weekly mileage (or hours) budget maps to number of runs and their lengths; the long run as a % of weekly mileage and its absolute caps [MAR vs HALF]; intensity distribution (polarized ~80/20) by phase. Give explicit guardrail rules (with numbers) that keep week-to-week load smooth, always include easy/rest, and never spike the long run.
+
+3. ZONES & PACES — Daniels VDOT and the 5 training paces E / M / T / I / R: define each, its purpose, and how to compute the pace from a recent race (give the VDOT formula). Also HR zones from LTHR (Z1-Z5 ranges). Worked example for a runner with a 21:12 5K.
+
+4. SESSION LIBRARY — every standard run session (recovery, easy, steady, long run, marathon-pace long run [Pfitz], medium-long, tempo/threshold (cruise intervals), VO2 intervals, strides, hill reps, progression run, fast finish long run), each with target pace/zone, typical duration/distance by phase, and purpose. Include warmup/main/cooldown structure.
+
+5. ADAPTATION TO THE ATHLETE — scale to available days/week, weekly mileage budget, experience (beginner/intermediate/advanced), current fitness (recent PBs, LTHR), injuries/limiters; how to place the long run, the quality (tempo/interval) days, and easy days across a 7-day week protecting recovery; treadmill/heat substitutions.
+
+6. TAPER — length and volume/intensity changes [MAR vs HALF]; how much to cut, what to keep.
+
+7. RACE-DAY EXECUTION — pacing strategy [MAR vs HALF] (even vs slight negative split, the marathon "wall" and how pacing avoids it, what % of goal pace the first km/mile should be); carbohydrate loading pre-race and in-race fueling (carbs/hr, fluid, when to take gels); the one-line "why" for the goal pace a smart runner would respect.
+
+8. RACE-TIME PROJECTION METHODOLOGY — how to predict a marathon / half finish from a recent 5K/10K (Riegel exponent for runners, Daniels VDOT equivalency); a marathon-specific fade/endurance factor and how training volume affects it (a runner on low mileage fades more than Riegel predicts); MINIMUM data for a credible projection; concrete LOW/MEDIUM/HIGH confidence criteria (data thresholds); how to communicate uncertainty as a range. Worked example: project a marathon and a half for a runner with a 21:12 5K on ~50 km/week.
+
+9. ANTI-PATTERNS / SAFETY — explicit DO-NOT rules with numbers (too much too soon, the 10% rule, easy days not easy, long run too long or too fast, too much intensity, skipping cutback weeks, racing the workouts). Running injuries are common, so be specific (cadence, surface, shoe rotation, bone-stress risk).
+
+10. FEASIBILITY / SANITY CHECK — given a goal time + weeks-to-race + current fitness, judge if it's realistic; the minimum weekly mileage and longest run a given goal time requires (e.g., a sub-3 marathon vs a sub-4 marathon vs a sub-1:45 half). Pair any "unrealistic" verdict with the specific lever (more weeks, more mileage, or a softer goal).
+
+FORMAT: clear headers and bullets, tables for anything numeric (paces by VDOT, phase durations, mileage->runs maps, confidence thresholds, min-mileage-by-goal), explicit numbers and rules I can turn into code, mark every Marathon-vs-Half difference, dense, no filler.
