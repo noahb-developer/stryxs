@@ -124,3 +124,35 @@ Produce these sections:
 10. FEASIBILITY / SANITY CHECK — given a goal time + weeks-to-race + current fitness, judge if it's realistic; the minimum weekly mileage and longest run a given goal time requires (e.g., a sub-3 marathon vs a sub-4 marathon vs a sub-1:45 half). Pair any "unrealistic" verdict with the specific lever (more weeks, more mileage, or a softer goal).
 
 FORMAT: clear headers and bullets, tables for anything numeric (paces by VDOT, phase durations, mileage->runs maps, confidence thresholds, min-mileage-by-goal), explicit numbers and rules I can turn into code, mark every Marathon-vs-Half difference, dense, no filler.
+
+---
+
+# Coach pair 2 round 2 follow-up (paste into the SAME marathon conversation)
+
+That reference is excellent and I have already encoded the periodization, the VDOT pace math, the mileage fade factor for projections, and the long-run/progression caps into the app. Now I want to go deeper and make sure we are not missing anything, because for this app the quality of the coach is everything. Keep covering BOTH the Marathon and the Half-Marathon, mark every [MAR vs HALF] difference, stay dense and numeric, ground it in Daniels / Pfitzinger / Canova / Seiler.
+
+Two asks first:
+
+A) REVIEW AND EXTEND your own reference. Re-read what you wrote and add anything you left out, glossed over, or could make more precise or codeable. Same style.
+
+B) Give me YOUR expert opinion on what a truly great AI running coach should have that I did not think to ask for. Do not hold back. If there is a whole topic we are missing (gut training, RED-S / energy availability, female-athlete physiology, masters runners, downhill-course quad prep, etc.), add it.
+
+Then go deep on these specific areas. For each give hard numbers, formulas, tables, and at least one worked example:
+
+1. ADAPTIVE ADJUSTMENT (most important). Given a completed week of real data (actual pace vs target on each run, HR drift on easy/long runs, sessions completed vs missed, RPE and felt-tags easy/hard/sore/sick, cadence, the 2-3 week trend), give explicit rules for adjusting NEXT week. For example: "if the long run was missed, do NOT stack it"; "if easy runs are drifting into Z3, do X"; "if a key tempo was >5% slow at the right HR, do Y"; "if sore/sick logged, do Z"; plus overtraining / bone-stress early-warning flags and the response to each.
+
+2. IN-SESSION STRUCTURE. For every run session type, a warmup / main set / cooldown template with how to SCALE the reps and volume by VDOT and by phase, so a description is concrete and prescriptive (e.g. how a threshold session grows from Base to Peak).
+
+3. WEEKLY TEMPLATES. Ready-to-use 7-day layouts for 4-, 5-, 6-, and 7-day availability, for MAR and HALF, in Base / Build / Peak, showing exact placement of the long run, the quality days, easy days, and rest, with the spacing rules baked in.
+
+4. PROJECTION DEPTH. More worked examples: a faster runner (sub-3 marathon type), a runner with ONLY a recent 10K, and a half-to-marathon step-up. How to update the projection as fitness changes mid-block, and how cadence/efficiency or a recent long-run pace can adjust it.
+
+5. RECOVERY & READINESS. How to read fatigue from resting HR / HRV / sleep when available, and from training data (pace at fixed HR, RPE creep, drift) when not; concrete thresholds for inserting unplanned rest or cutting a week short.
+
+6. ENVIRONMENT & LOGISTICS. Heat / cold / altitude pace adjustments (numbers), net-downhill and hilly courses (e.g. Boston quad prep, downhill-running adaptation), treadmill equivalence, and a marathon race-week + race-morning checklist.
+
+7. STRENGTH & INJURY PREVENTION (runners get injured constantly, go deep). Season strength phases (sets/reps/load), key lifts + plyometrics for runners, the injury triad and mitigations, cadence/form cues, shoe rotation/replacement, surface management, and return-to-run protocols after a layoff or niggle.
+
+8. PROACTIVE COACHING. The specific situations a good running coach should NOTICE and message about unprompted (mileage spike, easy runs creeping hard, long run skipped, niggle/sore reported, plateau at fixed HR, taper anxiety, race week, new PB), each with the trigger condition and the message intent.
+
+Format: dense, hard numbers, tables, formulas, worked examples, [MAR vs HALF] marked, no filler. Give me everything; if in doubt, include it.
