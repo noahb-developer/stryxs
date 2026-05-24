@@ -5581,7 +5581,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v80',
+      app_version: 'v81',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -6099,11 +6099,26 @@ function dismissActivationChecklist() {
 }
 
 // Restore the checklist from Settings (counterpart to dismiss).
-function restoreActivationChecklist() {
+async function restoreActivationChecklist() {
   if (!state.user) return;
+  // If the user has already completed every step, the dashboard card auto-hides
+  // (renderActivationChecklistCard returns '' at 100%), so "restoring" it would
+  // dump them on an empty dashboard and look broken. Detect that and just tell
+  // them they're done instead.
+  try {
+    let intakeDone = false;
+    try {
+      const { data: intake } = await sb.from('athlete_intake').select('completed').eq('user_id', state.user.id).maybeSingle();
+      intakeDone = !!intake?.completed;
+    } catch (_) {}
+    const st = await getActivationStatus(intakeDone);
+    const allDone = st.intake && st.plan && st.plan_viewed && st.workouts && st.analysis_viewed && st.trends_viewed;
+    if (allDone) { toast("You're all set, you've finished every getting-started step."); return; }
+  } catch (_) {}
   try { localStorage.removeItem(`stryxs_activation_dismissed_${state.user.id}`); } catch (_) {}
   // Re-render dashboard so the card shows up again
   navigate('dashboard');
+  toast('Getting-started checklist is back on your dashboard.');
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -7073,7 +7088,7 @@ window.addEventListener('scroll', () => {
 // 4 steps that teach NAVIGATION ACCESS, not features. The user learns where
 // each main area lives. Feature mastery happens later through the activation
 // checklist that drives them to actually use each one.
-function startSpotlightTour() {
+async function startSpotlightTour() {
   _spotlightState.active = true;
   _spotlightState.minimized = false;
   // Block pinch-zoom and double-tap-zoom for the duration of the tour.
@@ -7150,33 +7165,45 @@ function startSpotlightTour() {
       beforeShowDelay: 300,
       padding: 6,
     },
-    {
+  ];
+
+  // Step 4 (the getting-started checklist) ONLY if that card will actually be on
+  // the dashboard. If the user dismissed it OR has completed every step, the card
+  // isn't rendered — targeting it makes the tour appear to "stop at 3 of 4". We
+  // skip the step entirely so the counter matches what the user actually sees.
+  let _showChecklistStep = true;
+  try {
+    if (localStorage.getItem(`stryxs_activation_dismissed_${state.user.id}`) === '1') {
+      _showChecklistStep = false;
+    } else {
+      let intakeDone = false;
+      try {
+        const { data: _intk } = await sb.from('athlete_intake').select('completed').eq('user_id', state.user.id).maybeSingle();
+        intakeDone = !!_intk?.completed;
+      } catch (_) {}
+      const st = await getActivationStatus(intakeDone);
+      const allDone = st.intake && st.plan && st.plan_viewed && st.workouts && st.analysis_viewed && st.trends_viewed;
+      if (allDone) _showChecklistStep = false;
+    }
+  } catch (_) {}
+  if (_showChecklistStep) {
+    steps.push({
       target: '#activationChecklistCard',
       title: 'Your getting-started list',
       desc: 'Six things to do first, all on your dashboard. Each step unlocks once the previous is done.',
       nextLabel: 'Next →',
-      // No overlay at all, let user see the full dashboard. The cutout draws
-      // attention to the checklist card. User can scroll freely if needed.
+      // No overlay, let user see the full dashboard. Cutout draws attention.
       noOverlay: true,
       allowScroll: true,
       scrollBlock: 'start',
-      // Big scroll offset so the card top lands BELOW the tooltip (tooltip is
-      // pinned at the top of the viewport on mobile because there's not enough
-      // room above the card). Without this offset, the tooltip overlaps the
-      // card's "Tap each step in order" header.
+      // Offset so the card top lands BELOW the tooltip on mobile.
       scrollOffset: 220,
-      // Compact tooltip, short text + smaller padding/font so it doesn't
-      // cover the top of the activation card on mobile (user reported the
-      // standard-sized tooltip was hiding the card's header).
       compactTooltip: true,
-      beforeShow: () => {
-        // Make sure we're on dashboard so the activation card is visible
-        navigate('dashboard');
-      },
+      beforeShow: () => { navigate('dashboard'); },
       beforeShowDelay: 500,
       padding: 8,
-    },
-  ];
+    });
+  }
 
   // Conditionally add the trial step ONLY if user is actually in a trial.
   // Skipping this for paying users / expired-trial users keeps the message
@@ -17365,6 +17392,20 @@ function renderRaceDayPlan(intake, paces) {
     const t1Time = goal.includes('ironman') && !goal.includes('70') ? '~5 min' : goal.includes('70') ? '~4 min' : '~3 min';
     const t2Time = goal.includes('ironman') && !goal.includes('70') ? '~4 min' : goal.includes('70') ? '~3 min' : '~2 min';
 
+    // A short, honest "why" per leg so the pacing isn't just a number. Long course
+    // (Ironman / 70.3) is all about not overcooking the bike; short course (sprint/
+    // olympic) can be raced harder. These are strategy notes, not data claims.
+    const isLong = goal.includes('ironman') || goal.includes('70');
+    const whySwim = isLong
+      ? "Smallest slice of your day. Swim relaxed and aerobic, don't burn matches before the bike."
+      : "Strong but controlled. Don't redline before T1.";
+    const whyBike = isLong
+      ? "Hold steady, even effort. Going too hard here is the number one reason the run falls apart."
+      : "Firm, sustainable effort. Stay aero and keep it smooth.";
+    const whyRun = isLong
+      ? "Start easy off the bike, your legs are pre-fatigued. Build in, and negative-split if you feel good."
+      : "Settle into goal pace fast, then hold. Empty the tank in the final third.";
+
     return `
       <div>
         <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; margin-bottom: 10px;">Race-day plan</div>
@@ -17375,6 +17416,7 @@ function renderRaceDayPlan(intake, paces) {
               <div style="flex: 1; min-width: 0;">
                 <div style="font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px;">Swim</div>
                 <div style="font-size: 15px; font-weight: 600; font-family: 'JetBrains Mono', monospace; color: var(--text); margin-top: 2px;">${swimPace}</div>
+                <div style="font-size: 11px; color: var(--text-mute); line-height: 1.45; margin-top: 5px;">${whySwim}</div>
               </div>
             </div>
           ` : ''}
@@ -17390,6 +17432,7 @@ function renderRaceDayPlan(intake, paces) {
               <div style="flex: 1; min-width: 0;">
                 <div style="font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px;">Bike</div>
                 <div style="font-size: 15px; font-weight: 600; font-family: 'JetBrains Mono', monospace; color: var(--text); margin-top: 2px;">${bikePace}</div>
+                <div style="font-size: 11px; color: var(--text-mute); line-height: 1.45; margin-top: 5px;">${whyBike}</div>
               </div>
             </div>
           ` : ''}
@@ -17405,6 +17448,7 @@ function renderRaceDayPlan(intake, paces) {
               <div style="flex: 1; min-width: 0;">
                 <div style="font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px;">Run</div>
                 <div style="font-size: 15px; font-weight: 600; font-family: 'JetBrains Mono', monospace; color: var(--text); margin-top: 2px;">${runPace}</div>
+                <div style="font-size: 11px; color: var(--text-mute); line-height: 1.45; margin-top: 5px;">${whyRun}</div>
               </div>
             </div>
           ` : ''}
