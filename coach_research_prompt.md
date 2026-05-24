@@ -190,3 +190,67 @@ Produce these sections:
 10. FEASIBILITY / GOAL-SETTING. [5K10K] min training for a goal 5K/10K time (VDOT-based). [GENERAL] realistic health-improvement timelines (how fast VO2max, Zone 2, and strength actually improve for a beginner vs trained person), and how to set a motivating but realistic 8-12 week goal when there's no race.
 
 FORMAT: clear headers and bullets, tables for anything numeric (VDOT paces, zone definitions, weekly hour targets, VO2max norms by age/sex, progression rates), explicit numbers and rules I can turn into code, mark every [5K10K vs GENERAL] difference, dense, no filler.
+
+---
+
+# COACH PAIR 4 — Sprint + Olympic triathlon (round 1; NEW conversation)
+
+You are a world-class triathlon coach and exercise physiologist specializing in SHORT-COURSE racing: the Sprint triathlon (750 m swim / 20 km bike / 5 km run) and the Olympic / standard triathlon (1500 m swim / 40 km bike / 10 km run). I am building an AI coaching app that (a) generates personalized, periodized training plans and (b) predicts race finish times from an athlete's real training data. I need a rigorous, structured reference I can encode directly into the app's rules.
+
+Cover BOTH the Sprint and the Olympic. Whenever they differ, mark it [SPRINT vs OLY]. Be specific and quantitative: numbers, ranges, formulas, tables, not vague philosophy. Ground it in the established methodologies and cite which one (Joe Friel / Triathlete's Training Bible — short course, Brett Sutton, Matt Dixon / Fast-Track Triathlete, Stephen Seiler / polarized, Andrew Coggan / power, Jack Daniels & Pete Riegel for the run projection). Critical framing: unlike Ironman, short course is raced AT or ABOVE threshold, so the training is more intensity-driven — make every section reflect that. Every rule should map to a constant, lookup, or validator.
+
+Produce these sections:
+
+1. PERIODIZATION MODEL — phase structure (Base -> Build -> Peak -> short Taper -> Race); typical phase durations and how they scale with weeks-to-race (table for 8, 12, 16, and 24 weeks); how to set phase boundaries purely from time-to-race; the minimum viable build for a first-timer [SPRINT vs OLY]. Show how the short-course intensity mix shifts vs Ironman.
+
+2. WEEKLY STRUCTURE & PROGRESSION (most important, hard numbers): max safe week-to-week volume increase (% per week) by experience; deload/recovery-week cadence and how much to cut; minimum and typical REST days per week by level and phase; max sessions/day and when a double is appropriate for a short-course athlete; how a weekly HOURS budget (Sprint ~5-9 h, Olympic ~7-12 h — confirm or correct) maps to number of sessions per sport and their durations; intensity distribution by phase (short course runs hotter than IM's 80/20 — give the actual % of weekly time per zone, by phase, and the sport-by-sport split for SPRINT and OLY). Give explicit guardrail rules (with numbers) that keep week-to-week load smooth, always include adequate rest, and never spike.
+
+3. ZONES — HR zones from LTHR (run and bike separately) and swim zones from CSS; Z1-Z5 % ranges in a table; and the specific RACE zone each leg is held at for Sprint vs Olympic (these are well above Ironman effort).
+
+4. SESSION LIBRARY (per sport) — for swim, bike, run: every standard session type (easy/endurance, tempo, threshold, VO2/intervals, speed, long, recovery, technique/drills), each with target zone, typical duration/distance by phase, and purpose, emphasizing the THRESHOLD and VO2max work that short course depends on. BRICKS are central here, so go deep: optimal frequency, length, structure, and the race-pace brick simulation [SPRINT vs OLY], plus the bike-to-run "jelly legs" adaptation. TRANSITIONS (T1/T2): how to train them and how much time they cost. Strength: how much, what type, where in the week, what to avoid near key sessions. Open-water vs pool swim skills (sighting, drafting, mass start).
+
+5. ADAPTATION TO THE ATHLETE — scale to available training days/week, weekly hours budget, experience (beginner/intermediate/advanced), current fitness (run LTHR / bike LTHR or FTP / swim CSS / recent run PB), injuries/limiters, and equipment (pool vs open water, trainer, etc.). How to place the key swim, the threshold bike, the brick, and the long sessions across a 7-day week while protecting recovery. Draft-legal (ITU-style) vs non-draft age-group racing — how it changes bike training, if at all.
+
+6. TAPER — taper length and the volume/intensity changes for Sprint vs Olympic (short races over-taper easily — give the numbers); how much to cut, what intensity to keep.
+
+7. RACE-DAY EXECUTION (we display per-leg pacing) — target pacing for each leg (swim, bike, run) relative to threshold/zones, for Sprint vs Olympic (these are raced much closer to or above threshold than IM). For EACH leg give a single credible one-line rationale ("why") a smart athlete would respect, including how hard to push the bike while still being able to run fast off it. Transition strategy. Fueling/hydration (minimal for sprint, modest for olympic — give carbs/hr and fluid numbers).
+
+8. RACE-TIME PROJECTION METHODOLOGY (we predict finish times from training data) — how to project a Sprint / Olympic finish from recent benchmarks: run split from a recent 5K/10K PB (Riegel exponent + a SHORT-COURSE tri fatigue factor that is MUCH smaller than Ironman's because the run leg is short — give the actual multipliers for Sprint and Olympic by ability); bike split from FTP/NP or average aerobic speed times a short-course race factor (these are ridden well above Z2 — give the factors); swim split from CSS plus a buffer; plus T1/T2 time estimates. Give the actual formulas. State the MINIMUM data needed for a credible projection, what raises/lowers confidence, and concrete LOW/MEDIUM/HIGH confidence criteria (data thresholds). Show how to communicate the result as a range. WORKED EXAMPLE: project a full Sprint and a full Olympic finish, step by step, for an athlete with a 5K PB 21:12, bike ~26 km/h aerobic / FTP ~210 W, swim CSS 1:56/100m, ~10 weeks consistent — swim split, T1, bike split (show how you get speed/time), T2, run split (open-5K/10K prediction then the short-course fatigue factor applied), and total, with the confidence label and range.
+
+9. ANTI-PATTERNS / SAFETY — explicit DO-NOT rules with numbers. The short-course-specific mistakes: too much slow aerobic volume and not enough threshold/VO2 (the opposite of the IM mistake); OR all intensity and no aerobic base; neglecting the swim because it's "only 10-15% of the race"; never practicing bricks or transitions; over-tapering a short race; load spikes / no recovery week / unrealistic ramp.
+
+10. FEASIBILITY / SANITY CHECK — given a goal time + weeks-to-race + current fitness, judge whether the goal is realistic, and the minimum training (weekly hours, number of weeks, key sessions, longest brick) a given Sprint or Olympic goal requires. Pair any "unrealistic" verdict with the specific lever (more weeks, more volume/intensity, or a softer goal).
+
+FORMAT: clear headers and bullets, tables for anything numeric (zone %, phase durations, hours->sessions maps, fatigue/race factors, confidence thresholds), explicit numbers and rules I can turn into code, mark every [SPRINT vs OLY] difference, dense, no filler.
+
+---
+
+# Coach pair 4 round 2 follow-up (paste into the SAME sprint/olympic conversation)
+
+That reference is excellent and I have already encoded the periodization, the short-course intensity mix, the brick rules, the race-pace targets, and the deterministic projection (run PB + short-course fatigue factor, bike speed times a race factor, swim from CSS) into the app. Now I want to go deeper and make sure we are not missing anything, because for this app the quality of the coach is everything. Keep covering BOTH Sprint and Olympic, mark every [SPRINT vs OLY] difference, stay dense and numeric, ground it in Friel / Sutton / Dixon / Seiler / Coggan.
+
+Two asks first:
+
+A) REVIEW AND EXTEND your own reference. Re-read what you wrote and add anything you left out, glossed over, or could make more precise or codeable. Same style.
+
+B) Give me YOUR expert opinion on what a truly great AI short-course triathlon coach should have that I did not think to ask for. Do not hold back. If there is a whole topic we are missing (open-water race craft, drafting tactics, transition speed, fast-twitch/run-speed development for the 5K off the bike, female-athlete physiology, masters athletes, youth/draft-legal development), add it.
+
+Then go deep on these specific areas. For each give hard numbers, formulas, tables, and at least one worked example:
+
+1. ADAPTIVE ADJUSTMENT (most important). Given a completed week of real data (HR drift per session, actual pace/power/speed vs target, sessions completed vs missed, RPE and felt-tags easy/hard/sore/sick, the 2-3 week trend), give explicit rules for adjusting NEXT week — including the short-course-specific case where the athlete is hitting volume but the QUALITY/threshold sessions are fading (the signal to back off intensity, not volume). Overtraining / under-recovery red flags and the response to each.
+
+2. IN-SESSION STRUCTURE. For each session type per sport (and the brick), a warmup / main set / cooldown template with durations and targets, and how to SCALE reps/volume by phase, so a description is concrete and prescriptive instead of vague. Show how a threshold bike and a VO2max run session grow from Base to Peak.
+
+3. KEY-SESSION PLACEMENT across the week. Exact spacing rules for hard sessions (what counts as the same energy system across swim/bike/run, the minimum gap), and ready-to-use 7-day weekly templates for 5-, 6-, and 7-day availability, for SPRINT and OLY, in Base / Build / Peak, showing where the brick, the key swim, rest, and deload sit.
+
+4. PROJECTION DEPTH. More worked examples: a swim-limited athlete, a strong cyclist / weak runner, a draft-legal vs non-draft Olympic athlete, and a Sprint-to-Olympic step-up. How to update the projection as fitness changes mid-block, and how a recent brick-run pace can sharpen the run split estimate.
+
+5. RECOVERY & READINESS. How to read fatigue from resting HR / HRV / sleep / mood when available, and from training data (pace/power at fixed HR, RPE creep, drift) when not; concrete thresholds for inserting unplanned rest or cutting a week short.
+
+6. ENVIRONMENT & LOGISTICS. Heat / cold-water / wetsuit-legal temperature / altitude adjustments, hilly-bike and hot-run pacing, and a race-week + race-morning checklist specific to short course (transition setup, warm-up that actually matters for a 5K-off-the-bike, etc.).
+
+7. STRENGTH PROGRESSION across a season (sets / reps / load by phase) and the injury-prevention + mobility essentials per sport for a triathlete.
+
+8. PROACTIVE COACHING. The specific situations a good short-course coach should NOTICE and message about unprompted (missed bricks, easy sessions creeping into the grey zone, threshold sessions stalling, neglected swim, taper anxiety, race week, new PB), each with the trigger condition and the message intent.
+
+Format: dense, hard numbers, tables, formulas, worked examples, [SPRINT vs OLY] marked, no filler. Give me everything; if in doubt, include it.

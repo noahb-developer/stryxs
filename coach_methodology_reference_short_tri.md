@@ -1,7 +1,8 @@
 # Coach Reference: short_tri (Sprint / Olympic triathlon)
 
 > `short_tri` = Friel short-course (Triathlete's Training Bible) + general multisport. Race AT or ABOVE threshold.
-> Pair 4. Compiled 2026-05-24 (round 15). Compact, codeable summary. Most of the engine (capped ramp, R1/R3/R6 guardrails, deload cadence, adaptive adjustment, load model, projection) is shared with the IM/70.3 tri build (`coach_methodology_reference.md` + `_part2.md`) — this doc only captures what is DIFFERENT for short course.
+> Pair 4. **INTERIM — Claude-synthesized 2026-05-24 (round 15), NOT yet from Noah's deep research.** The other pairs' references came from Noah running a research prompt through a strong model and pasting the rich output back; the Pair-4 research prompt is now in `coach_research_prompt.md` and is still TO BE RUN. When Noah pastes that output, REPLACE/EXTEND this file with it and re-encode the deeper detail (this round only covered the obvious short-course rules + the already-built projection).
+> Compact, codeable summary. Most of the engine (capped ramp, R1/R3/R6 guardrails, deload cadence, adaptive adjustment, load model, projection) is shared with the IM/70.3 tri build (`coach_methodology_reference.md` + `_part2.md`) — this doc only captures what is DIFFERENT for short course.
 
 ## 0. Shared with long-course tri
 Same projection engine (`computeTriProjection` / `_triFinish`), same deterministic guardrails, same Friel zone language (LTHR-based). `_TRI_DIST`: olympic = swim 1500 / bike 40km / run 10k / T1 120s / T2 90s; sprint = swim 750 / bike 20km / run 5k / T1 90s / T2 60s. Same assessment-week-if-no-LTHR behavior (isFrielPersona).
