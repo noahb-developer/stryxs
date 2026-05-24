@@ -156,3 +156,37 @@ Then go deep on these specific areas. For each give hard numbers, formulas, tabl
 8. PROACTIVE COACHING. The specific situations a good running coach should NOTICE and message about unprompted (mileage spike, easy runs creeping hard, long run skipped, niggle/sore reported, plateau at fixed HR, taper anxiety, race week, new PB), each with the trigger condition and the message intent.
 
 Format: dense, hard numbers, tables, formulas, worked examples, [MAR vs HALF] marked, no filler. Give me everything; if in doubt, include it.
+
+---
+
+# COACH PAIR 3 — 5K/10K racing + General fitness/health (round 1; NEW conversation)
+
+You are a world-class coach and exercise physiologist. I'm building an AI coaching app and need a rigorous, encodable reference for TWO related but distinct personas:
+- **[5K10K]** Short-distance running performance: the 5K, 10K, and mile. Methodology: Jack Daniels (VDOT), with Seiler (polarized) and some Canova. Goal: race a specific time.
+- **[GENERAL]** General fitness & health (NO race). Methodology: Peter Attia (longevity, Zone 2, VO2max, strength, stability) + Stephen Seiler. Goal: get and stay fit and healthy, improve aerobic base, VO2max, and strength, often across mixed modalities (run/bike/row/etc.).
+
+Cover BOTH. Mark every divergence [5K10K vs GENERAL]. Be specific and quantitative: numbers, ranges, formulas, tables. Cite methodology. Every rule should map to a constant, lookup, or validator.
+
+Produce these sections:
+
+1. PERIODIZATION / PROGRAM STRUCTURE. [5K10K] phase model (base -> build -> peak -> short taper -> race) and how it scales with weeks-to-race (tables for 8, 12, 16 weeks); the 5K/10K is more VO2max/speed-driven than the marathon, so show how the intensity mix shifts. [GENERAL] there's usually NO race: give an ongoing, sustainable structure (e.g. rolling base + periodic VO2max blocks + continuous strength), how to cycle stimulus to avoid staleness, and how to set 8-12 week "health goals" instead of a race date.
+
+2. WEEKLY STRUCTURE & PROGRESSION. Volume/load progression caps, deload cadence, rest days, sessions/week by experience. [5K10K] mileage-based with quality emphasis; [GENERAL] the Attia template (multiple Zone 2 sessions/week totalling a target, e.g. ~3 hrs/wk Zone 2; 1 VO2max session/wk; 2-4 strength sessions/wk; stability/mobility), with concrete weekly hour/session targets by fitness level and by available time.
+
+3. ZONES & PACES. [5K10K] Daniels VDOT E/M/T/I/R (reuse the VDOT formulas) with emphasis on I and R for 5K/10K; HR zones from LTHR. [GENERAL] define Zone 2 precisely (the "can hold a conversation / nasal-breathing / ~lactate 2 mmol / talk test" + %LTHR or %max HR bands), the VO2max zone, and how to find Zone 2 without a lab (talk test, HR, RPE). Give the standard 5-zone model and where Zone 2 and VO2max sit.
+
+4. SESSION LIBRARY. [5K10K] easy, long (shorter than marathon), tempo/threshold, VO2max intervals (the key session: e.g. 5-6x3 min, 1km reps, 400-800m reps), R/speed, strides, hills. [GENERAL] Zone 2 steady (any modality, 30-60+ min), the canonical VO2max session (e.g. 4x4 min @ ~90-95% max HR, Norwegian protocol), strength sessions (compound lifts, sets/reps for health vs hypertrophy vs strength), stability/mobility, and "rucking/incline walk" as a Zone 2 option. WU/main/CD for each.
+
+5. ADAPTATION. Scale to days/week, experience (beginner/intermediate/advanced), age (Attia cares a lot about masters/older adults, falls, bone density, stability), injuries, and EQUIPMENT/modality (general fitness people use bikes, rowers, treadmills, weights, not just running). How to substitute modalities while keeping the Zone 2 / VO2max / strength stimulus.
+
+6. TAPER / PEAKING. [5K10K] short taper (about 1 week) for a goal race. [GENERAL] usually none; how to "test" fitness (a VO2max test, a Zone 2 benchmark, a strength test) periodically instead.
+
+7. RACE-DAY / TEST-DAY. [5K10K] 5K and 10K pacing strategy (these are run much closer to threshold/VO2, so pacing differs from the marathon), warmup protocol (proper WU matters far more for short races), and fueling (minimal for 5K/10K). [GENERAL] how to run a periodic fitness test safely and what to measure.
+
+8. PROGRESS / PROJECTION. [5K10K] predict 5K/10K/mile times from a recent race (VDOT + Riegel), confidence + range. [GENERAL] there's no finish time — define how to MEASURE and PROJECT progress instead: estimated VO2max (give the formulas, e.g. from a race, from HR, from the Cooper/Rockport tests), Zone 2 pace/power at a fixed HR improving over time, resting HR trend, strength benchmarks, "fitness age." What to show a general user as their "are you getting fitter" signal.
+
+9. ANTI-PATTERNS / SAFETY. [5K10K] too much intensity (5K/10K runners over-race workouts), neglecting easy volume, spiking speedwork. [GENERAL] the big one: people do everything at moderate intensity ("grey zone") and never truly easy or truly hard; also neglecting strength, neglecting Zone 2 for only-HIIT, ego-lifting, ignoring recovery. Explicit DO-NOT rules with numbers.
+
+10. FEASIBILITY / GOAL-SETTING. [5K10K] min training for a goal 5K/10K time (VDOT-based). [GENERAL] realistic health-improvement timelines (how fast VO2max, Zone 2, and strength actually improve for a beginner vs trained person), and how to set a motivating but realistic 8-12 week goal when there's no race.
+
+FORMAT: clear headers and bullets, tables for anything numeric (VDOT paces, zone definitions, weekly hour targets, VO2max norms by age/sex, progression rates), explicit numbers and rules I can turn into code, mark every [5K10K vs GENERAL] difference, dense, no filler.
