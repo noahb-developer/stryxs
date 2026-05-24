@@ -5584,7 +5584,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v84',
+      app_version: 'v85',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -7787,7 +7787,79 @@ async function buildNotifications() {
     } catch (_) {}
   } catch (e) { console.warn('[Stryxs] buildNotifications failed:', e); }
 
+  // ── Proactive coaching nudges (methodology Part 2 §8): the app notices things
+  // and surfaces them, instead of waiting to be asked. ──
+  try { const nudges = await buildProactiveNudges(uid); if (nudges.length) out.push(...nudges); } catch (_) {}
+
   out.sort((a, b) => new Date(b.time) - new Date(a.time));
+  return out;
+}
+
+// Proactive nudges derived from the load model, recent drift, and the race date.
+// Each carries a STABLE time (anchored to the event that triggered it) so the bell
+// dot fires once when the situation arises and clears when the panel is opened.
+async function buildProactiveNudges(uid) {
+  const out = [];
+  try {
+    // Make sure the load model is computed (it may not be yet if the dashboard
+    // hasn't rendered this session).
+    let lm = (typeof window !== 'undefined') ? window._stryxsLoadModel : null;
+    if ((!lm || typeof lm.tsb !== 'number') && typeof computeLoadModel === 'function' && state.workouts && state.workouts.length) {
+      try { lm = computeLoadModel(); } catch (_) {}
+    }
+    const recent = (state.workouts || []).filter(w => {
+      const d = (w.date || w.created_at || '').split('T')[0];
+      if (!d) return false;
+      return (Date.now() - new Date(d + 'T12:00:00').getTime()) < 14 * 86400000 && w.activity_classification !== 'daily_activity';
+    });
+    const newestTime = recent.length
+      ? recent.reduce((m, w) => { const t = new Date((w.date || w.created_at)).getTime(); return t > m ? t : m; }, 0)
+      : Date.now();
+
+    // 1) Injury-risk spike (ACWR > 1.5).
+    if (lm && typeof lm.acwr === 'number' && lm.acwr > 1.5 && recent.length >= 3) {
+      out.push({ id: 'nudge_acwr', type: 'coachtip', time: new Date(newestTime).toISOString(), icon: '⚠️', actionKind: 'coach',
+        title: 'Your training load just spiked',
+        sub: `Your load ratio is ${lm.acwr.toFixed(2)} (above 1.5 is where injury risk climbs). Hold steady this week, no new long sessions. Tap to ask Coach how to back off smartly.` });
+    }
+    // 2) Deep fatigue (very negative form).
+    else if (lm && typeof lm.tsb === 'number' && lm.tsb < -25 && recent.length >= 3) {
+      out.push({ id: 'nudge_fatigue', type: 'coachtip', time: new Date(newestTime).toISOString(), icon: '🔋', actionKind: 'coach',
+        title: "You're carrying a lot of fatigue",
+        sub: `Your form is ${lm.tsb} right now. A recovery day or two will actually make you faster. Tap to talk it through with Coach.` });
+    }
+
+    // 3) Aerobic drift on easy efforts (fatigue / base gap signal).
+    const drifty = recent.filter(w => { const d = parseFloat(w.drift ?? w.cardiac_drift); return !isNaN(d) && d > 8; });
+    if (drifty.length >= 2) {
+      const t = drifty.reduce((m, w) => { const x = new Date((w.date || w.created_at)).getTime(); return x > m ? x : m; }, 0);
+      out.push({ id: 'nudge_drift', type: 'coachtip', time: new Date(t).toISOString(), icon: '💓', actionKind: 'coach',
+        title: 'Your heart rate is drifting on easy days',
+        sub: "Two or more recent aerobic sessions drifted up a lot, a sign of fatigue or a base gap. Keep easy days genuinely easy. Tap to ask Coach." });
+    }
+
+    // 4) Race week.
+    try {
+      const { data: intake } = await sb.from('athlete_intake').select('race_date, goal_event').eq('user_id', uid).maybeSingle();
+      if (intake?.race_date) {
+        const race = new Date(intake.race_date + 'T12:00:00');
+        const days = Math.ceil((race.getTime() - Date.now()) / 86400000);
+        if (days >= 0 && days <= 7) {
+          out.push({ id: 'nudge_raceweek', type: 'coachtip', time: new Date(race.getTime() - 7 * 86400000).toISOString(), icon: '🏁', actionKind: 'coach',
+            title: days === 0 ? 'Race day, go get it' : `Race week, ${days} day${days === 1 ? '' : 's'} to go`,
+            sub: 'Taper now: cut volume, keep a little intensity, sleep, hydrate, and nothing new on race day. Tap for your race-week checklist.' });
+        }
+      }
+    } catch (_) {}
+
+    // 5) Positive reinforcement: a strong, consistent week.
+    const last7 = recent.filter(w => (Date.now() - new Date((w.date || w.created_at)).getTime()) < 7 * 86400000);
+    if (last7.length >= 5) {
+      out.push({ id: 'nudge_consistent', type: 'coachtip', time: new Date(newestTime).toISOString(), icon: '🔥', actionKind: 'none',
+        title: `${last7.length} sessions this week, strong work`,
+        sub: 'Consistency is the whole game. This is exactly how fitness gets built.' });
+    }
+  } catch (e) { console.warn('[Stryxs] buildProactiveNudges failed:', e); }
   return out;
 }
 
