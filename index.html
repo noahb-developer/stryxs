@@ -5584,7 +5584,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v86',
+      app_version: 'v87',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -11757,13 +11757,91 @@ function renderLoadFormCard() {
   `;
 }
 
+// ═══ GENERAL-FITNESS PROGRESS PANEL ═══
+// General users have no race time, so we show longevity markers instead
+// (methodology reference §8): estimated VO2max from their best benchmark + an
+// aerobic-efficiency trend (easy-run pace at the same HR over time).
+function _vdotFromPB(intake) {
+  const parse = (s, d) => {
+    if (!s) return null;
+    const p = String(s).trim().replace(/[^\d:.]/g, '').split(':').map(parseFloat).filter(x => !isNaN(x));
+    let sec = null;
+    if (p.length === 3) sec = p[0] * 3600 + p[1] * 60 + p[2];
+    else if (p.length === 2) sec = d >= 21000 ? p[0] * 3600 + p[1] * 60 : p[0] * 60 + p[1];
+    else if (p.length === 1) sec = p[0] * 60;
+    return (sec && sec > 0) ? { t: sec, d } : null;
+  };
+  const cands = [parse(intake.pb_5k, 5000), parse(intake.pb_10k, 10000), parse(intake.pb_half, 21097.5), parse(intake.pb_marathon, 42195)].filter(Boolean);
+  if (!cands.length) return null;
+  cands.sort((a, b) => b.d - a.d);
+  const { t, d } = cands[0];
+  const tmin = t / 60, v = d / tmin;
+  const vo2 = -4.60 + 0.182258 * v + 0.000104 * v * v;
+  const pct = 0.8 + 0.1894393 * Math.exp(-0.012778 * tmin) + 0.2989558 * Math.exp(-0.1932605 * tmin);
+  return pct > 0 ? vo2 / pct : null;
+}
+function _vo2Rating(vo2, age, sex) {
+  const male = String(sex || '').toLowerCase().startsWith('m');
+  const a = parseInt(age) || 35;
+  const goodFloor = male ? (a < 30 ? 44 : a < 40 ? 40 : a < 50 ? 36 : a < 60 ? 33 : 30) : (a < 30 ? 35 : a < 40 ? 33 : a < 50 ? 30 : a < 60 ? 27 : 24);
+  const excFloor = goodFloor + (male ? 7 : 6);
+  if (vo2 >= excFloor) return { label: 'Excellent', color: '#4ade80' };
+  if (vo2 >= goodFloor) return { label: 'Good', color: '#34d399' };
+  if (vo2 >= goodFloor - 6) return { label: 'Fair', color: '#facc15' };
+  return { label: 'Building', color: '#fb923c' };
+}
+function _aerobicEfficiency(loDays, hiDays) {
+  const profile = state.profile || {};
+  const runLthr = parseInt(profile.runLthr) || 175;
+  const now = Date.now();
+  let sumEff = 0, n = 0;
+  for (const w of (state.workouts || [])) {
+    const sp = (typeof normalizeSport === 'function') ? normalizeSport(w.sport) : (w.sport || '');
+    if (sp !== 'run') continue;
+    const hr = w.avgHr || w.avg_hr;
+    if (!hr || hr < 0.65 * runLthr || hr > 0.90 * runLthr) continue; // easy/aerobic only
+    if (!(w.distance > 0) || w.duration == null) continue;
+    const x = parseFloat(w.duration); if (isNaN(x) || x <= 0) continue;
+    const durH = (x > 600 ? x / 60 : x) / 60;
+    const dStr = (w.date || w.created_at || '').split('T')[0]; if (!dStr) continue;
+    const ago = (now - new Date(dStr + 'T12:00:00').getTime()) / 86400000;
+    if (ago < loDays || ago >= hiDays) continue;
+    sumEff += (w.distance / durH) / hr; n++;
+  }
+  return n >= 2 ? sumEff / n : null;
+}
+function renderGeneralFitnessCard(intake) {
+  const card = document.getElementById('raceProjectionMini');
+  if (!card) return;
+  const vo2 = _vdotFromPB(intake);
+  const recentEff = _aerobicEfficiency(0, 21), priorEff = _aerobicEfficiency(21, 56);
+  let trend = null;
+  if (recentEff && priorEff) {
+    const ch = (recentEff - priorEff) / priorEff * 100;
+    trend = ch > 2 ? { t: 'Improving', c: '#4ade80' } : ch < -2 ? { t: 'Dipping', c: '#fb923c' } : { t: 'Steady', c: '#facc15' };
+  }
+  if (!vo2 && !trend) { card.innerHTML = ''; return; }
+  const rating = vo2 ? _vo2Rating(vo2, intake.age, intake.sex) : null;
+  card.innerHTML = `
+    <div class="panel" style="margin-bottom: 14px;">
+      <div class="panel-header"><div><div class="panel-title">💪 Fitness & health</div><div class="panel-sub">Your longevity markers, no race needed</div></div></div>
+      <div style="display: grid; grid-template-columns: ${(vo2 && trend) ? '1fr 1fr' : '1fr'}; gap: 10px;">
+        ${vo2 ? `<div style="background: var(--bg-3); border: 1px solid ${rating.color}55; border-radius: 10px; padding: 12px;"><div style="font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.8px; font-weight: 700;">Est. VO2max</div><div style="font-size: 22px; font-weight: 800; font-family: 'JetBrains Mono', monospace; margin-top: 2px;">${vo2.toFixed(0)}</div><div style="font-size: 10px; color: ${rating.color};">${rating.label}</div></div>` : ''}
+        ${trend ? `<div style="background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; padding: 12px;"><div style="font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.8px; font-weight: 700;">Aerobic efficiency</div><div style="font-size: 18px; font-weight: 800; margin-top: 2px; color: ${trend.c};">${trend.t}</div><div style="font-size: 10px; color: var(--text-mute);">pace at the same HR</div></div>` : ''}
+      </div>
+      <div style="font-size: 10px; color: var(--text-mute); margin-top: 8px; line-height: 1.45;">${vo2 ? 'VO2max estimated from your best logged race or benchmark. ' : ''}Aerobic efficiency compares your easy-run pace at the same heart rate over recent weeks. Higher means fitter.</div>
+    </div>`;
+}
+
 async function renderDashRaceProjectionMini(intake) {
   const card = document.getElementById('raceProjectionMini');
   if (!card) return;
 
-  // Hide entirely if no goal event
-  if (!intake?.goal_event || intake.goal_event === 'general' || intake.goal_event === 'general_fitness') {
-    card.innerHTML = '';
+  // No goal at all → nothing here.
+  if (!intake?.goal_event) { card.innerHTML = ''; return; }
+  // General fitness has no race time → show the fitness/health progress panel instead.
+  if (intake.goal_event === 'general' || intake.goal_event === 'general_fitness') {
+    try { renderGeneralFitnessCard(intake); } catch (_) { card.innerHTML = ''; }
     return;
   }
 
