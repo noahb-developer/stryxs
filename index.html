@@ -5581,7 +5581,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v81',
+      app_version: 'v82',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -17372,7 +17372,7 @@ function renderProjectionsFromData(container, intake, recentWorkouts, proj) {
       ${paces && Object.keys(paces).length > 0 ? renderRaceDayPlan(intake, paces) : ''}
 
       <div style="margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); text-align: center;">
-        <div style="font-size: 11px; color: var(--text-mute); line-height: 1.5;">🔄 Updates automatically each week</div>
+        <div style="font-size: 11px; color: var(--text-mute); line-height: 1.5;">🔄 Updates automatically each week · <a style="color: var(--accent); cursor: pointer; text-decoration: underline;" onclick="refreshProjectionsView()">Refresh now</a></div>
         <div style="font-size: 11px; color: var(--text-mute); line-height: 1.5; margin-top: 4px;">These get more accurate as you log more workouts and add a recent race or benchmark time.</div>
       </div>
     </div>
