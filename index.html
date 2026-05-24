@@ -5581,7 +5581,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v79',
+      app_version: 'v80',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -11564,7 +11564,11 @@ async function renderDashRaceProjectionMini(intake) {
     if (typeof _projectionsCache !== 'undefined' && _projectionsCache?.proj?.primary_projection) {
       const p = _projectionsCache.proj.primary_projection;
       const t = p.predicted_time || p.time;
-      if (t && t !== '—') { projTime = t; confidence = _projectionsCache.proj.data_sufficiency || p.confidence || null; }
+      // Show the projection's OWN confidence (low/medium/high), the SAME field the
+      // Race Planner detail shows. (We used to show data_sufficiency here, which is
+      // a different thing — "enough data to compute" — so the dashboard could say
+      // "high" while the detail said "low". Now they match.)
+      if (t && t !== '—') { projTime = t; confidence = p.confidence || _projectionsCache.proj.data_sufficiency || null; }
     }
     const eventName = formatGoal(intake.goal_event) || 'race';
 
@@ -17340,10 +17344,9 @@ function renderProjectionsFromData(container, intake, recentWorkouts, proj) {
 
       ${paces && Object.keys(paces).length > 0 ? renderRaceDayPlan(intake, paces) : ''}
 
-      <div style="margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: center;">
-        <div style="font-size: 11px; color: var(--text-mute); display: flex; align-items: center; gap: 6px;">
-          🔄 Updates automatically each week
-        </div>
+      <div style="margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); text-align: center;">
+        <div style="font-size: 11px; color: var(--text-mute); line-height: 1.5;">🔄 Updates automatically each week</div>
+        <div style="font-size: 11px; color: var(--text-mute); line-height: 1.5; margin-top: 4px;">These get more accurate as you log more workouts and add a recent race or benchmark time.</div>
       </div>
     </div>
   `;
