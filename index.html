@@ -5584,7 +5584,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v85',
+      app_version: 'v86',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -11662,6 +11662,7 @@ function computeLoadModel() {
   const today = new Date(todayStr + 'T12:00:00');
   const daily = new Array(DAYS).fill(0);
   let counted = 0;
+  let runKm28 = 0, longestRun42 = 0; // for the marathon/half projection (mileage fade)
   for (const w of (state.workouts || [])) {
     if (w.activity_classification === 'daily_activity') continue; // commutes/walks don't count
     const dStr = (w.date || w.created_at || '').split('T')[0];
@@ -11681,6 +11682,11 @@ function computeLoadModel() {
     load = Math.max(0, Math.min(load, 400)); // clamp one session to something sane
     daily[DAYS - 1 - ago] += load;
     counted++;
+    // Running volume for the projection's mileage fade factor.
+    if (sport === 'run' && w.distance > 0) {
+      if (ago < 28) runKm28 += parseFloat(w.distance) || 0;
+      if (ago < 42 && (parseFloat(w.distance) || 0) > longestRun42) longestRun42 = parseFloat(w.distance) || 0;
+    }
   }
   // EWMA (TrainingPeaks: today = yesterday + (load - yesterday)/timeConstant)
   let ctl = 0, atl = 0, formYesterday = 0;
@@ -11697,6 +11703,8 @@ function computeLoadModel() {
   const model = {
     ctl: Math.round(ctl), atl: Math.round(atl), tsb: Math.round(formYesterday),
     acwr: acwr != null ? Math.round(acwr * 100) / 100 : null, counted,
+    weeklyRunKm: Math.round((runKm28 / 4) * 10) / 10, // avg run km/wk over last 4 wks
+    longestRunKm: Math.round(longestRun42 * 10) / 10, // longest run in last 6 wks
   };
   window._stryxsLoadModel = model;
   return model;
