@@ -5584,7 +5584,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v88',
+      app_version: 'v89',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -10336,22 +10336,46 @@ function renderSwimLapsTable(laps, poolLength) {
   `;
 }
 
-// Per-lap pace bar chart for swims. Uses the same interactive crosshair as
-// the other split charts so the user can tap any bar to see distance + pace.
-// Skips rest laps. Bar height: lower pacePer100m = faster = taller bar.
+// Per-lap pace chart for swims. Pool swims are DISCRETE intervals of varying
+// distance (e.g. 200/400/200/100) with rests between, so a smoothed line is
+// misleading (it invents a continuous curve from a few points and spaces
+// unequal laps equally). We use one bar per WORK lap instead, each labelled
+// with its distance and pace. Bar height: lower pacePer100m = faster = taller.
+// Pure CSS flex bars (no stretched-SVG distortion); native title tooltips.
 function renderSwimPaceChart(laps) {
   if (!Array.isArray(laps)) return '';
   const valid = laps.filter(l => !l.isRest && l.distanceM > 0 && typeof l.pacePer100m === 'number' && l.pacePer100m > 0);
   if (valid.length < 2) return '';
-  return renderStryxsLineChart({
-    title: 'Pace per lap',
-    seriesA: valid.map(l => l.pacePer100m / 60), // convert sec→min for consistent formatter
-    labelA: 'Pace',
-    unitA: 'min/100m',
-    colorA: '#5082ff',
-    formatterA: v => _stryxsFmtPace(v, '100m'),
-    height: 150,
-  });
+  const paces = valid.map(l => l.pacePer100m);
+  const lo = Math.min(...paces), hi = Math.max(...paces);
+  const range = (hi - lo) || 1;
+  const avg = paces.reduce((s, p) => s + p, 0) / paces.length;
+  const fmtPace = sec => `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, '0')}`;
+  const fmtTime = sec => sec >= 60 ? `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, '0')}` : `${Math.round(sec)}s`;
+  // Faster (lower pace) = taller bar, so the chart reads intuitively.
+  const heightPct = p => Math.max(14, 14 + (1 - (p - lo) / range) * 86);
+  const showLabels = valid.length <= 16; // avoid crowding on very long sets
+  const bars = valid.map(l => {
+    const tip = `Lap ${l.lap} · ${l.distanceM} m · ${fmtTime(l.elapsedSec)} · ${fmtPace(l.pacePer100m)}/100m`;
+    return `<div style="flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%;">
+        <div style="font-size:10px; color:var(--text-dim); margin-bottom:3px; font-variant-numeric:tabular-nums; white-space:nowrap;">${fmtPace(l.pacePer100m)}</div>
+        <div title="${tip}" style="width:100%; max-width:46px; height:${heightPct(l.pacePer100m).toFixed(1)}%; background:#00e5a0; opacity:0.92; border-radius:4px 4px 0 0;"></div>
+      </div>`;
+  }).join('');
+  const labels = showLabels ? valid.map(l =>
+    `<div style="flex:1; min-width:0; text-align:center; font-size:10px; color:var(--text-mute); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${l.distanceM}m</div>`
+  ).join('') : '';
+  return `
+    <div style="background: rgba(80, 130, 255, 0.04); border: 1px solid rgba(255,255,255,0.05); border-radius: 10px; padding: 14px; margin-top: 14px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 6px;">
+        <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px;">Pace per lap</div>
+        <div style="font-size: 11px; color: var(--text-dim); font-variant-numeric: tabular-nums;">avg ${fmtPace(avg)} · fastest ${fmtPace(lo)} · slowest ${fmtPace(hi)} /100m</div>
+      </div>
+      <div style="display:flex; align-items:flex-end; gap:6px; height:140px;">${bars}</div>
+      ${showLabels ? `<div style="display:flex; gap:6px; margin-top:6px;">${labels}</div>` : ''}
+      <div style="font-size:10px; color:var(--text-mute); margin-top:8px; text-align:center;">taller bar = faster lap${showLabels ? '' : ' · tap a bar for its distance and pace'}</div>
+    </div>
+  `;
 }
 
 // Power stats for cyclists. Avg + max are free; normalized power is Pro.
@@ -11687,6 +11711,10 @@ function computeLoadModel() {
   const profile = state.profile || {};
   const runLthr = parseInt(profile.runLthr) || 175;
   const bikeLthr = parseInt(profile.bikeLthr) || 165;
+  // Whether the athlete has actually set an LTHR. When false we fall back to
+  // guessed defaults (175/165), which still rank sessions by intensity correctly
+  // but make the ABSOLUTE numbers a rough estimate, so we surface that in the card.
+  const lthrSet = (parseInt(profile.runLthr) > 0) || (parseInt(profile.bikeLthr) > 0);
   const DAYS = 60;
   const todayStr = (typeof getClientToday === 'function') ? getClientToday() : new Date().toISOString().split('T')[0];
   const today = new Date(todayStr + 'T12:00:00');
@@ -11735,6 +11763,7 @@ function computeLoadModel() {
     acwr: acwr != null ? Math.round(acwr * 100) / 100 : null, counted,
     weeklyRunKm: Math.round((runKm28 / 4) * 10) / 10, // avg run km/wk over last 4 wks
     longestRunKm: Math.round(longestRun42 * 10) / 10, // longest run in last 6 wks
+    lthrSet,
   };
   window._stryxsLoadModel = model;
   return model;
@@ -11782,7 +11811,7 @@ function renderLoadFormCard() {
         </div>
       </div>
       <div style="font-size: 12px; color: var(--text-dim); line-height: 1.5;">${st.note}${m.acwr != null ? ` · <span style="color: ${acwrColor};">load ratio ${m.acwr.toFixed(2)}</span> (${acwrNote})` : ''}</div>
-      <div style="font-size: 10px; color: var(--text-mute); margin-top: 8px; line-height: 1.45;">Estimated from your logged workouts and heart rate. The more you sync with HR, the sharper this gets.</div>
+      <div style="font-size: 10px; color: var(--text-mute); margin-top: 8px; line-height: 1.45;">An estimate from your heart rate (TrainingPeaks-style). Read the trend and your form state more than the exact number, it is not on the same scale as Garmin or a power meter.${!m.lthrSet ? ' Set your run/bike LTHR in Settings to sharpen it.' : ' Syncing more HR data keeps it sharp.'}</div>
     </div>
   `;
 }
