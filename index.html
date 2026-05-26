@@ -5584,7 +5584,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v87',
+      app_version: 'v88',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -7838,9 +7838,39 @@ async function buildProactiveNudges(uid) {
         sub: "Two or more recent aerobic sessions drifted up a lot, a sign of fatigue or a base gap. Keep easy days genuinely easy. Tap to ask Coach." });
     }
 
+    // Intake-gated nudges (triathlon swim/brick discipline + race week). Fetch intake once.
+    let intake = null;
+    try { const _r = await sb.from('athlete_intake').select('race_date, goal_event').eq('user_id', uid).maybeSingle(); intake = _r.data; } catch (_) {}
+    const _goal = (intake?.goal_event || '').toLowerCase();
+    const _isTri = _goal === 'ironman' || _goal.includes('70_3') || _goal.includes('70.3') || _goal.includes('olympic') || _goal.includes('sprint') || _goal.includes('tri');
+    const _isShortTri = _goal.includes('olympic') || _goal.includes('sprint');
+
+    // 3b) Swim neglected (triathletes): the swim rewards frequency over volume.
+    if (_isTri && recent.length >= 4 && !recent.some(w => /swim/.test(String(w.sport || '').toLowerCase()))) {
+      out.push({ id: 'nudge_swim_neglected', type: 'coachtip', time: new Date(newestTime).toISOString(), icon: '🏊', actionKind: 'coach',
+        title: 'No swim logged in two weeks',
+        sub: 'The swim rewards frequency over volume, and a shaky swim costs you the bike and run too. Try to get 2 swims in this week. Tap to ask Coach for a quick set.' });
+    }
+    // 3c) Brick neglected (short-course tri): the bike-to-run brick is the keystone session.
+    if (_isShortTri && recent.length >= 4) {
+      const _byDay = {};
+      recent.forEach(w => {
+        const d = (w.date || w.created_at || '').split('T')[0];
+        if (!d) return;
+        const sp = String(w.sport || '').toLowerCase();
+        const key = /bike|cycl|ride/.test(sp) ? 'bike' : /run/.test(sp) ? 'run' : 'other';
+        (_byDay[d] = _byDay[d] || new Set()).add(key);
+      });
+      const _hadBrick = Object.keys(_byDay).some(d => _byDay[d].has('bike') && _byDay[d].has('run'));
+      if (!_hadBrick) {
+        out.push({ id: 'nudge_brick_neglected', type: 'coachtip', time: new Date(newestTime).toISOString(), icon: '🔁', actionKind: 'coach',
+          title: 'No brick in your recent training',
+          sub: 'For sprint and olympic racing the bike-to-run brick is the keystone, it is where the race is won or lost. Aim for one this week: ride, then run straight off the bike. Tap to ask Coach how to structure it.' });
+      }
+    }
+
     // 4) Race week.
     try {
-      const { data: intake } = await sb.from('athlete_intake').select('race_date, goal_event').eq('user_id', uid).maybeSingle();
       if (intake?.race_date) {
         const race = new Date(intake.race_date + 'T12:00:00');
         const days = Math.ceil((race.getTime() - Date.now()) / 86400000);
