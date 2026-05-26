@@ -4,7 +4,7 @@
 > Grounding: Friel (TTB), Sutton (short-course intensity), Dixon (Purple Patch race-specificity), Seiler (polarized), Coggan (power/NP/IF/TSS), Daniels (VDOT/run paces), Riegel (time model).
 > Base athlete used in worked examples: 5K PB 21:12 (1272s, VDOT 46.5), FTP 210 W, aerobic ~26 km/h, CSS 1:56/100m (116 s/100m), intermediate, 75 kg. Physics model: `P = 0.18375*v^3 + 3.679*v` (CdA 0.30, Crr 0.005, m 75, rho 1.225); race speed = flat speed * course_factor (default 0.85, range 0.80 hilly/windy to 0.92 flat/fast).
 
-> ENCODE STATUS (2026-05-24, round 17): Encoded the §1.1 adaptive intensity-vs-volume fork (into generatePlan priorWeekContext, gated to short_tri) and the §A3/B2/§7 run-speed/speed-reserve rule (into the short_tri plan block). DELIBERATELY DEFERRED (Noah's call): (1) the §4 physics bike model + revised constants, because the round-1 projection is already deployed and verified to the second and the difference is sub-minute / inside the confidence band, switching would be churn + would break round-1 unit tests; (2) the §4.6 brick-run override, because it needs reliable detection of a race-effort brick in logged workouts, which the workout schema does not flag yet; (3) the §8 proactive triggers (missed bricks, no-speed-reserve, transition lag, over-biking), because proactive nudges live in the FRONTEND (buildProactiveNudges in index.html), not the coach edge; (4) §2 in-session templates / §3 weekly day-by-day templates (the engine adapts placement to available_days via the prompt + R1/R3/R6 guardrails, already covered); (5) §5/§6 recovery+environment detail (chat knowledge + needs RHR/HRV sensor data we do not reliably have). These are good future work, not bugs.
+> ENCODE STATUS (2026-05-24, rounds 17-18): ENCODED — (1) §1.1 adaptive intensity-vs-volume fork (generatePlan priorWeekContext, gated to short_tri); (2) §A3/B2/§7 run-speed/speed-reserve rule (short_tri plan block); (3) §8 proactive triggers for short course = the SWIM-NEGLECTED (any triathlete, no swim in 14 days) and BRICK-NEGLECTED (sprint/olympic, no same-day bike+run in 14 days) nudges in the FRONTEND `buildProactiveNudges` (index.html v88); (4) §4.6 BRICK-RUN OVERRIDE in `_brickFatigue`/`computeTriProjection` — a recent (<=28d) race-effort brick run (same-day as a bike, >=50% of race-run distance, avg HR >= 90% run LTHR, measured factor clamped to [1.00,1.15]) replaces the modeled fatigue factor with the measured one and bumps short-course confidence to HIGH (run leg now measured); verified additive (no brick = round-16 numbers unchanged) and the HR/distance gates reject easy/short bricks. STILL DEFERRED (Noah's call): (a) the §4 physics bike model + revised constants — round-16 projection deployed+verified to the second, sub-minute difference, switching = churn + breaks round-1 unit tests; (b) §8 over-biking / transition-lag / no-speed-reserve nudges (need brick-vs-plan pacing, transition timing, or projection-pace-vs-PB data not cleanly available in the nudge context); (c) §2 in-session / §3 weekly day-by-day templates (engine adapts placement via prompt + R1/R3/R6 guardrails); (d) §5/§6 recovery+environment detail (chat knowledge + needs RHR/HRV we do not reliably have).
 
 ---
 
@@ -208,7 +208,7 @@ MEDIUM +/-7%: SPRINT 1:14:46-1:26:01; OLY 2:32:43-2:55:43. Run-fatigue defaults:
 ### 4.3 Draft-legal vs non-draft OLY: non-draft 2:44:13; draft-legal IF pack made ~2:36:10 (bike *0.92, run factor 1.04). Bimodal: if dropped, often slower than steady non-draft. Cap confidence MEDIUM unless pack-making history.
 ### 4.4 Sprint->Oly step-up: bike feels easier (IF 0.95->0.88), run becomes the decider (10K off bike).
 ### 4.5 Mid-block FTP 210->225 OLY: bike 1:21:41, total 2:41:59 (saves 2:14). Re-run on any benchmark update.
-### 4.6 Brick-run override (HIGHEST-VALUE future calibration): `measured_factor = actual_brick_pace / open_5K_pace`. If a race-effort brick within 3-4 wks at >= 50% race-run distance exists, use measured_factor instead of the default and narrow the run band. [DEFERRED: needs brick detection in logged workouts.]
+### 4.6 Brick-run override [ENCODED round 18]: `measured_factor = actual_brick_pace / open_race_pace`. A recent (<=28d) race-effort brick run (same-day as a bike, >=50% race-run distance, avg HR >= 90% run LTHR, factor clamped [1.00,1.15]) replaces the default and narrows the run band + bumps confidence to HIGH. Verified additive: no brick = unchanged round-16 numbers; easy/short bricks rejected by the gates.
 
 ---
 
@@ -234,7 +234,7 @@ Lifts: squat, deadlift/RDL, single-leg, hip thrust, calf raise, Pallof, plank. P
 
 ---
 
-## 8. PROACTIVE COACHING (FRONTEND: buildProactiveNudges; DEFERRED for short-course-specific triggers)
+## 8. PROACTIVE COACHING (FRONTEND: buildProactiveNudges; round 18 encoded swim-neglected + brick-neglected; rest deferred)
 Throttle ~1-2/wk, suppress dupes within 14 days, pair every flag with a concrete action.
 | Situation | Trigger | Intent |
 |---|---|---|
