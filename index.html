@@ -5584,7 +5584,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v89',
+      app_version: 'v90',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -6301,6 +6301,48 @@ async function loadWorkouts() {
   } catch (_) {}
   // Refresh the notifications bell (new/unclassified workouts) after data changes.
   try { if (typeof refreshNotifBadge === 'function') refreshNotifBadge(); } catch (_) {}
+  // Keep the public-share snapshot of completed stats current (no-op if not sharing).
+  try { if (typeof refreshShareSnapshot === 'function') refreshShareSnapshot(); } catch (_) {}
+}
+
+// Denormalize the athlete's recent COMPLETED workout stats (duration/distance/avg HR,
+// keyed by date+sport) onto their active shared_plans row, so the anonymous public-share
+// viewer can show actual-vs-planned (the viewer cannot read the private `workouts` table).
+// Fire-and-forget, fully non-fatal: no-op when there is no active share, and silently
+// tolerates the snapshot column not existing yet (pre-migrate_v8).
+async function refreshShareSnapshot() {
+  if (!state.user) return;
+  try {
+    const { data: share } = await sb.from('shared_plans')
+      .select('id').eq('user_id', state.user.id).eq('active', true)
+      .order('created_at', { ascending: false }).limit(1).maybeSingle();
+    if (!share) return;
+    const winStart = new Date(); winStart.setDate(winStart.getDate() - 18);
+    const actuals = {};
+    for (const w of (state.workouts || [])) {
+      if (w.activity_classification === 'daily_activity') continue;
+      const dStr = (w.date || w.created_at || '').split('T')[0];
+      if (!dStr) continue;
+      const dt = new Date(dStr + 'T12:00:00');
+      if (isNaN(dt) || dt < winStart) continue;
+      const sport = (typeof normalizeSport === 'function') ? normalizeSport(w.sport) : (w.sport || '');
+      if (!sport) continue;
+      const durRaw = w.duration != null ? parseFloat(w.duration) : null;
+      const durMin = (durRaw && durRaw > 0) ? (durRaw > 600 ? durRaw / 60 : durRaw) : null;
+      const dist = parseFloat(w.distance);
+      const cand = {
+        d: durMin ? Math.round(durMin) : null,
+        k: (dist > 0) ? Math.round(dist * 10) / 10 : null,
+        h: parseInt(w.avgHr || w.avg_hr) || null,
+      };
+      const key = `${dStr}|${sport}`;
+      // Keep the longest session for a given day+sport (the "real" session, not a warmup).
+      if (!actuals[key] || (cand.d || 0) > (actuals[key].d || 0)) actuals[key] = cand;
+    }
+    await sb.from('shared_plans').update({ snapshot: { actuals, at: new Date().toISOString() } }).eq('id', share.id);
+  } catch (e) {
+    console.warn('[Stryxs] refreshShareSnapshot skipped (non-fatal, e.g. pre-migration):', e?.message || e);
+  }
 }
 
 async function saveWorkout(workout) {
@@ -19262,6 +19304,10 @@ async function saveShareSettings() {
       toast('Share link created');
     }
 
+    // Capture the first completed-stats snapshot right away so the share page
+    // shows actual-vs-planned immediately (it then refreshes on each data load).
+    try { await refreshShareSnapshot(); } catch (_) {}
+
     // Reload modal
     openShareModal();
   } catch (err) {
@@ -19434,6 +19480,10 @@ async function renderPublicShare(token) {
       `;
     }
 
+    // Completed-stats snapshot (denormalized by the athlete's app; the viewer
+    // can't read the private workouts table). Keyed by `${date}|${sport}`.
+    const snapActuals = (share.snapshot && share.snapshot.actuals) ? share.snapshot.actuals : {};
+
     // Build week sections
     let weeksHTML = '';
     const sortedWeeks = Object.keys(weekMap).sort();
@@ -19487,6 +19537,16 @@ async function renderPublicShare(token) {
                       </div>
                       <div style="font-size: 14px; color: rgba(232, 237, 245, 0.78); line-height: 1.6;">${w.description || ''}</div>
                       ${w.intensity_target ? `<div style="font-size: 11px; color: var(--accent); margin-top: 6px; font-weight: 600;">→ ${w.intensity_target}</div>` : ''}
+                      ${(() => {
+                        if (isRest) return '';
+                        const act = snapActuals[`${w.scheduled_date}|${w.sport}`];
+                        if (!act || (!act.d && !act.k && !act.h)) return '';
+                        const bits = [];
+                        if (act.d) bits.push(`${act.d}min`);
+                        if (act.k) bits.push(`${act.k}km`);
+                        if (act.h) bits.push(`${act.h}bpm`);
+                        return `<div style="font-size: 12px; color: var(--accent); margin-top: 8px; font-weight: 700; font-family: 'JetBrains Mono', monospace;">✓ Done · ${bits.join(' · ')}</div>`;
+                      })()}
                     </div>
                   </div>
                 `;
