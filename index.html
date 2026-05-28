@@ -5591,7 +5591,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v93',
+      app_version: 'v94',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -5658,6 +5658,7 @@ async function loadProfile() {
     // null means "not tested yet", don't fill defaults, the UI handles fallback for analysis
     runLthr: data.run_lthr || null,
     bikeLthr: data.bike_lthr || null,
+    bikeFtp: data.bike_ftp || null, // optional: powers power-based TSS for cycling sessions
     avatarUrl: data.avatar_url || null,
     bio: data.bio || '',
     displayName: data.display_name || data.name || null,
@@ -11329,6 +11330,15 @@ function renderSwim(a) {
 async function renderDashboard() {
   if (!state.user) return;
 
+  // Cache a minimal intake slice so computeLoadModel can derive the run T-pace
+  // (rTSS) from a PB. Tiny query, runs once per dashboard render. Soft-fails.
+  try {
+    const { data: _i } = await sb.from('athlete_intake')
+      .select('pb_5k, pb_10k, pb_half, pb_marathon, run_lthr, bike_lthr')
+      .eq('user_id', state.user.id).maybeSingle();
+    window._stryxsIntake = _i || null;
+  } catch (_) {}
+
   // ═══ STEP 1: CONTEXTUAL GREETING + RACE COUNTDOWN ═══
   await renderDashGreeting();
 
@@ -11840,16 +11850,27 @@ function computeLoadModel() {
   const profile = state.profile || {};
   const runLthr = parseInt(profile.runLthr) || 175;
   const bikeLthr = parseInt(profile.bikeLthr) || 165;
+  const bikeFtp = parseInt(profile.bikeFtp) || 0;
   // Whether the athlete has actually set an LTHR. When false we fall back to
   // guessed defaults (175/165), which still rank sessions by intensity correctly
   // but make the ABSOLUTE numbers a rough estimate, so we surface that in the card.
   const lthrSet = (parseInt(profile.runLthr) > 0) || (parseInt(profile.bikeLthr) > 0);
+  // Derive a run threshold pace (Daniels T pace ≈ 5K pace + 15 s/km) from the
+  // best PB available on intake, for rTSS. If no PB, run rTSS is skipped and
+  // run sessions still score via hrTSS. window._stryxsIntake is set in
+  // renderDashboard.
+  const intake = (typeof window !== 'undefined') ? window._stryxsIntake : null;
+  const tPaceSecPerKm = _deriveRunThresholdPace(intake);
+
   const DAYS = 60;
   const todayStr = (typeof getClientToday === 'function') ? getClientToday() : new Date().toISOString().split('T')[0];
   const today = new Date(todayStr + 'T12:00:00');
   const daily = new Array(DAYS).fill(0);
   let counted = 0;
   let runKm28 = 0, longestRun42 = 0; // for the marathon/half projection (mileage fade)
+  // Track which method each session was scored with so the card can show
+  // an honest "data quality" line.
+  const methods = { power: 0, pace: 0, hr: 0, fallback: 0 };
   for (const w of (state.workouts || [])) {
     if (w.activity_classification === 'daily_activity') continue; // commutes/walks don't count
     const dStr = (w.date || w.created_at || '').split('T')[0];
@@ -11863,9 +11884,43 @@ function computeLoadModel() {
     if (!durMin) continue;
     const durH = durMin / 60;
     const sport = (typeof normalizeSport === 'function') ? normalizeSport(w.sport) : (w.sport || '');
-    const hr = w.avgHr || w.avg_hr;
-    const lthr = sport === 'bike' ? bikeLthr : runLthr;
-    let load = (hr && lthr) ? durH * (hr / lthr) * (hr / lthr) * 100 : durH * 50;
+    const hr = parseInt(w.avgHr || w.avg_hr) || 0;
+    let load = null;
+    // 1) Power TSS for cycling: TSS = hours * (NP/FTP)^2 * 100. Most accurate for
+    //    bike, especially on a trainer where HR lags. Needs FTP set + power data.
+    if (sport === 'bike' && bikeFtp > 0) {
+      const np = parseFloat(w.normalizedPower) || parseFloat(w.avgPower) || 0;
+      if (np > 0) {
+        const intensity = np / bikeFtp;
+        load = durH * intensity * intensity * 100;
+        methods.power++;
+      }
+    }
+    // 2) Running TSS (rTSS): TSS = hours * (Tpace/avgPace)^2 * 100. Needs a
+    //    derived T pace (from a PB) AND a usable avg pace (from distance+duration).
+    if (load == null && sport === 'run' && tPaceSecPerKm > 0) {
+      const km = parseFloat(w.distance) || 0;
+      const sec = durMin * 60;
+      if (km > 0.5 && sec > 0) {
+        const avgPaceSecPerKm = sec / km;
+        if (avgPaceSecPerKm > 0) {
+          const intensity = tPaceSecPerKm / avgPaceSecPerKm; // faster than T = >1
+          load = durH * intensity * intensity * 100;
+          methods.pace++;
+        }
+      }
+    }
+    // 3) hrTSS for everything else with HR present (and the default for swims/strength)
+    if (load == null) {
+      const lthr = sport === 'bike' ? bikeLthr : runLthr;
+      if (hr > 0 && lthr > 0) {
+        load = durH * (hr / lthr) * (hr / lthr) * 100;
+        methods.hr++;
+      } else {
+        load = durH * 50; // duration-only fallback for sessions with no HR/power/pace
+        methods.fallback++;
+      }
+    }
     load = Math.max(0, Math.min(load, 400)); // clamp one session to something sane
     daily[DAYS - 1 - ago] += load;
     counted++;
@@ -11893,9 +11948,42 @@ function computeLoadModel() {
     weeklyRunKm: Math.round((runKm28 / 4) * 10) / 10, // avg run km/wk over last 4 wks
     longestRunKm: Math.round(longestRun42 * 10) / 10, // longest run in last 6 wks
     lthrSet,
+    ftpSet: bikeFtp > 0,
+    methods, // { power, pace, hr, fallback } counts for the data-quality line
   };
   window._stryxsLoadModel = model;
   return model;
+}
+
+// Daniels T pace (~lactate threshold pace) from the athlete's best PB.
+// T pace ≈ 5K pace + 15 s/km (Daniels approximation). Picks the BEST (longest)
+// PB on intake and converts via Riegel back to 5K pace if needed. Returns
+// seconds per km, or 0 if no PB available.
+function _deriveRunThresholdPace(intake) {
+  if (!intake) return 0;
+  const parse = (s, d) => {
+    if (!s) return null;
+    const p = String(s).trim().replace(/[^\d:.]/g, '').split(':').map(parseFloat).filter(x => !isNaN(x));
+    let sec = null;
+    if (p.length === 3) sec = p[0] * 3600 + p[1] * 60 + p[2];
+    else if (p.length === 2) sec = d >= 21000 ? p[0] * 3600 + p[1] * 60 : p[0] * 60 + p[1];
+    else if (p.length === 1) sec = p[0] * 60;
+    return (sec && sec > 0) ? { t: sec, d } : null;
+  };
+  const cands = [
+    parse(intake.pb_5k, 5000),
+    parse(intake.pb_10k, 10000),
+    parse(intake.pb_half, 21097.5),
+    parse(intake.pb_marathon, 42195),
+  ].filter(Boolean);
+  if (!cands.length) return 0;
+  // Use the longest PB (most reliable endurance signal), convert to a 5K-equiv
+  // via Riegel (t1 * (d2/d1)^1.06), then T pace = 5K pace + 15 s/km.
+  cands.sort((a, b) => b.d - a.d);
+  const { t, d } = cands[0];
+  const fiveKTime = t * Math.pow(5000 / d, 1.06);
+  const fiveKPaceSecPerKm = fiveKTime / 5;
+  return fiveKPaceSecPerKm + 15; // Daniels T ≈ 5K pace + 15 s/km
 }
 
 function _formStatus(tsb) {
@@ -11940,7 +12028,21 @@ function renderLoadFormCard() {
         </div>
       </div>
       <div style="font-size: 12px; color: var(--text-dim); line-height: 1.5;">${st.note}${m.acwr != null ? ` · <span style="color: ${acwrColor};">load ratio ${m.acwr.toFixed(2)}</span> (${acwrNote})` : ''}</div>
-      <div style="font-size: 10px; color: var(--text-mute); margin-top: 8px; line-height: 1.45;">An estimate from your heart rate (TrainingPeaks-style). Read the trend and your form state more than the exact number, it is not on the same scale as Garmin or a power meter.${!m.lthrSet ? ' Set your run/bike LTHR in Settings to sharpen it.' : ' Syncing more HR data keeps it sharp.'}</div>
+      ${(() => {
+        // "Data quality" line: shows how the sessions were scored, so users can
+        // see when the number is built on solid data vs estimated. The more
+        // sessions on power / pace / HR (vs duration-only fallback), the sharper.
+        const mt = m.methods || { power: 0, pace: 0, hr: 0, fallback: 0 };
+        const total = mt.power + mt.pace + mt.hr + mt.fallback;
+        if (total === 0) return '';
+        const bits = [];
+        if (mt.power > 0) bits.push(`<span style="color:#fbbf24;">${mt.power} with power</span>`);
+        if (mt.pace > 0) bits.push(`<span style="color:#5082ff;">${mt.pace} with pace</span>`);
+        if (mt.hr > 0) bits.push(`<span style="color:#f87171;">${mt.hr} with HR</span>`);
+        if (mt.fallback > 0) bits.push(`<span style="color:var(--text-mute);">${mt.fallback} estimated from duration</span>`);
+        return `<div style="font-size: 11px; color: var(--text-mute); margin-top: 8px; display:flex; flex-wrap:wrap; gap:6px 12px; line-height:1.5;"><span style="color: var(--text-dim);">Built from ${total} sessions:</span>${bits.map(b => `<span>${b}</span>`).join('')}</div>`;
+      })()}
+      <div style="font-size: 10px; color: var(--text-mute); margin-top: 8px; line-height: 1.45;">An estimate from your training data (TrainingPeaks-style PMC). Read the trend and your form state more than the exact number, it is not on the same scale as Garmin or a power meter.${!m.lthrSet ? ' Set your run/bike LTHR in Settings to sharpen it.' : ''}${!m.ftpSet ? ' Set your Bike FTP in Settings for more accurate cycling load.' : ''}${m.lthrSet && m.ftpSet ? ' Syncing more HR + power data keeps it sharp.' : ''}</div>
     </div>
   `;
 }
@@ -22062,6 +22164,10 @@ async function renderSettings() {
         <label>Bike LTHR (bpm)</label>
         <input type="number" id="settingsBikeLthr" value="${state.profile.bikeLthr || ''}" placeholder="e.g. 165" />
       </div>
+      <div class="field">
+        <label>Bike FTP (watts) <span style="color:var(--text-mute); font-weight:400; font-size:11px;">optional, but unlocks more accurate cycling load</span></label>
+        <input type="number" id="settingsBikeFtp" value="${state.profile.bikeFtp || ''}" placeholder="e.g. 230" />
+      </div>
       <div id="zonePreview"></div>
         </div>
       </div>
@@ -23133,28 +23239,33 @@ async function saveAllSettings(silent = false) {
   // Zones, null means "not tested yet", don't save fake defaults
   const runLthrRaw = document.getElementById('settingsRunLthr')?.value?.trim();
   const bikeLthrRaw = document.getElementById('settingsBikeLthr')?.value?.trim();
+  const bikeFtpRaw = document.getElementById('settingsBikeFtp')?.value?.trim();
   const runLthr = runLthrRaw ? parseInt(runLthrRaw) : null;
   const bikeLthr = bikeLthrRaw ? parseInt(bikeLthrRaw) : null;
+  const bikeFtp = bikeFtpRaw ? parseInt(bikeFtpRaw) : null;
 
   // Update profile state
-  state.profile = { ...state.profile, runLthr, bikeLthr };
+  state.profile = { ...state.profile, runLthr, bikeLthr, bikeFtp };
   if (name && state.user) state.user.name = name;
 
   // Bio
   const bio = document.getElementById('settingsBio')?.value.trim() || '';
 
   // Update profile state
-  state.profile = { ...state.profile, runLthr, bikeLthr, bio };
+  state.profile = { ...state.profile, runLthr, bikeLthr, bikeFtp, bio };
   if (name && state.user) state.user.name = name;
 
-  // Save profile
-  await sb.from('profiles').update({
+  // Save profile. bike_ftp uses conditional spread so the UPDATE still works
+  // pre-migrate_v11 (unknown column would otherwise reject the row).
+  const profileUpdate = {
     run_lthr: runLthr,
     bike_lthr: bikeLthr,
     name: name,
     display_name: name,
     bio: bio,
-  }).eq('id', state.user.id);
+  };
+  if (bikeFtp != null) profileUpdate.bike_ftp = bikeFtp;
+  await sb.from('profiles').update(profileUpdate).eq('id', state.user.id);
 
   // Also sync LTHR to athlete_intake so plan generation has access
   await sb.from('athlete_intake').update({
