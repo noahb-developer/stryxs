@@ -4792,7 +4792,7 @@ body.on-auth .container {
   <div id="uploadCsvPanel" class="analyze-panel" style="display: none;">
     <div style="padding: 14px; background: rgba(0, 255, 163, 0.04); border: 1px solid rgba(0, 255, 163, 0.15); border-radius: 10px; margin-bottom: 14px;">
       <div style="font-size: 13px; color: var(--text-dim); line-height: 1.55;">
-        <strong style="color: var(--accent);">For power users:</strong> Upload a CSV from your watch for full per-lap analysis (cardiac drift, zone distribution, intensity targets). Strava sync gives you the basics; CSV gives you everything.
+        <strong style="color: var(--accent);">No Strava needed:</strong> Upload a FIT, TCX, GPX, or CSV file straight from your watch or app for full analysis (GPS map, per-km splits, heart-rate zones, power). Works with Garmin, Coros, Polar, Suunto, Wahoo, and Apple Watch exports.
       </div>
     </div>
     <label class="upload-zone" id="uploadZone">
@@ -4801,7 +4801,7 @@ body.on-auth .container {
       <div class="upload-hint">or tap to choose a file</div>
       <input type="file" class="upload-input" id="fileInput" accept=".csv, .tcx, .gpx, .fit">
     </label>
-    <p class="source-supports">Supports Garmin, COROS, Polar, Suunto, Apple Watch exports (.csv)</p>
+    <p class="source-supports">Supports Garmin, COROS, Polar, Suunto, Wahoo, Apple Watch (.fit, .tcx, .gpx, .csv)</p>
     <div style="margin-top: 14px; padding: 12px 14px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; font-size: 12px; color: var(--text-dim); line-height: 1.55;">
       <strong style="color: var(--text);">Got a Garmin, Coros, or Apple Watch?</strong> Easiest path is to connect it to Strava once (Garmin Connect → Settings → Partner Apps, Coros app → Profile → Strava, Apple Health → Strava), then use Auto-sync above. Or log manually below if you prefer not to use Strava.
     </div>
@@ -5591,7 +5591,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v94',
+      app_version: 'v95',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -6431,13 +6431,17 @@ async function saveWorkout(workout) {
   // CSV uploads are almost always intentional training, classify as plan
   // (user wouldn't manually upload a grocery bike ride)
   if (!workout.activity_classification) workout.activity_classification = 'plan';
-  const { data, error } = await sb.from('workouts').insert({
+  const insertRow = {
     user_id: state.user.id,
     sport: workout.sport,
     workout_data: workout,
     source: workout.source,
     activity_classification: workout.activity_classification,
-  }).select().single();
+  };
+  // Honor an explicit activity date (file uploads / photo logs) so the workout
+  // buckets to the day it happened, not the upload time. Defaults to now() server-side.
+  if (workout.created_at) insertRow.created_at = workout.created_at;
+  const { data, error } = await sb.from('workouts').insert(insertRow).select().single();
   if (data) workout._dbId = data.id;
   else if (error) console.error('Workout save error:', error);
 
@@ -9462,6 +9466,481 @@ function analyzeSwim(data) {
     timeSource: data.summary?.timeSource || null,
     date: new Date().toISOString(),
   };
+}
+
+// ═══════════════════════════════════════════════════════════
+// FILE UPLOAD: GPX / TCX / FIT  (device-independent workout import)
+//
+// Every endurance device (Garmin, Coros, Polar, Suunto, Wahoo, and Apple
+// Watch via export) produces one of these. GPX + TCX are XML; FIT is Garmin's
+// compact binary format. We parse each into a normalized STREAM (a list of
+// per-sample points + optional device totals), then build the SAME summary
+// workout object that Strava sync produces, so it renders through
+// renderSummaryWorkout (GPS map, HR-zone bars, per-km splits, power) and saves
+// through saveWorkout exactly like a synced activity. No build step, no
+// external library, no edge round-trip: fully self-contained so it keeps
+// working regardless of any third-party service.
+// ═══════════════════════════════════════════════════════════
+
+// Haversine distance in metres between two points (used when a file carries
+// GPS but no distance stream, e.g. most GPX).
+function _haversineM(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const toRad = d => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1), dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
+// Encode [[lat,lng],...] into a Google-encoded polyline (precision 1e5) so it
+// renders through the existing decodePolyline()/Leaflet path. Dense tracks are
+// downsampled to <=1000 points to keep the stored string small + the map smooth.
+function encodePolyline(coords) {
+  if (!Array.isArray(coords) || coords.length < 2) return '';
+  let pts = coords;
+  if (pts.length > 1000) {
+    const step = Math.ceil(pts.length / 1000);
+    pts = coords.filter((_, i) => i % step === 0 || i === coords.length - 1);
+  }
+  let lastLat = 0, lastLng = 0, out = '';
+  const enc = num => {
+    let v = num < 0 ? ~(num << 1) : (num << 1);
+    let s = '';
+    while (v >= 0x20) { s += String.fromCharCode((0x20 | (v & 0x1f)) + 63); v >>= 5; }
+    s += String.fromCharCode(v + 63);
+    return s;
+  };
+  for (const c of pts) {
+    const la = Math.round(c[0] * 1e5), ln = Math.round(c[1] * 1e5);
+    out += enc(la - lastLat) + enc(ln - lastLng);
+    lastLat = la; lastLng = ln;
+  }
+  return out;
+}
+
+function _fmtClock(totalSec) {
+  totalSec = Math.round(totalSec || 0);
+  const h = Math.floor(totalSec / 3600), m = Math.floor((totalSec % 3600) / 60), s = totalSec % 60;
+  return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}` : `${m}:${String(s).padStart(2, '0')}`;
+}
+function _fmtPaceSec(secPerKm) {
+  if (!secPerKm || !isFinite(secPerKm) || secPerKm <= 0) return '';
+  const total = Math.round(secPerKm); // round first so 299.7s -> 5:00, not 4:60
+  const m = Math.floor(total / 60), s = total % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+// Core normalizer: a parsed stream -> a summary workout object (Strava shape).
+// parsed = {
+//   sport: 'run'|'bike'|'swim'|null,   // null => inferred below
+//   name: string|null,
+//   startTime: ms-epoch|null,
+//   points: [{ ts(ms), hr, lat, lng, alt(m), dist(m, cumulative), cad, power, speed(m/s) }],
+//   totals: { durationSec, distanceM, avgHr, maxHr, avgPower, maxPower, avgCad, elevationGain }, // device-reported, optional
+//   swimLaps: [{ distanceM, elapsedSec, avgHr }]|null,
+//   poolLengthM: number|null,
+// }
+function buildWorkoutFromStream(parsed) {
+  if (!parsed) return null;
+  const pts = Array.isArray(parsed.points) ? parsed.points : [];
+  const totals = parsed.totals || {};
+  if (pts.length < 2 && !(totals.distanceM || totals.durationSec)) return null;
+
+  let sport = parsed.sport;
+
+  // Derive cumulative distance from GPS when the file carried no distance stream.
+  let haveDist = pts.some(p => typeof p.dist === 'number');
+  if (!haveDist && pts.some(p => typeof p.lat === 'number')) {
+    let cum = 0;
+    for (let i = 0; i < pts.length; i++) {
+      if (i > 0 && typeof pts[i].lat === 'number' && typeof pts[i - 1].lat === 'number') {
+        cum += _haversineM(pts[i - 1].lat, pts[i - 1].lng, pts[i].lat, pts[i].lng);
+      }
+      pts[i].dist = cum;
+    }
+    haveDist = true;
+  }
+
+  const firstTs = pts.length && pts[0].ts != null ? pts[0].ts : (parsed.startTime || null);
+  const lastTs = pts.length && pts[pts.length - 1].ts != null ? pts[pts.length - 1].ts : null;
+  const durationSec = totals.durationSec || (firstTs != null && lastTs != null ? (lastTs - firstTs) / 1000 : 0);
+  const distanceM = totals.distanceM || (haveDist && pts.length ? pts[pts.length - 1].dist - pts[0].dist : 0);
+
+  const hrs = pts.map(p => p.hr).filter(h => typeof h === 'number' && h > 0);
+  const avgHr = totals.avgHr || (hrs.length ? Math.round(hrs.reduce((s, h) => s + h, 0) / hrs.length) : 0);
+  const maxHr = totals.maxHr || (hrs.length ? Math.max(...hrs) : 0);
+
+  const powers = pts.map(p => p.power).filter(w => typeof w === 'number' && w > 0);
+  const avgPower = totals.avgPower || (powers.length ? Math.round(powers.reduce((s, w) => s + w, 0) / powers.length) : 0);
+  const maxPower = totals.maxPower || (powers.length ? Math.max(...powers) : 0);
+
+  const cads = pts.map(p => p.cad).filter(c => typeof c === 'number' && c > 0);
+  const avgCad = totals.avgCad || (cads.length ? Math.round(cads.reduce((s, c) => s + c, 0) / cads.length) : 0);
+
+  let elevationGain = totals.elevationGain || 0;
+  if (!elevationGain && pts.some(p => typeof p.alt === 'number')) {
+    let g = 0, prev = null;
+    for (const p of pts) {
+      if (typeof p.alt === 'number') {
+        if (prev != null && p.alt - prev > 0) g += p.alt - prev;
+        prev = p.alt;
+      }
+    }
+    elevationGain = Math.round(g);
+  }
+
+  const distanceKm = distanceM / 1000;
+  const avgSpeedKmh = durationSec > 0 ? distanceKm / (durationSec / 3600) : 0;
+
+  // Infer sport when the file did not declare it (GPX usually omits it).
+  if (!sport) {
+    if (parsed.poolLengthM || (parsed.swimLaps && parsed.swimLaps.length)) sport = 'swim';
+    else if (avgSpeedKmh >= 15) sport = 'bike';
+    else sport = 'run';
+  }
+
+  const lthr = sport === 'bike' ? (state.profile && state.profile.bikeLthr) : (state.profile && state.profile.runLthr);
+  const zd = hrs.length >= 5 ? zoneDistribution(hrs, getZones(lthr || (sport === 'bike' ? 165 : 170))) : null;
+
+  // Per-km splits from the distance + time + HR streams (runs/bikes).
+  const splits = [];
+  if (haveDist && pts.length > 3 && sport !== 'swim') {
+    const buckets = {};
+    for (const p of pts) {
+      if (typeof p.dist !== 'number') continue;
+      const km = Math.floor(p.dist / 1000);
+      (buckets[km] = buckets[km] || []).push(p);
+    }
+    Object.keys(buckets).map(Number).sort((a, b) => a - b).forEach(km => {
+      const b = buckets[km];
+      if (b.length < 2) return;
+      const segHr = b.map(p => p.hr).filter(h => h > 0);
+      const tSpan = (b[b.length - 1].ts - b[0].ts) / 1000;
+      const dSpan = b[b.length - 1].dist - b[0].dist;
+      const secPerKm = dSpan > 0 ? tSpan / (dSpan / 1000) : 0;
+      let segElev = 0, prev = null;
+      for (const p of b) { if (typeof p.alt === 'number') { if (prev != null && p.alt - prev > 0) segElev += p.alt - prev; prev = p.alt; } }
+      const split = { km: km + 1, avgHr: segHr.length ? Math.round(segHr.reduce((s, h) => s + h, 0) / segHr.length) : 0, elevationGain: Math.round(segElev) };
+      if (sport === 'run') split.pace = _fmtPaceSec(secPerKm);
+      else split.elapsedSec = Math.round(tSpan);
+      splits.push(split);
+    });
+  }
+
+  // Swim laps (pool) from device lap data when present.
+  let swimLaps = null;
+  if (sport === 'swim' && Array.isArray(parsed.swimLaps) && parsed.swimLaps.length) {
+    swimLaps = parsed.swimLaps.map((l, i) => {
+      const dM = l.distanceM || 0;
+      const elapsedSec = Math.round(l.elapsedSec || 0);
+      const pacePer100m = (dM > 0 && elapsedSec > 0) ? (elapsedSec / (dM / 100)) : 0;
+      return {
+        lap: i + 1, distanceM: Math.round(dM), elapsedSec, isRest: dM === 0,
+        avgHr: l.avgHr || 0,
+        pace: pacePer100m ? _fmtPaceSec(pacePer100m) : null,
+        pacePer100m,
+      };
+    });
+  }
+
+  const dateIso = firstTs != null ? new Date(firstTs).toISOString()
+    : (parsed.startTime ? new Date(parsed.startTime).toISOString() : new Date().toISOString());
+  const icon = sport === 'bike' ? '🚴' : sport === 'swim' ? '🏊' : '🏃';
+  const sportLabel = sport === 'bike' ? 'Bike' : sport === 'swim' ? 'Swim' : 'Run';
+
+  const coords = pts.filter(p => typeof p.lat === 'number' && typeof p.lng === 'number').map(p => [p.lat, p.lng]);
+
+  const w = {
+    sport,
+    name: parsed.name || sportLabel,
+    icon,
+    summary_only: true,
+    source: 'file_upload',
+    distance: +distanceKm.toFixed(3),
+    time: _fmtClock(durationSec),
+    duration: Math.round(durationSec),
+    date: dateIso,
+    created_at: dateIso,
+    lapCount: pts.length,
+  };
+  if (avgHr) w.avgHr = avgHr;
+  if (maxHr) w.maxHr = maxHr;
+  if (avgCad) w.cadence = avgCad;
+  if (elevationGain) w.elevationGain = elevationGain;
+  if (zd) w.zd = zd;
+  if (splits.length) w.splits = splits;
+  if (coords.length >= 2) w.polyline = encodePolyline(coords);
+  if (sport === 'run' && distanceKm > 0 && durationSec > 0) w.avgPace = _fmtPaceSec(durationSec / distanceKm);
+  if (sport === 'bike') { w.avgSpeed = +avgSpeedKmh.toFixed(1); if (avgPower) w.avgPower = avgPower; if (maxPower) w.maxPower = maxPower; }
+  if (parsed.poolLengthM) w.pool_length = Math.round(parsed.poolLengthM);
+  if (swimLaps) w.swim_laps = swimLaps;
+  if (!avgHr) w._no_hr_data = true;
+  return w;
+}
+
+// ── GPX ─────────────────────────────────────────────────────
+function _gpxSport(t) {
+  t = (t || '').toLowerCase();
+  if (/run|jog/.test(t)) return 'run';
+  if (/bike|cycl|ride/.test(t)) return 'bike';
+  if (/swim/.test(t)) return 'swim';
+  return null;
+}
+function parseGPX(text) {
+  let doc;
+  try { doc = new DOMParser().parseFromString(text, 'application/xml'); } catch (_) { return null; }
+  if (!doc || doc.getElementsByTagName('parsererror').length) return null;
+  const trkpts = Array.from(doc.getElementsByTagName('trkpt'));
+  if (!trkpts.length) return null;
+  const typeEl = doc.getElementsByTagName('type')[0];
+  const sport = typeEl ? _gpxSport(typeEl.textContent) : null;
+  const nameEl = doc.getElementsByTagName('name')[0];
+  const name = nameEl && nameEl.textContent ? nameEl.textContent.trim().slice(0, 80) : null;
+  const points = [];
+  for (const tp of trkpts) {
+    const lat = parseFloat(tp.getAttribute('lat'));
+    const lng = parseFloat(tp.getAttribute('lon'));
+    const p = {};
+    if (isFinite(lat) && isFinite(lng)) { p.lat = lat; p.lng = lng; }
+    // Walk the point + its nested extensions by localName (namespace-agnostic).
+    const scan = el => {
+      for (const c of Array.from(el.children)) {
+        const ln = (c.localName || '').toLowerCase();
+        if (ln === 'time') { const t = Date.parse(c.textContent); if (!isNaN(t)) p.ts = t; }
+        else if (ln === 'ele') { const v = parseFloat(c.textContent); if (isFinite(v)) p.alt = v; }
+        else if (ln === 'hr') { const v = parseInt(c.textContent); if (v > 0) p.hr = v; }
+        else if (ln === 'cad') { const v = parseInt(c.textContent); if (v > 0) p.cad = v; }
+        else if (ln === 'power' || ln === 'watts') { const v = parseInt(c.textContent); if (v > 0) p.power = v; }
+        else if (c.children && c.children.length) scan(c);
+      }
+    };
+    scan(tp);
+    points.push(p);
+  }
+  return { sport, name, startTime: (points[0] && points[0].ts) || null, points };
+}
+
+// ── TCX ─────────────────────────────────────────────────────
+function _tcxSport(s) {
+  s = (s || '').toLowerCase();
+  if (s === 'running') return 'run';
+  if (s === 'biking' || s === 'cycling') return 'bike';
+  if (s === 'swimming') return 'swim';
+  return null;
+}
+function parseTCX(text) {
+  let doc;
+  try { doc = new DOMParser().parseFromString(text, 'application/xml'); } catch (_) { return null; }
+  if (!doc || doc.getElementsByTagName('parsererror').length) return null;
+  const tps = Array.from(doc.getElementsByTagName('Trackpoint'));
+  if (!tps.length) return null;
+  const act = doc.getElementsByTagName('Activity')[0];
+  const sport = act ? _tcxSport(act.getAttribute('Sport')) : null;
+  const notesEl = doc.getElementsByTagName('Notes')[0];
+  const name = notesEl && notesEl.textContent ? notesEl.textContent.trim().slice(0, 80) : null;
+  const txt = (el, tag) => { const e = el.getElementsByTagName(tag)[0]; return e ? e.textContent.trim() : null; };
+  const points = [];
+  for (const tp of tps) {
+    const p = {};
+    const time = txt(tp, 'Time'); if (time) { const t = Date.parse(time); if (!isNaN(t)) p.ts = t; }
+    const latS = txt(tp, 'LatitudeDegrees'), lngS = txt(tp, 'LongitudeDegrees');
+    if (latS && lngS) { const la = parseFloat(latS), ln = parseFloat(lngS); if (isFinite(la) && isFinite(ln)) { p.lat = la; p.lng = ln; } }
+    const alt = txt(tp, 'AltitudeMeters'); if (alt) { const v = parseFloat(alt); if (isFinite(v)) p.alt = v; }
+    const dist = txt(tp, 'DistanceMeters'); if (dist) { const v = parseFloat(dist); if (isFinite(v)) p.dist = v; }
+    const hrEl = tp.getElementsByTagName('HeartRateBpm')[0];
+    if (hrEl) { const v = parseInt(txt(hrEl, 'Value') || hrEl.textContent); if (v > 0) p.hr = v; }
+    const cad = txt(tp, 'Cadence'); if (cad) { const v = parseInt(cad); if (v > 0) p.cad = v; }
+    const ext = tp.getElementsByTagName('Extensions')[0];
+    if (ext) {
+      for (const c of Array.from(ext.getElementsByTagName('*'))) {
+        const ln = (c.localName || '').toLowerCase();
+        if (ln === 'watts') { const v = parseInt(c.textContent); if (v > 0) p.power = v; }
+        else if (ln === 'speed') { const v = parseFloat(c.textContent); if (isFinite(v)) p.speed = v; }
+        else if (ln === 'runcadence' && p.cad == null) { const v = parseInt(c.textContent); if (v > 0) p.cad = v; }
+      }
+    }
+    points.push(p);
+  }
+  return { sport, name, startTime: (points[0] && points[0].ts) || null, points };
+}
+
+// ── FIT (binary) ────────────────────────────────────────────
+// Self-contained decoder for the subset we need: the file header, definition
+// + data messages, and the global message types record(20), lap(19),
+// session(18), sport(12), file_id(0). Handles per-message endianness, the
+// FIT "invalid" sentinels, developer fields (skipped), and compressed
+// timestamp headers. Returns null on any malformed input rather than throwing.
+function parseFIT(buffer) {
+  try {
+    const view = new DataView(buffer);
+    if (view.byteLength < 14) return null;
+    const headerSize = view.getUint8(0);
+    if (String.fromCharCode(view.getUint8(8), view.getUint8(9), view.getUint8(10), view.getUint8(11)) !== '.FIT') return null;
+    const dataSize = view.getUint32(4, true);
+    const dataEnd = Math.min(headerSize + dataSize, view.byteLength);
+    let pos = headerSize;
+
+    const FIT_EPOCH = 631065600; // seconds between 1970-01-01 and the FIT epoch (1989-12-31)
+    const baseSize = bt => {
+      switch (bt & 0x1f) {
+        case 0x00: case 0x01: case 0x02: case 0x07: case 0x0a: case 0x0d: return 1;
+        case 0x03: case 0x04: case 0x0b: return 2;
+        case 0x05: case 0x06: case 0x08: case 0x0c: return 4;
+        case 0x09: case 0x0e: case 0x0f: case 0x10: return 8;
+        default: return 1;
+      }
+    };
+    const invalidOf = bt => {
+      switch (bt & 0x1f) {
+        case 0x00: case 0x02: case 0x0d: return 0xFF;
+        case 0x01: return 0x7F;
+        case 0x03: return 0x7FFF;
+        case 0x04: return 0xFFFF;
+        case 0x05: return 0x7FFFFFFF;
+        case 0x06: return 0xFFFFFFFF;
+        case 0x0a: case 0x0b: case 0x0c: return 0;
+        default: return null;
+      }
+    };
+    const readVal = (off, bt, le) => {
+      const t = bt & 0x1f;
+      let val;
+      switch (t) {
+        case 0x01: val = view.getInt8(off); break;
+        case 0x00: case 0x02: case 0x07: case 0x0a: case 0x0d: val = view.getUint8(off); break;
+        case 0x03: val = view.getInt16(off, le); break;
+        case 0x04: case 0x0b: val = view.getUint16(off, le); break;
+        case 0x05: val = view.getInt32(off, le); break;
+        case 0x06: case 0x0c: val = view.getUint32(off, le); break;
+        case 0x08: val = view.getFloat32(off, le); break;
+        case 0x09: val = view.getFloat64(off, le); break;
+        default: val = view.getUint8(off);
+      }
+      const inv = invalidOf(bt);
+      if (inv != null && val === inv) return null;
+      return val;
+    };
+
+    const defs = {};
+    const records = [], laps = [];
+    let session = null, sportMsg = null, fileStart = null, lastTimestamp = null;
+
+    while (pos < dataEnd) {
+      const header = view.getUint8(pos++);
+      let localType, isDef = false, hasDev = false, compressed = false, timeOffset = 0;
+      if (header & 0x80) {
+        compressed = true;
+        localType = (header >> 5) & 0x03;
+        timeOffset = header & 0x1f;
+      } else {
+        isDef = !!(header & 0x40);
+        hasDev = !!(header & 0x20);
+        localType = header & 0x0f;
+      }
+      if (isDef) {
+        pos++; // reserved
+        const le = view.getUint8(pos++) === 0;
+        const global = view.getUint16(pos, le); pos += 2;
+        const nFields = view.getUint8(pos++);
+        const fields = [];
+        let size = 0;
+        for (let i = 0; i < nFields; i++) {
+          const num = view.getUint8(pos++), fsz = view.getUint8(pos++), bt = view.getUint8(pos++);
+          fields.push({ num, size: fsz, bt }); size += fsz;
+        }
+        if (hasDev) {
+          const nDev = view.getUint8(pos++);
+          for (let i = 0; i < nDev; i++) {
+            view.getUint8(pos++); const fsz = view.getUint8(pos++); view.getUint8(pos++);
+            fields.push({ dev: true, size: fsz }); size += fsz;
+          }
+        }
+        defs[localType] = { global, le, fields, size };
+      } else {
+        const def = defs[localType];
+        if (!def) break; // unknown local type => stream desync, stop safely
+        const start = pos;
+        const vals = {};
+        let off = pos;
+        for (const f of def.fields) {
+          if (!f.dev && off + baseSize(f.bt) <= view.byteLength) vals[f.num] = readVal(off, f.bt, def.le);
+          off += f.size;
+        }
+        pos = start + def.size;
+        if (compressed && lastTimestamp != null) {
+          const prevLow = lastTimestamp & 0x1f;
+          let ts = lastTimestamp - prevLow + timeOffset;
+          if (timeOffset < prevLow) ts += 0x20;
+          lastTimestamp = ts;
+          if (vals[253] == null) vals[253] = ts;
+        } else if (vals[253] != null) {
+          lastTimestamp = vals[253];
+        }
+        const g = def.global;
+        if (g === 20) records.push(vals);
+        else if (g === 19) laps.push(vals);
+        else if (g === 18 && !session) session = vals;
+        else if (g === 12 && !sportMsg) sportMsg = vals;
+        else if (g === 0 && fileStart == null && vals[4] != null) fileStart = (vals[4] + FIT_EPOCH) * 1000;
+      }
+    }
+
+    const sportEnum = (session && session[5] != null) ? session[5] : (sportMsg && sportMsg[0] != null ? sportMsg[0] : null);
+    let sport = null;
+    if (sportEnum === 1) sport = 'run';
+    else if (sportEnum === 2) sport = 'bike';
+    else if (sportEnum === 5) sport = 'swim';
+
+    const SEMI = 180 / Math.pow(2, 31);
+    const points = [];
+    for (const r of records) {
+      const p = {};
+      if (r[253] != null) p.ts = (r[253] + FIT_EPOCH) * 1000;
+      if (r[0] != null && r[1] != null) { p.lat = r[0] * SEMI; p.lng = r[1] * SEMI; }
+      if (r[3] != null) p.hr = r[3];
+      if (r[4] != null) p.cad = r[4];
+      if (r[7] != null) p.power = r[7];
+      if (r[5] != null) p.dist = r[5] / 100;          // distance: scale 100 -> m
+      if (r[78] != null) p.alt = r[78] / 5 - 500;      // enhanced_altitude
+      else if (r[2] != null) p.alt = r[2] / 5 - 500;   // altitude
+      if (r[73] != null) p.speed = r[73] / 1000;       // enhanced_speed -> m/s
+      else if (r[6] != null) p.speed = r[6] / 1000;    // speed -> m/s
+      points.push(p);
+    }
+    if (points.length && points[0].ts == null && fileStart != null) points[0].ts = fileStart;
+
+    const totals = {};
+    if (session) {
+      if (session[8] != null) totals.durationSec = session[8] / 1000;       // total_timer_time
+      else if (session[7] != null) totals.durationSec = session[7] / 1000;  // total_elapsed_time
+      if (session[9] != null) totals.distanceM = session[9] / 100;
+      if (session[16] != null) totals.avgHr = session[16];
+      if (session[17] != null) totals.maxHr = session[17];
+      if (session[20] != null) totals.avgPower = session[20];
+      if (session[21] != null) totals.maxPower = session[21];
+      if (session[18] != null) totals.avgCad = session[18];
+      if (session[22] != null) totals.elevationGain = session[22];
+    }
+    const poolLengthM = (session && session[44] != null) ? session[44] / 100 : null;
+
+    let swimLaps = null;
+    if (sport === 'swim' && laps.length) {
+      swimLaps = laps.map(l => ({
+        distanceM: l[9] != null ? l[9] / 100 : 0,
+        elapsedSec: l[8] != null ? l[8] / 1000 : (l[7] != null ? l[7] / 1000 : 0),
+        avgHr: l[16] != null ? l[16] : 0,
+      }));
+    }
+
+    const startTime = (points[0] && points[0].ts) || fileStart
+      || (session && session[2] != null ? (session[2] + FIT_EPOCH) * 1000 : null);
+
+    if (!points.length && !totals.distanceM) return null;
+    return { sport, name: null, startTime, points, totals, swimLaps, poolLengthM };
+  } catch (e) {
+    console.warn('[Stryxs] FIT parse failed:', e);
+    return null;
+  }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -23853,20 +24332,36 @@ function initUpload() {
   });
 
   async function handleFile(file) {
-    if (!file.name.toLowerCase().endsWith('.csv')) {
-      output.innerHTML = `<div class="analysis-card" style="padding: 20px;"><p style="color: var(--danger);">Only CSV files supported right now. Please export as CSV from your watch platform.</p></div>`;
+    const fname = (file.name || '').toLowerCase();
+    const ext = fname.split('.').pop();
+    const supported = ['csv', 'gpx', 'tcx', 'fit'];
+    if (!supported.includes(ext)) {
+      output.innerHTML = `<div class="analysis-card" style="padding: 20px;"><p style="color: var(--danger);">Unsupported file type. Upload a .fit, .tcx, .gpx, or .csv export from your watch or app.</p></div>`;
       return;
     }
     output.innerHTML = `<div class="analysis-card" style="padding: 20px;"><div class="loading"><div class="spinner"></div>Analyzing ${file.name}...</div></div>`;
     try {
-      const text = await file.text();
-      const atype = detectActivity(text, file.name);
-      let data, analysis;
-      if (atype === 'swim') { data = parseSwimCSV(text); if (data) analysis = analyzeSwim(data); }
-      else if (atype === 'bike') { data = parseBikeCSV(text); if (data) analysis = analyzeBike(data, state.profile.bikeLthr); }
-      else { data = parseRunCSV(text); if (data) analysis = analyzeRun(data, state.profile.runLthr); }
+      let analysis = null;
+      if (ext === 'csv') {
+        const text = await file.text();
+        const atype = detectActivity(text, file.name);
+        let data;
+        if (atype === 'swim') { data = parseSwimCSV(text); if (data) analysis = analyzeSwim(data); }
+        else if (atype === 'bike') { data = parseBikeCSV(text); if (data) analysis = analyzeBike(data, state.profile.bikeLthr); }
+        else { data = parseRunCSV(text); if (data) analysis = analyzeRun(data, state.profile.runLthr); }
+        if (!analysis) {
+          output.innerHTML = `<div class="analysis-card" style="padding: 20px;"><p style="color: var(--danger);">Couldn't parse this file. Make sure it's a CSV export from your watch platform with HR data.</p></div>`;
+          return;
+        }
+      } else if (ext === 'gpx' || ext === 'tcx') {
+        const text = await file.text();
+        analysis = buildWorkoutFromStream(ext === 'gpx' ? parseGPX(text) : parseTCX(text));
+      } else if (ext === 'fit') {
+        const buf = await file.arrayBuffer();
+        analysis = buildWorkoutFromStream(parseFIT(buf));
+      }
       if (!analysis) {
-        output.innerHTML = `<div class="analysis-card" style="padding: 20px;"><p style="color: var(--danger);">Couldn't parse this file. Make sure it's a CSV export from your watch platform with HR data.</p></div>`;
+        output.innerHTML = `<div class="analysis-card" style="padding: 20px;"><p style="color: var(--danger);">Couldn't read this ${ext.toUpperCase()} file. It may be empty or corrupt. Try re-exporting it from your device or app.</p></div>`;
         return;
       }
       output.innerHTML = renderAnalysis(analysis);
