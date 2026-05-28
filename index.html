@@ -5584,7 +5584,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v91',
+      app_version: 'v92',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -15525,7 +15525,7 @@ function renderCoachInputRow(gate) {
           <textarea id="chatInput" class="composer-input" placeholder="${t('coach.input.placeholder')}" rows="1" oninput="onChatInputChange(this)" onkeydown="handleChatInputKeydown(event)"></textarea>
           <button type="button" id="coachSendBtn" class="composer-send" onclick="sendChatMsg()" aria-label="Send" disabled>↑</button>
         </div>
-        <input type="file" id="coachFileInput" accept="image/*" style="display: none;" onchange="onCoachFileChosen(this)" />
+        <input type="file" id="coachFileInput" accept="image/*,application/pdf,.pdf" style="display: none;" onchange="onCoachFileChosen(this)" />
       </div>
     `;
   }
@@ -15620,6 +15620,7 @@ async function onCoachFileChosen(input) {
   const file = input.files && input.files[0];
   if (!file) return;
   const isPhoto = (file.type || '').startsWith('image/');
+  const isPdf = (file.type || '') === 'application/pdf' || /\.pdf$/i.test(file.name || '');
   if (isPhoto) {
     try {
       const im = await readImageResized(file);
@@ -15627,6 +15628,27 @@ async function onCoachFileChosen(input) {
     } catch (e) {
       console.warn('[Stryxs] image read failed:', e);
       toast('Could not read that image, try another.');
+      return;
+    }
+  } else if (isPdf) {
+    // Anthropic accepts PDFs up to ~32 MB total per request; cap at 10 MB to keep
+    // costs sane and stay well under the limit. Plenty for a plan / lab / race PDF.
+    if (file.size > 10 * 1024 * 1024) {
+      toast('That PDF is too large (max about 10 MB).', 4000);
+      return;
+    }
+    try {
+      const base64 = await new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onerror = () => reject(new Error('read failed'));
+        r.onload = () => resolve(String(r.result || '').split(',')[1] || '');
+        r.readAsDataURL(file);
+      });
+      if (!base64) throw new Error('empty read');
+      coachAttachments.push({ name: file.name || 'document.pdf', kind: 'document', base64, mediaType: 'application/pdf' });
+    } catch (e) {
+      console.warn('[Stryxs] PDF read failed:', e);
+      toast('Could not read that PDF, try another.');
       return;
     }
   } else {
@@ -16296,24 +16318,29 @@ async function sendChatMsg() {
   const msgs = document.getElementById('chatMessages');
   if (!input || !msgs) return;
   const text = input.value.trim();
-  // Capture an attached photo for Coach vision (one-shot, not persisted). Other
-  // file types aren't analyzable yet.
+  // Capture an attached photo (Coach vision, persisted via uploadChatPhoto) and/or
+  // an attached PDF (Coach reads via Claude document blocks; PDFs are one-shot,
+  // not persisted yet). Other file types still warn until supported.
   const photo = coachAttachments.find(a => a.kind === 'photo' && a.base64);
-  if (coachAttachments.some(a => a.kind !== 'photo') && !photo) {
-    toast('Coach can read photos for now, not other file types yet.', 4000);
+  const doc = coachAttachments.find(a => a.kind === 'document' && a.base64);
+  if (coachAttachments.some(a => a.kind !== 'photo' && a.kind !== 'document') && !photo && !doc) {
+    toast('Coach can read photos and PDFs. That file type is not supported yet.', 4000);
   }
   const photoForApi = photo ? { base64: photo.base64, mediaType: photo.mediaType } : null;
+  const docForApi = doc ? { base64: doc.base64, mediaType: doc.mediaType, name: doc.name } : null;
   const photoThumb = photo?.dataUrl || null;
   clearCoachAttachments();
-  if (!text && !photoForApi) { updateCoachSendState(); return; }
+  if (!text && !photoForApi && !docForApi) { updateCoachSendState(); return; }
   input.value = '';
   // Reset textarea height after clearing so it shrinks back
   input.style.height = 'auto';
   updateCoachSendState();
   input.disabled = true;
 
-  // Append user msg immediately (with the photo thumbnail if present)
-  msgs.innerHTML += renderMsg('user', text, null, null, photoThumb);
+  // Append user msg immediately (with the photo thumbnail if present, or a small
+  // file chip when a PDF is attached with no text).
+  const optimisticText = text || (docForApi ? '📄 ' + (docForApi.name || 'PDF') : '');
+  msgs.innerHTML += renderMsg('user', optimisticText, null, null, photoThumb);
   msgs.scrollTop = msgs.scrollHeight;
 
   // Save user msg to db. If a photo is attached, upload it to the chat-photos
@@ -16322,7 +16349,7 @@ async function sendChatMsg() {
   // the user sees their photo instantly regardless of upload latency. If upload
   // fails (e.g. bucket not yet created), we fall back to the legacy "📷 Photo"
   // marker so the message still saves.
-  const dbContent = text || (photoForApi ? '📷 Photo' : '');
+  const dbContent = text || (photoForApi ? '📷 Photo' : docForApi ? '📄 PDF' : '');
   const uploadedImageUrl = photo ? await uploadChatPhoto(photo) : null;
   try {
     // Conditionally include image_url so an INSERT still works pre-migrate_v9
@@ -16343,7 +16370,7 @@ async function sendChatMsg() {
   }
 
   // Append thinking indicator
-  msgs.innerHTML += `<div class="chat-msg" id="thinkingMsg"><div class="msg-avatar">🧠</div><div class="msg-bubble"><span style="opacity:0.6;">${photoForApi ? 'Analyzing your photo…' : 'Thinking...'}</span></div></div>`;
+  msgs.innerHTML += `<div class="chat-msg" id="thinkingMsg"><div class="msg-avatar">🧠</div><div class="msg-bubble"><span style="opacity:0.6;">${photoForApi ? 'Analyzing your photo…' : docForApi ? 'Reading your PDF…' : 'Thinking...'}</span></div></div>`;
   msgs.scrollTop = msgs.scrollHeight;
 
   try {
@@ -16396,15 +16423,19 @@ async function sendChatMsg() {
       content: h.content,
     }));
 
-    // If a photo was attached, replace the current (last) user turn's content
-    // with a Claude vision block so Coach can actually see + analyze the image.
-    if (photoForApi && messages.length) {
+    // If a photo and/or PDF was attached, replace the current (last) user turn's
+    // content with a Claude content-array (text + image + document blocks) so
+    // Coach can actually see + analyze the attachment(s).
+    if ((photoForApi || docForApi) && messages.length) {
       const last = messages[messages.length - 1];
       last.role = 'user';
-      last.content = [
-        { type: 'text', text: text || "Here's a photo. Read it carefully, tell me exactly what it shows, give me your analysis, and take any action that makes sense (e.g. log a workout that didn't sync)." },
-        { type: 'image', source: { type: 'base64', media_type: photoForApi.mediaType, data: photoForApi.base64 } },
-      ];
+      const promptText = text || (photoForApi
+        ? "Here's a photo. Read it carefully, tell me exactly what it shows, give me your analysis, and take any action that makes sense (e.g. log a workout that didn't sync)."
+        : "Here's a PDF. Read it carefully, tell me what it is, give me your analysis, and tie it back to my training where relevant.");
+      const blocks = [{ type: 'text', text: promptText }];
+      if (photoForApi) blocks.push({ type: 'image', source: { type: 'base64', media_type: photoForApi.mediaType, data: photoForApi.base64 } });
+      if (docForApi) blocks.push({ type: 'document', source: { type: 'base64', media_type: docForApi.mediaType, data: docForApi.base64 } });
+      last.content = blocks;
     }
 
     // Round 1 audit fix: pass active insights into chat context so Coach is
