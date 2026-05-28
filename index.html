@@ -2675,7 +2675,14 @@ body.coach-chat-active .chat-msg.user .msg-bubble strong { color: var(--text); }
 .coach-attach-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 2px 6px; }
 .coach-attach-chip .chip-thumb { width: 24px; height: 24px; border-radius: 5px; object-fit: cover; flex-shrink: 0; }
 /* Photo the athlete sent, shown in their chat bubble */
-.msg-photo { display: block; max-width: 230px; width: 100%; border-radius: 10px; margin-bottom: 6px; }
+.chat-stop-btn { margin-left: 10px; padding: 3px 10px; font-size: 11px; font-weight: 600; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.18); color: var(--text-dim); border-radius: 999px; cursor: pointer; vertical-align: middle; line-height: 1.4; transition: background 0.12s, color 0.12s; }
+.chat-stop-btn:hover { background: rgba(239, 68, 68, 0.18); border-color: rgba(239, 68, 68, 0.5); color: #f87171; }
+.msg-photo { display: block; max-width: 230px; width: 100%; border-radius: 10px; margin-bottom: 6px; cursor: zoom-in; transition: opacity 0.15s; }
+.msg-photo:hover { opacity: 0.92; }
+#photoLightbox { position: fixed; inset: 0; background: rgba(0,0,0,0.94); z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 24px; cursor: zoom-out; animation: fadeInLightbox 0.15s ease; -webkit-tap-highlight-color: transparent; }
+#photoLightbox img { max-width: 96%; max-height: 96%; object-fit: contain; border-radius: 6px; box-shadow: 0 10px 60px rgba(0,0,0,0.55); }
+#photoLightbox .lightbox-close { position: absolute; top: calc(12px + env(safe-area-inset-top, 0px)); right: 14px; width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,0.12); color: #fff; border: 0; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+@keyframes fadeInLightbox { from { opacity: 0; } to { opacity: 1; } }
 .chat-msg.user .msg-bubble:last-child .msg-photo:only-child { margin-bottom: 0; }
 .coach-attach-chip {
   display: inline-flex; align-items: center; gap: 8px; max-width: 220px;
@@ -5584,7 +5591,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v92',
+      app_version: 'v93',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -5955,6 +5962,74 @@ async function getActivationStatus(intakeDone) {
   return status;
 }
 
+// ════════════════════════════════════════════════════════════════════
+// Cross-device persistence for onboarding/UX flags. localStorage is the fast
+// path (and historical source of truth), but it lives per-browser-per-device,
+// so deleting the PWA + logging in via the website used to re-show the tour
+// and reset checklist progress. We mirror the small set of "user-level" flags
+// into profiles.client_state (jsonb), restore them on login, and debounce-
+// sync on change so they follow the USER, not the device.
+//
+// Needs migrate_v10.sql (adds profiles.client_state jsonb). Pre-migration,
+// both functions soft-fail (try/catch) so the app keeps working unchanged.
+// ════════════════════════════════════════════════════════════════════
+const _CROSS_DEVICE_FLAG_PREFIXES = [
+  'stryxs_spotlight_tour_seen',      // tour offer shown / dismissed
+  'stryxs_activation_dismissed',     // activation checklist hidden by user
+  'stryxs_visited_plan',             // tab-visit ticks (drive checklist)
+  'stryxs_visited_trends',
+  'stryxs_visited_upload',
+  'stryxs_pwa_dismissed',            // PWA install nudge dismissed
+  'stryxs_welcomed_at',              // welcome notification first-seen timestamp
+  'stryxs_feedback_eligible_at',     // feedback widget eligibility timestamp
+];
+
+let _clientStateSyncTimer = null;
+function _scheduleClientStateSync(delayMs = 600) {
+  if (_clientStateSyncTimer) clearTimeout(_clientStateSyncTimer);
+  _clientStateSyncTimer = setTimeout(() => { _clientStateSyncTimer = null; syncClientStateToDb(); }, delayMs);
+}
+
+async function syncClientStateToDb() {
+  if (!state.user) return;
+  const uid = state.user.id;
+  const obj = {};
+  for (const prefix of _CROSS_DEVICE_FLAG_PREFIXES) {
+    try {
+      const v = localStorage.getItem(`${prefix}_${uid}`);
+      if (v !== null) obj[prefix] = v;
+    } catch (_) {}
+  }
+  try {
+    await sb.from('profiles').update({ client_state: obj }).eq('id', uid);
+  } catch (e) {
+    // Almost always means migrate_v10 hasn't run yet, fully non-fatal.
+    console.warn('[Stryxs] client_state sync skipped (non-fatal):', e?.message || e);
+  }
+}
+
+async function restoreClientStateFromDb() {
+  if (!state.user) return;
+  const uid = state.user.id;
+  try {
+    const { data } = await sb.from('profiles').select('client_state').eq('id', uid).maybeSingle();
+    const cs = data?.client_state;
+    if (!cs || typeof cs !== 'object') return;
+    for (const prefix of _CROSS_DEVICE_FLAG_PREFIXES) {
+      const v = cs[prefix];
+      if (v == null) continue;
+      const lk = `${prefix}_${uid}`;
+      try {
+        // Restore only if this device has no local value. localStorage wins
+        // when both exist so a deliberate local reset isn't overridden.
+        if (localStorage.getItem(lk) === null) localStorage.setItem(lk, String(v));
+      } catch (_) {}
+    }
+  } catch (e) {
+    console.warn('[Stryxs] client_state restore skipped (non-fatal):', e?.message || e);
+  }
+}
+
 function renderActivationChecklistCard(status) {
   if (!state.user) return '';
   // Hide if user explicitly dismissed it
@@ -6097,6 +6172,7 @@ function confirmDismissActivationChecklist() {
 function dismissActivationChecklist() {
   if (!state.user) return;
   try { localStorage.setItem(`stryxs_activation_dismissed_${state.user.id}`, '1'); } catch (_) {}
+  try { _scheduleClientStateSync(); } catch (_) {} // cross-device persist
   const el = document.getElementById('activationChecklistCard');
   if (el) el.remove();
 }
@@ -6119,6 +6195,7 @@ async function restoreActivationChecklist() {
     if (allDone) { toast("You're all set, you've finished every getting-started step."); return; }
   } catch (_) {}
   try { localStorage.removeItem(`stryxs_activation_dismissed_${state.user.id}`); } catch (_) {}
+  try { _scheduleClientStateSync(); } catch (_) {} // cross-device persist
   // Re-render dashboard so the card shows up again
   navigate('dashboard');
   toast('Getting-started checklist is back on your dashboard.');
@@ -6256,6 +6333,7 @@ async function triggerPwaInstall() {
 function dismissPwaInstall() {
   if (!state.user) return;
   try { localStorage.setItem(`stryxs_pwa_dismissed_${state.user.id}`, '1'); } catch (_) {}
+  try { _scheduleClientStateSync(); } catch (_) {} // cross-device persist
   const el = document.getElementById('pwaInstallCard');
   if (el) el.remove();
 }
@@ -6604,6 +6682,9 @@ function showApp() {
   if (typeof loadProjectionsCacheFromStorage === 'function') {
     loadProjectionsCacheFromStorage();
   }
+  // Restore cross-device onboarding flags from the user's profile so a new
+  // device / fresh PWA install doesn't re-show the tour or reset the checklist.
+  try { restoreClientStateFromDb(); } catch (_) {}
   // Clear any old global-key caches from previous versions of the app
   try {
     localStorage.removeItem('stryxs_projections_cache'); // legacy global key
@@ -6751,6 +6832,7 @@ function endSpotlightTour() {
   _spotlightState.minimized = false;
   if (state.user) {
     try { localStorage.setItem(`${SPOTLIGHT_TOUR_KEY}_${state.user.id}`, '1'); } catch(e) {}
+    try { _scheduleClientStateSync(); } catch (_) {} // cross-device persist
   }
   // After tour ends, drop user back on dashboard so they see the activation
   // checklist. We don't fire navigate() if we're already on dashboard so we
@@ -7292,6 +7374,7 @@ function maybeOfferSpotlightTour() {
   // Mark seen IMMEDIATELY so navigation events that re-render the dashboard
   // don't re-fire this offer. Whether they accept or skip, it's "seen".
   try { localStorage.setItem(`${SPOTLIGHT_TOUR_KEY}_${state.user.id}`, '1'); } catch(e) {}
+  try { _scheduleClientStateSync(); } catch (_) {} // cross-device persist
   showTourOfferModal();
   return true;
 }
@@ -7334,6 +7417,7 @@ function declineTourOffer() {
 function showSpotlightTourAgain() {
   if (!state.user) return;
   try { localStorage.removeItem(`${SPOTLIGHT_TOUR_KEY}_${state.user.id}`); } catch(e) {}
+  try { _scheduleClientStateSync(); } catch (_) {} // cross-device persist
   navigate('dashboard');
   setTimeout(() => startSpotlightTour(), 400);
 }
@@ -7551,6 +7635,9 @@ function navigate(page) {
       if (page === 'trends') localStorage.setItem(`stryxs_visited_trends_${state.user.id}`, '1');
       if (page === 'plan') localStorage.setItem(`stryxs_visited_plan_${state.user.id}`, '1');
       if (page === 'upload') localStorage.setItem(`stryxs_visited_upload_${state.user.id}`, '1');
+      if (page === 'trends' || page === 'plan' || page === 'upload') {
+        try { _scheduleClientStateSync(); } catch (_) {} // cross-device persist
+      }
     } catch (_) {}
   }
 
@@ -7820,7 +7907,7 @@ async function buildNotifications() {
     try {
       const wkey = `stryxs_welcomed_at_${uid}`;
       let wat = localStorage.getItem(wkey);
-      if (!wat) { wat = new Date().toISOString(); localStorage.setItem(wkey, wat); }
+      if (!wat) { wat = new Date().toISOString(); localStorage.setItem(wkey, wat); try { _scheduleClientStateSync(); } catch (_) {} }
       if (Date.now() - new Date(wat).getTime() < 14 * 24 * 60 * 60 * 1000) {
         out.push({ id: 'welcome', type: 'welcome', time: wat, icon: '👋', actionKind: 'coach',
           title: 'Welcome to Stryxs! 🎉',
@@ -14955,6 +15042,13 @@ async function callCoach(action, payload, options = {}) {
   const timeoutMs = options.timeoutMs || 90000;
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  // Optional EXTERNAL abort signal (e.g. the user-tappable Stop button on
+  // the chat thinking indicator). When the caller's signal fires, mirror it
+  // into the internal controller so the fetch tears down immediately.
+  const externalSignal = options.signal;
+  if (externalSignal?.aborted) controller.abort();
+  const _mirrorAbort = () => controller.abort();
+  externalSignal?.addEventListener('abort', _mirrorAbort, { once: true });
 
   // Inject the user's UI language into every Coach payload so the LLM
   // responds in the right language even when the athlete types in
@@ -14983,6 +15077,7 @@ async function callCoach(action, payload, options = {}) {
       signal: controller.signal,
     });
     clearTimeout(timeoutId);
+    externalSignal?.removeEventListener('abort', _mirrorAbort);
 
     // Read the JSON body once, many error paths still return JSON with
     // structured fields we need (e.g. USAGE_LIMIT_EXCEEDED's limit_type).
@@ -15027,7 +15122,15 @@ async function callCoach(action, payload, options = {}) {
     return parsed.result;
   } catch (err) {
     clearTimeout(timeoutId);
+    externalSignal?.removeEventListener('abort', _mirrorAbort);
     if (err.name === 'AbortError') {
+      // Distinguish a USER cancel (Stop button) from a TIMEOUT so the caller
+      // can show "Stopped" instead of "Coach is taking too long".
+      if (externalSignal?.aborted) {
+        const e = new Error('User cancelled the request.');
+        e.name = 'UserAbortError';
+        throw e;
+      }
       throw new Error('Coach is taking longer than expected. Please try again.');
     }
     throw err;
@@ -15981,10 +16084,37 @@ async function loadCoachPersonaBadge(intake) {
   }
 }
 
+// Open a chat photo in a fullscreen lightbox. Tap anywhere (image, backdrop, or
+// the X button) to close. ESC also closes for desktop.
+function openPhotoLightbox(url) {
+  if (!url) return;
+  closePhotoLightbox();
+  const overlay = document.createElement('div');
+  overlay.id = 'photoLightbox';
+  overlay.innerHTML = `
+    <button type="button" class="lightbox-close" aria-label="Close" onclick="closePhotoLightbox()">✕</button>
+    <img src="${url}" alt="full-size photo" />
+  `;
+  overlay.addEventListener('click', closePhotoLightbox);
+  document.body.appendChild(overlay);
+  document.addEventListener('keydown', _lightboxKeyHandler);
+}
+function closePhotoLightbox() {
+  const el = document.getElementById('photoLightbox');
+  if (el) el.remove();
+  document.removeEventListener('keydown', _lightboxKeyHandler);
+}
+function _lightboxKeyHandler(e) { if (e.key === 'Escape') closePhotoLightbox(); }
+
 function renderMsg(role, content, contextType = null, msgId = null, imageUrl = null) {
   const avatar = role === 'coach' ? '🧠' : (state.user?.name?.[0]?.toUpperCase() || 'A');
   const formatted = role === 'coach' ? formatMarkdown(content) : escapeHtml(content);
-  const imgHtml = imageUrl ? `<img class="msg-photo" src="${imageUrl}" alt="attached photo" />` : '';
+  // When the row carries a real image URL, suppress the legacy media-marker
+  // captions ("📷 Photo" / "📄 PDF") that we save for back-compat — they were
+  // showing up as duplicated text under the photo on reload.
+  const isBareMediaMarker = imageUrl && (content === '📷 Photo' || content === '📄 PDF');
+  const bodyHtml = isBareMediaMarker ? '' : formatted;
+  const imgHtml = imageUrl ? `<img class="msg-photo" src="${imageUrl}" alt="attached photo" onclick="openPhotoLightbox(this.src)" />` : '';
 
   // Special button for settings_change_reactive context (only show if NOT already applied)
   let actionsHtml = '';
@@ -16029,7 +16159,7 @@ function renderMsg(role, content, contextType = null, msgId = null, imageUrl = n
       <div class="msg-avatar">${avatar}</div>
       <div class="msg-bubble">
         ${imgHtml}
-        ${formatted}
+        ${bodyHtml}
         ${actionsHtml ? `<div class="msg-actions-wrap">${actionsHtml}</div>` : ''}
       </div>
     </div>
@@ -16369,8 +16499,16 @@ async function sendChatMsg() {
     return;
   }
 
-  // Append thinking indicator
-  msgs.innerHTML += `<div class="chat-msg" id="thinkingMsg"><div class="msg-avatar">🧠</div><div class="msg-bubble"><span style="opacity:0.6;">${photoForApi ? 'Analyzing your photo…' : docForApi ? 'Reading your PDF…' : 'Thinking...'}</span></div></div>`;
+  // Create an abort controller the user can trigger via the Stop button on the
+  // thinking indicator. _chatAbortController is a module-level reference that
+  // stopChatMsg() reads, so any tap on the Stop button cancels the in-flight call.
+  _chatAbortController = new AbortController();
+
+  // Append thinking indicator with a Stop button (so the user can cancel a
+  // mistakenly-sent or slow-to-respond message). Cancellation still counts
+  // toward usage, since the request already left the device.
+  const thinkingLabel = photoForApi ? 'Analyzing your photo…' : docForApi ? 'Reading your PDF…' : 'Thinking…';
+  msgs.innerHTML += `<div class="chat-msg" id="thinkingMsg"><div class="msg-avatar">🧠</div><div class="msg-bubble"><span style="opacity:0.6;">${thinkingLabel}</span><button type="button" class="chat-stop-btn" onclick="stopChatMsg()" title="Stop">Stop</button></div></div>`;
   msgs.scrollTop = msgs.scrollHeight;
 
   try {
@@ -16476,7 +16614,7 @@ async function sendChatMsg() {
       recentFeedback: recentFeedbackRaw,
       clientToday: getClientToday(),
       clientTimezone: getClientTimezone(),
-    });
+    }, { signal: _chatAbortController?.signal });
 
     // Remove thinking indicator
     const thinking = document.getElementById('thinkingMsg');
@@ -16639,8 +16777,17 @@ async function sendChatMsg() {
   } catch (err) {
     const thinking = document.getElementById('thinkingMsg');
     if (thinking) thinking.remove();
-    msgs.innerHTML += renderMsg('coach', 'Sorry, something went wrong. Try again in a moment.');
-    console.error(err);
+    if (err?.name === 'UserAbortError') {
+      // User tapped Stop. Show a soft notice; the message already counted toward
+      // usage on send, since the request had already left the device.
+      msgs.innerHTML += `<div class="chat-msg"><div class="msg-avatar">🧠</div><div class="msg-bubble"><span style="opacity:0.65; font-style: italic;">Stopped. (This message still counts toward your usage since the request was already sent.)</span></div></div>`;
+      msgs.scrollTop = msgs.scrollHeight;
+    } else {
+      msgs.innerHTML += renderMsg('coach', 'Sorry, something went wrong. Try again in a moment.');
+      console.error(err);
+    }
+  } finally {
+    _chatAbortController = null;
   }
 
   // Refresh the input row for free users so the remaining-count hint stays accurate.
@@ -16651,6 +16798,14 @@ async function sendChatMsg() {
   }
   input.disabled = false;
   input.focus();
+}
+
+// Module-level handle to the in-flight chat AbortController. Set by sendChatMsg
+// at the start of a request, cleared in the finally. The Stop button on the
+// thinking indicator calls stopChatMsg() to abort whatever is in flight.
+let _chatAbortController = null;
+function stopChatMsg() {
+  try { _chatAbortController?.abort(); } catch (_) {}
 }
 
 function formatGoal(g) {
@@ -17432,7 +17587,12 @@ let _projectionsInflight = false;
 // so the workout count updates every time the user logs/classifies. Read by the
 // dashboard mini + race-planner gate. { have, need, hasPb, unclassified }.
 let _projGateInfo = null;
-const PROJECTIONS_CACHE_TTL = 7 * 24 * 60 * 60 * 1000; // 1 week, projections refresh weekly to save tokens
+// Projections used to be LLM-heavy (week-long TTL to save tokens); since round 12c+
+// they are deterministic in the edge (Riegel/VDOT/physics math, no LLM cost), so a
+// short TTL is the right tradeoff. The long stale cache was making PC and phone
+// show different projected times until the cache expired. 30 min keeps things
+// responsive without thrashing.
+const PROJECTIONS_CACHE_TTL = 30 * 60 * 1000;
 
 // Try to restore cache from localStorage on page load
 // Cache is scoped per-user so signing out / different accounts don't see each other's data
@@ -17458,12 +17618,18 @@ function loadProjectionsCacheFromStorage() {
       // Must be fresh, the right user, AND a real projection. A stale low-data
       // cache (e.g. an old "0/5" written before this guard existed) is discarded
       // so the count recomputes live.
+      // ALSO: invalidate if the workout count changed since the cache was written
+      // (the athlete logged or synced workouts since), so PC and phone stay in
+      // sync as soon as data changes rather than waiting for the TTL.
       const real = parsed?.data?.proj?.primary_projection && parsed.data.proj.data_sufficiency !== 'low';
-      if (parsed && parsed.time && parsed.user_id === state.user?.id && (Date.now() - parsed.time < PROJECTIONS_CACHE_TTL) && real) {
+      const cachedCount = parsed?.workoutCount;
+      const liveCount = (state.workouts || []).length;
+      const countMatches = (typeof cachedCount !== 'number') || cachedCount === liveCount;
+      if (parsed && parsed.time && parsed.user_id === state.user?.id && (Date.now() - parsed.time < PROJECTIONS_CACHE_TTL) && real && countMatches) {
         _projectionsCache = parsed.data;
         _projectionsCacheTime = parsed.time;
       } else {
-        // Stale, wrong user, or not a real projection, wipe it
+        // Stale, wrong user, count changed, or not a real projection, wipe it
         localStorage.removeItem(getProjectionsCacheKey());
       }
     }
@@ -17476,6 +17642,10 @@ function persistProjectionsCache() {
       data: _projectionsCache,
       time: _projectionsCacheTime,
       user_id: state.user?.id,
+      // Stamp the workout count at write time so loaders can invalidate as
+      // soon as the underlying data changes (cross-device sync without
+      // waiting for the TTL).
+      workoutCount: (state.workouts || []).length,
     }));
   } catch (e) {}
 }
