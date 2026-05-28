@@ -5584,7 +5584,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v90',
+      app_version: 'v91',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -15590,6 +15590,32 @@ function readImageResized(file, maxDim = 1280, quality = 0.82) {
   });
 }
 
+// Upload an attached chat photo to the public `chat-photos` storage bucket so it
+// persists across reloads (was previously a one-shot vision block, DB only stored
+// "📷 Photo"). Path is `<uid>/<uuid>.jpg`, returns the public URL or null on any
+// failure. Non-fatal: if upload fails, send-photo still works for Coach vision,
+// the photo just won't survive a reload (graceful degrade pre-bucket too).
+async function uploadChatPhoto(photo) {
+  if (!photo || !photo.dataUrl || !state.user) return null;
+  try {
+    // Build a short UUID for the filename. Use crypto.randomUUID when available,
+    // else a quick base36 fallback.
+    const uuid = (typeof crypto !== 'undefined' && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : Array.from(crypto.getRandomValues(new Uint8Array(12))).map(b => b.toString(36).padStart(2, '0')).join('').slice(0, 24);
+    const path = `${state.user.id}/${uuid}.jpg`;
+    const blob = await fetch(photo.dataUrl).then(r => r.blob());
+    const { error } = await sb.storage.from('chat-photos')
+      .upload(path, blob, { upsert: false, contentType: photo.mediaType || 'image/jpeg' });
+    if (error) throw error;
+    const { data } = sb.storage.from('chat-photos').getPublicUrl(path);
+    return data?.publicUrl || null;
+  } catch (e) {
+    console.warn('[Stryxs] chat photo upload failed (non-fatal):', e?.message || e);
+    return null;
+  }
+}
+
 async function onCoachFileChosen(input) {
   const file = input.files && input.files[0];
   if (!file) return;
@@ -15773,7 +15799,7 @@ async function renderCoachChat(el, intake) {
     <div class="coach-chat">
       <div class="chat-messages" id="chatMessages">
         ${(recentMessages.length > 0)
-          ? recentMessages.map(m => renderMsg(m.role, m.content, m.context_type, m.id)).join('')
+          ? recentMessages.map(m => renderMsg(m.role, m.content, m.context_type, m.id, m.image_url)).join('')
           : renderMsg('coach', (() => {
               // Persona-flavored fallback when no Coach messages exist yet.
               // Normally planIntroMessage saves a real welcome, this is the safety net.
@@ -16290,14 +16316,23 @@ async function sendChatMsg() {
   msgs.innerHTML += renderMsg('user', text, null, null, photoThumb);
   msgs.scrollTop = msgs.scrollHeight;
 
-  // Save user msg to db (text + a marker if a photo was attached; the image is a
-  // one-shot for analysis and isn't stored). Wrap in try/catch so a transient
-  // RLS or network error doesn't leave the input permanently disabled.
+  // Save user msg to db. If a photo is attached, upload it to the chat-photos
+  // bucket first so it persists across reloads (was previously a one-shot vision
+  // block). The optimistic render above already shows the data-URL thumbnail, so
+  // the user sees their photo instantly regardless of upload latency. If upload
+  // fails (e.g. bucket not yet created), we fall back to the legacy "📷 Photo"
+  // marker so the message still saves.
   const dbContent = text || (photoForApi ? '📷 Photo' : '');
+  const uploadedImageUrl = photo ? await uploadChatPhoto(photo) : null;
   try {
-    const { error: insertErr } = await sb.from('coach_messages').insert({
+    // Conditionally include image_url so an INSERT still works pre-migrate_v9
+    // (unknown column would otherwise reject the row). Once the column + bucket
+    // exist and a photo uploads, the URL rides along.
+    const insertRow = {
       user_id: state.user.id, role: 'user', content: dbContent, context_type: 'general_chat',
-    });
+    };
+    if (uploadedImageUrl) insertRow.image_url = uploadedImageUrl;
+    const { error: insertErr } = await sb.from('coach_messages').insert(insertRow);
     if (insertErr) throw insertErr;
   } catch (saveErr) {
     console.error('[Stryxs] chat msg save failed:', saveErr);
