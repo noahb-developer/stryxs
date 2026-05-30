@@ -9605,7 +9605,21 @@ function buildWorkoutFromStream(parsed) {
   }
 
   const lthr = sport === 'bike' ? (state.profile && state.profile.bikeLthr) : (state.profile && state.profile.runLthr);
-  const zd = hrs.length >= 5 ? zoneDistribution(hrs, getZones(lthr || (sport === 'bike' ? 165 : 170))) : null;
+  const safeLthr = lthr || (sport === 'bike' ? 165 : 170);
+  const zd = hrs.length >= 5 ? zoneDistribution(hrs, getZones(safeLthr)) : null;
+
+  // pct (avg HR as % of threshold) + cardiac drift (first vs second half HR), so
+  // uploaded workouts are first-class in the Trends cards, which key off these
+  // fields. hrs preserves chronological order (map then filter), so the halves
+  // are time-ordered. Only when we have enough HR samples to be meaningful.
+  let pctVal = null, driftVal = null;
+  if (hrs.length >= 6 && (sport === 'run' || sport === 'bike')) {
+    pctVal = Math.round((avgHr / safeLthr) * 1000) / 10;
+    const mid = Math.floor(hrs.length / 2);
+    const fa = hrs.slice(0, mid).reduce((s, h) => s + h, 0) / mid;
+    const sa = hrs.slice(mid).reduce((s, h) => s + h, 0) / (hrs.length - mid);
+    if (fa > 0) driftVal = Math.round(((sa - fa) / fa) * 1000) / 10;
+  }
 
   // Per-km splits from the distance + time + HR streams (runs/bikes).
   const splits = [];
@@ -9673,6 +9687,8 @@ function buildWorkoutFromStream(parsed) {
   if (avgCad) w.cadence = avgCad;
   if (elevationGain) w.elevationGain = elevationGain;
   if (zd) w.zd = zd;
+  if (pctVal != null) w.pct = pctVal;
+  if (driftVal != null) w.drift = driftVal;
   if (splits.length) w.splits = splits;
   if (coords.length >= 2) w.polyline = encodePolyline(coords);
   if (sport === 'run' && distanceKm > 0 && durationSec > 0) w.avgPace = _fmtPaceSec(durationSec / distanceKm);
@@ -13325,16 +13341,26 @@ function renderTrends() {
   const driftSet = driftWorkouts(state.trendsDriftSport);
   const avgDrift = driftSet.length ? driftSet.reduce((s, r) => s + r.drift, 0) / driftSet.length : null;
 
-  // Intensity distribution per sport
+  // Intensity distribution per sport. pctOf falls back to avg-HR-vs-threshold so
+  // Strava-synced + uploaded workouts (which carry avgHr but not always the
+  // CSV-style `pct`) still count, not just CSV lap uploads.
+  const pctOf = (w) => {
+    if (typeof w.pct === 'number') return w.pct;
+    if (w.avgHr && (w.sport === 'run' || w.sport === 'bike')) {
+      const l = w.sport === 'bike' ? (state.profile?.bikeLthr || 165) : (state.profile?.runLthr || 170);
+      return (w.avgHr / l) * 100;
+    }
+    return null;
+  };
   const intensityWorkouts = (sport) => {
     if (sport === 'overall') {
-      return recent.filter(w => (w.sport === 'run' || w.sport === 'bike') && w.pct !== undefined && w.pct !== null);
+      return recent.filter(w => (w.sport === 'run' || w.sport === 'bike') && pctOf(w) !== null);
     }
-    return recent.filter(w => w.sport === sport && w.pct !== undefined && w.pct !== null);
+    return recent.filter(w => w.sport === sport && pctOf(w) !== null);
   };
   const landW = intensityWorkouts(state.trendsIntensitySport);
-  const easy = landW.filter(w => w.pct < 85).length;
-  const hard = landW.filter(w => w.pct >= 91).length;
+  const easy = landW.filter(w => pctOf(w) < 85).length;
+  const hard = landW.filter(w => pctOf(w) >= 91).length;
   const easyPct = landW.length ? Math.round(easy * 100 / landW.length) : 0;
   const hardPct = landW.length ? Math.round(hard * 100 / landW.length) : 0;
   const medPct = 100 - easyPct - hardPct;
@@ -21461,6 +21487,15 @@ async function renderPlan() {
       if (skeleton && skeleton[currentWeekIndex - 1]) {
         currentWeekInfo = skeleton[currentWeekIndex - 1];
       }
+      // DIAGNOSTIC for "wrong week shown" reports on non-imported plans.
+      console.log('[Stryxs] 📅 Plan tab week calc (periodized):', {
+        plan_start_date: planStartDateStr,
+        today: today.toISOString().split('T')[0],
+        daysFromPlanStart,
+        computed_currentWeekIndex: currentWeekIndex,
+        skeleton_weeks: Array.isArray(skeleton) ? skeleton.length : null,
+        has_currentWeekInfo: !!currentWeekInfo,
+      });
     }
   } else if (activePlan?.created_at) {
     // Fallback for plans created before plan_start_date was stored
