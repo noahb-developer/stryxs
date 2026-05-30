@@ -16559,6 +16559,26 @@ function setupCoachKeyboardInset() {
   };
   vv.addEventListener('resize', update);
   update();
+
+  // Backgrounding the app (app switch / lock) while the composer is focused
+  // leaves iOS in a stale keyboard + scroll state, so on return the cursor and
+  // the page jump around. Fix: when we go hidden, blur the input to dismiss the
+  // keyboard and zero the inset; when we come back, re-measure once iOS settles
+  // and re-pin the scroll to the bottom.
+  document.addEventListener('visibilitychange', () => {
+    if (!document.body.classList.contains('coach-chat-active')) return;
+    if (document.visibilityState === 'hidden') {
+      const input = document.getElementById('chatInput');
+      if (input && document.activeElement === input) input.blur();
+      document.documentElement.style.setProperty('--coach-kb-inset', '0px');
+    } else {
+      setTimeout(() => {
+        try { measureCoachNav(); update(); } catch (_) {}
+        const msgs = document.getElementById('chatMessages');
+        if (msgs) msgs.scrollTop = msgs.scrollHeight;
+      }, 120);
+    }
+  });
 }
 
 // Measure the (now fixed) top nav so the chat starts exactly below it on ANY
