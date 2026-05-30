@@ -2558,6 +2558,9 @@ body.coach-chat-active { overflow: hidden; overscroll-behavior: none; }
 html.coach-html-lock { height: 100%; overflow: hidden; overscroll-behavior: none; }
 html.coach-html-lock body { overflow: hidden; }
 body.coach-chat-active .container { padding: 0; max-width: none; }
+/* The floating feedback button (fixed, bottom-right) overlaps the Coach
+   composer, so hide it while the full-screen chat is open. */
+body.coach-chat-active #feedbackFab { display: none !important; }
 /* Pin the top bar so it can NEVER slide off-screen with finger drag / iOS
    rubber-band while in the chat. Fixed (not sticky) + safe-area padding so it
    clears the notch / Dynamic Island / Samsung punch-hole on every device. */
@@ -11387,55 +11390,57 @@ function renderAnalysis(a) {
 // reduce the "View on Strava" CTAs down to a single tiny footer link.
 // Deep-analysis-failed states get a quiet diagnostic line, not a banner
 // pointing back at Strava.
-// "Analyze with Coach" button shown on every workout card. Instead of an
-// auto-generated one-shot commentary, the user taps this to open the Coach
-// with the session's key stats seeded into a chat message — so the analysis is
-// on-demand, costs nothing until requested, and is conversational (they can ask
-// follow-ups). The workout is stashed in a registry keyed by a generated id so
-// the button works regardless of whether the row has a _dbId yet.
+// "Analyze with Coach" button shown on every workout card. Tapping it asks
+// Coach for an analysis of THIS workout and renders it INLINE, right under the
+// button — no navigation into the full-screen chat (that caused cursor/scroll
+// jumping + the floating widget overlapping the composer on desktop). Analysis
+// is on-demand (no token cost until requested); a "follow-up" link still opens
+// Coach for a conversation. The workout is stashed in a registry keyed by a
+// generated id so it works regardless of whether the row has a _dbId yet.
 let _stryxsAnalyzeCounter = 0;
 function renderAnalyzeBtn(a) {
   if (!a || !a.sport) return '';
   const key = 'awk_' + (++_stryxsAnalyzeCounter);
   (window._stryxsAnalyzeWorkouts = window._stryxsAnalyzeWorkouts || {})[key] = a;
   return `
-    <button class="btn" style="width: 100%; margin-top: 14px; padding: 12px; font-size: 14px; font-weight: 600; background: linear-gradient(135deg, rgba(0,229,160,0.16), rgba(80,130,255,0.10)); border: 1px solid rgba(0,229,160,0.35); color: var(--accent); display: flex; align-items: center; justify-content: center; gap: 8px;" onclick="analyzeWorkoutWithCoach('${key}')">
-      🔍 Analyze this workout with Coach
-    </button>`;
+    <div class="analyze-coach-slot" style="margin-top: 14px;">
+      <button class="btn" style="width: 100%; padding: 12px; font-size: 14px; font-weight: 600; background: linear-gradient(135deg, rgba(0,229,160,0.16), rgba(80,130,255,0.10)); border: 1px solid rgba(0,229,160,0.35); color: var(--accent); display: flex; align-items: center; justify-content: center; gap: 8px;" onclick="analyzeWorkoutWithCoach('${key}', this)">
+        🔍 Analyze this workout with Coach
+      </button>
+    </div>`;
 }
-function _buildCoachAnalyzePrompt(a) {
-  const sport = a.sport || 'session';
-  const parts = [];
-  if (a.distance > 0) parts.push(formatDistance(a.distance, 2));
-  if (a.time && a.time !== 'N/A') parts.push(a.time);
-  if (a.avgHr) parts.push('avg HR ' + a.avgHr + ' bpm');
-  if (a.maxHr) parts.push('max HR ' + a.maxHr + ' bpm');
-  if (a.avgPower) parts.push('avg power ' + a.avgPower + ' W');
-  if (a.cadence) parts.push('cadence ' + a.cadence);
-  if (a.elevationGain) parts.push(formatElevation(a.elevationGain) + ' climb');
-  if (a.zd) parts.push(`time in zones Z1 ${a.zd.Z1.pct}% / Z2 ${a.zd.Z2.pct}% / Z3 ${a.zd.Z3.pct}% / Z4 ${a.zd.Z4.pct}% / Z5 ${a.zd.Z5.pct}%`);
-  const when = a.date ? new Date(a.date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' }) : 'recently';
-  const stats = parts.length ? (': ' + parts.join(', ')) : '';
-  return `Analyze my ${sport} from ${when}${stats}. Walk me through what this session tells you about my fitness, whether I executed it well, and what I should do next.`;
-}
-function analyzeWorkoutWithCoach(key) {
+async function analyzeWorkoutWithCoach(key, btn) {
   const a = (window._stryxsAnalyzeWorkouts || {})[key];
-  navigate('coach');
   if (!a) return;
-  const seed = _buildCoachAnalyzePrompt(a);
-  // The Coach view mounts asynchronously; retry briefly until #chatInput exists.
-  let tries = 0;
-  const trySend = () => {
-    const input = document.getElementById('chatInput');
-    if (input) {
-      input.value = seed;
-      if (typeof updateCoachSendState === 'function') updateCoachSendState();
-      sendChatMsg();
-    } else if (tries++ < 25) {
-      setTimeout(trySend, 100);
+  const slot = btn ? btn.closest('.analyze-coach-slot') : null;
+  if (btn) {
+    btn.disabled = true;
+    btn.style.opacity = '0.7';
+    btn.innerHTML = '<span class="spinner" style="width:16px;height:16px;border-width:2px;"></span> Coach is analyzing...';
+  }
+  try {
+    const { data: intake } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).single();
+    const commentary = await callCoach('workout_commentary', { workout: a, intake, activeInsights: [] });
+    // Persist as a coach message so it shows in the chat history too.
+    try {
+      await sb.from('coach_messages').insert({ user_id: state.user.id, role: 'coach', content: commentary, context_type: 'workout_commentary' });
+    } catch (_) {}
+    const html = `
+      <div class="coach-box" style="margin-top: 14px;">
+        <div class="coach-title">💬 Coach's analysis</div>
+        <div class="coach-text">${formatMarkdown(commentary)}</div>
+        <div style="margin-top: 12px;"><a style="color: var(--accent); cursor: pointer; font-size: 13px; font-weight: 600;" onclick="navigate('coach')">Ask Coach a follow-up →</a></div>
+      </div>`;
+    if (slot) slot.innerHTML = html;
+  } catch (e) {
+    console.error('[Stryxs] workout analysis failed:', e);
+    if (btn) {
+      btn.disabled = false;
+      btn.style.opacity = '1';
+      btn.innerHTML = '🔍 Analyze this workout with Coach';
     }
-  };
-  setTimeout(trySend, 250);
+    toast('Coach is busy right now, try again in a moment.', 4000);
+  }
 }
 
 function renderSummaryWorkout(a) {
@@ -21327,6 +21332,12 @@ async function confirmDeleteRacePlan(planId) {
 
 
 async function renderPlan() {
+  // Safety net: the full-screen Coach chat sets body.coach-chat-active, which
+  // strips .container max-width app-wide. If that class ever sticks (e.g. a
+  // render path that bypassed navigate()), every page renders edge-to-edge and
+  // huge. Since we're rendering the Plan, Coach is not active, so clear it.
+  document.body.classList.remove('coach-chat-active');
+  document.documentElement.classList.remove('coach-html-lock');
   const el = document.getElementById('planContent');
   if (!state.user) { el.innerHTML = ''; return; }
 
@@ -21507,15 +21518,6 @@ async function renderPlan() {
       if (skeleton && skeleton[currentWeekIndex - 1]) {
         currentWeekInfo = skeleton[currentWeekIndex - 1];
       }
-      // DIAGNOSTIC for "wrong week shown" reports on non-imported plans.
-      console.log('[Stryxs] 📅 Plan tab week calc (periodized):', {
-        plan_start_date: planStartDateStr,
-        today: today.toISOString().split('T')[0],
-        daysFromPlanStart,
-        computed_currentWeekIndex: currentWeekIndex,
-        skeleton_weeks: Array.isArray(skeleton) ? skeleton.length : null,
-        has_currentWeekInfo: !!currentWeekInfo,
-      });
     }
   } else if (activePlan?.created_at) {
     // Fallback for plans created before plan_start_date was stored
