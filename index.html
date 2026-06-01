@@ -2567,18 +2567,23 @@ body.coach-chat-active #feedbackFab { display: none !important; }
 body.coach-chat-active .nav {
   position: fixed; top: 0; left: 0; right: 0; z-index: 120;
   padding-top: calc(12px + var(--safe-top));
+  will-change: transform;
 }
 body.coach-chat-active #page-coach.active {
   position: fixed;
-  /* Sits directly below the fixed top nav. --coach-nav-h is measured in JS so it
-     is exact on any device; the calc() is a safe fallback before measurement. */
-  top: var(--coach-nav-h, calc(var(--safe-top) + 56px));
-  left: 0; right: 0;
-  bottom: var(--coach-kb-inset, 0px);  /* lifts above the keyboard when it opens */
+  /* Glued to the VISUAL viewport by JS (trackCoachViewport): top:0 + a transform
+     of translateY(visualViewport.offsetTop + navH) + an explicit height of
+     visualViewport.height - navH. This moves WITH iOS's keyboard animation rather
+     than against it, so the page doesn't bounce up-then-down on focus. The values
+     here are a sane pre-JS fallback. */
+  top: 0; left: 0; right: 0;
+  height: calc(100% - var(--coach-nav-h, 56px));
+  transform: translateY(var(--coach-nav-h, 56px));
   padding: 0;
   display: flex; flex-direction: column;
   overflow: hidden;
   animation: none;
+  will-change: transform, height;
 }
 body.coach-chat-active .chat-messages { overscroll-behavior: contain; }
 body.coach-chat-active #coachContent {
@@ -7633,6 +7638,7 @@ function navigate(page) {
   if (page !== 'coach') {
     document.body.classList.remove('coach-chat-active');
     document.documentElement.classList.remove('coach-html-lock');
+    if (typeof resetCoachViewport === 'function') resetCoachViewport(); // clear inline transforms
   }
   try { if (typeof closeNotifPanel === 'function') closeNotifPanel(); } catch (_) {}
 
@@ -16549,49 +16555,64 @@ async function logWorkoutFromPhoto(btn, encoded) {
 // Keep the Coach composer floating above the on-screen keyboard. Mobile browsers
 // shrink the visual viewport (not the layout viewport) when the keyboard opens, so
 // we measure the gap and expose it as --coach-kb-inset for the full-screen CSS.
+// Glue the Coach UI to the VISUAL viewport. On input focus iOS offsets + shrinks
+// the visual viewport and animates it; with plain position:fixed that makes the
+// nav + chat slide up then (with our old scrollTo correction) snap back = the
+// "bounce" Noah saw. Instead of fighting it, we MOVE WITH it: every frame we
+// translate the nav + chat down by visualViewport.offsetTop and size the chat to
+// visualViewport.height - navH. Net effect: nav + composer stay visually glued to
+// the screen and the composer naturally sits right above the keyboard.
+function trackCoachViewport() {
+  const vv = window.visualViewport;
+  if (!vv) return;
+  const nav = document.getElementById('mainNav');
+  const page = document.getElementById('page-coach');
+  if (!document.body.classList.contains('coach-chat-active')) {
+    // Not in chat → make sure we leave no inline transforms behind on other pages.
+    if (nav) nav.style.transform = '';
+    if (page) { page.style.transform = ''; page.style.height = ''; }
+    return;
+  }
+  const offset = Math.max(0, Math.round(vv.offsetTop));
+  const navH = nav ? Math.round(nav.getBoundingClientRect().height) : 56;
+  if (navH > 0) document.documentElement.style.setProperty('--coach-nav-h', navH + 'px');
+  if (nav) nav.style.transform = `translateY(${offset}px)`;
+  if (page) {
+    page.style.transform = `translateY(${offset + navH}px)`;
+    page.style.height = Math.max(0, Math.round(vv.height - navH)) + 'px';
+  }
+  // Keyboard up → it already covers the home-indicator zone, so drop the
+  // composer's safe-area bottom padding to give back that dead space.
+  document.body.classList.toggle('coach-kb-open', (window.innerHeight - vv.height) > 40);
+}
+// Reset the inline styles we set, so leaving Coach can't leave the nav/page shifted.
+function resetCoachViewport() {
+  const nav = document.getElementById('mainNav');
+  const page = document.getElementById('page-coach');
+  if (nav) nav.style.transform = '';
+  if (page) { page.style.transform = ''; page.style.height = ''; }
+  document.body.classList.remove('coach-kb-open');
+}
+
 function setupCoachKeyboardInset() {
   const vv = window.visualViewport;
   if (!vv || window._coachVVBound) return;
   window._coachVVBound = true;
-  const update = () => {
-    if (!document.body.classList.contains('coach-chat-active')) {
-      document.documentElement.style.setProperty('--coach-kb-inset', '0px');
-      return;
-    }
-    // Keyboard height = layout viewport minus the (shrunk) visual viewport.
-    // Ignore vv.offsetTop (we pin the document on focus, so it stays ~0; using
-    // offsetTop made the fixed bars slide during over-scroll bounce).
-    const inset = Math.max(0, Math.round(window.innerHeight - vv.height));
-    document.documentElement.style.setProperty('--coach-kb-inset', inset + 'px');
-    // When the keyboard is up it already covers the home-indicator zone, so drop
-    // the composer's safe-area bottom padding to give back that dead space.
-    document.body.classList.toggle('coach-kb-open', inset > 40);
-  };
-  // Expose so onChatInputFocus() can drive it from a poll — iOS frequently does
-  // NOT fire 'resize' when the keyboard opens on focus, which left the inset at 0
-  // and hid the composer behind the keyboard. Polling on focus catches it.
-  window._coachApplyInset = update;
-  vv.addEventListener('resize', update);
-  vv.addEventListener('scroll', update);
-  update();
+  // Expose under the legacy name the focus rAF loop calls.
+  window._coachApplyInset = trackCoachViewport;
+  vv.addEventListener('resize', trackCoachViewport);
+  vv.addEventListener('scroll', trackCoachViewport);
+  trackCoachViewport();
 
-  // Backgrounding the app (app switch / lock) while the composer is focused
-  // leaves iOS in a stale keyboard + scroll state, so on return the cursor and
-  // the page jump around. Fix: when we go hidden, blur the input to dismiss the
-  // keyboard and zero the inset; when we come back, re-measure once iOS settles
-  // and re-pin the scroll to the bottom.
+  // Backgrounding the app while the composer is focused leaves iOS in a stale
+  // keyboard state. On hide, blur the input; on return, re-track once it settles.
   document.addEventListener('visibilitychange', () => {
     if (!document.body.classList.contains('coach-chat-active')) return;
     if (document.visibilityState === 'hidden') {
       const input = document.getElementById('chatInput');
       if (input && document.activeElement === input) input.blur();
-      document.documentElement.style.setProperty('--coach-kb-inset', '0px');
     } else {
-      setTimeout(() => {
-        try { measureCoachNav(); update(); } catch (_) {}
-        const msgs = document.getElementById('chatMessages');
-        if (msgs) msgs.scrollTop = msgs.scrollHeight;
-      }, 120);
+      setTimeout(() => { try { trackCoachViewport(); } catch (_) {} }, 120);
     }
   });
 }
@@ -16615,9 +16636,9 @@ async function renderCoachChat(el, intake) {
   document.body.classList.add('coach-chat-active');
   document.documentElement.classList.add('coach-html-lock');
   setupCoachKeyboardInset();
-  // Measure the fixed nav once styles have applied (it gains safe-area padding
-  // under .coach-chat-active), so the chat sits flush beneath it.
-  requestAnimationFrame(() => { measureCoachNav(); requestAnimationFrame(measureCoachNav); });
+  // Measure the fixed nav + glue the chat to the visual viewport once styles have
+  // applied (the nav gains safe-area padding under .coach-chat-active).
+  requestAnimationFrame(() => { measureCoachNav(); trackCoachViewport(); requestAnimationFrame(() => { measureCoachNav(); trackCoachViewport(); }); });
 
   // Load the latest 300 messages. Anything older stays in the DB (Coach can still
   // query it for context) but isn't rendered, so the chat never becomes an endless
@@ -17117,33 +17138,31 @@ function autoResizeChatInput(el) {
 //      event, so we POLL the viewport for ~750ms and re-apply the inset every
 //      frame-ish — this catches the keyboard whether or not the event fires.
 function onChatInputFocus() {
-  // Follow the keyboard SMOOTHLY via requestAnimationFrame for ~650ms. We re-apply
-  // the inset each frame (cheap) so the composer tracks the keyboard even if iOS
-  // never fires its 'resize' event — but unlike the old 50ms setInterval, rAF is
-  // smooth so the box doesn't visibly step/bounce. A focus-generation token means
-  // a re-focus supersedes the previous loop instead of stacking.
+  // Re-glue the UI to the visual viewport every frame for ~650ms so it tracks
+  // iOS's keyboard animation smoothly (iOS doesn't fire vv events reliably during
+  // the animation). No scrollTo — we move WITH iOS now, so there's no bounce. A
+  // focus-generation token means a re-focus supersedes the previous loop.
   window._coachFocusGen = (window._coachFocusGen || 0) + 1;
   const myGen = window._coachFocusGen;
   let frames = 0;
   const follow = () => {
     if (myGen !== window._coachFocusGen) return;
-    if (typeof window._coachApplyInset === 'function') window._coachApplyInset();
+    trackCoachViewport();
     if (++frames < 40) requestAnimationFrame(follow);
   };
   requestAnimationFrame(follow);
-  // Correct page-scroll drift only TWICE (on focus + after the keyboard settles),
-  // NOT continuously — resetting scroll every frame was fighting iOS and caused
-  // the oscillation. With the composer now correctly above the keyboard, iOS
-  // rarely needs to scroll at all, so a light touch is enough.
-  const pin = () => {
-    try {
-      window.scrollTo(0, 0);
-      document.documentElement.scrollTop = 0;
-      if (document.body) document.body.scrollTop = 0;
-    } catch (_) {}
-  };
-  pin();
-  setTimeout(pin, 350);
+  // Bring the latest text up into the smaller space above the keyboard — but only
+  // if the user was already near the bottom, so we don't yank them away from an
+  // earlier message they deliberately scrolled up to read.
+  const msgs = document.getElementById('chatMessages');
+  if (msgs) {
+    const nearBottom = (msgs.scrollHeight - msgs.scrollTop - msgs.clientHeight) < 260;
+    if (nearBottom) {
+      const toBottom = () => { msgs.scrollTop = msgs.scrollHeight; };
+      setTimeout(toBottom, 320);
+      setTimeout(toBottom, 560);
+    }
+  }
 }
 
 // Chat input keyboard:
@@ -21355,6 +21374,7 @@ async function renderPlan() {
   // huge. Since we're rendering the Plan, Coach is not active, so clear it.
   document.body.classList.remove('coach-chat-active');
   document.documentElement.classList.remove('coach-html-lock');
+  if (typeof resetCoachViewport === 'function') resetCoachViewport();
   const el = document.getElementById('planContent');
   if (!state.user) { el.innerHTML = ''; return; }
 
