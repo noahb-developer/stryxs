@@ -2600,6 +2600,9 @@ body.coach-chat-active .chat-input-row {
   border-top: none; background: transparent;
   padding: 8px 20px max(14px, var(--safe-bottom));
 }
+/* Keyboard is open → it already covers the home-indicator area, so reclaim the
+   safe-area bottom padding (less dead space below the composer while typing). */
+body.coach-chat-active.coach-kb-open .chat-input-row { padding-bottom: 8px; }
 /* AI messages: no box, just text */
 body.coach-chat-active .chat-msg .msg-avatar { display: none !important; }
 body.coach-chat-active .chat-msg:not(.user) {
@@ -16556,13 +16559,20 @@ function setupCoachKeyboardInset() {
       return;
     }
     // Keyboard height = layout viewport minus the (shrunk) visual viewport.
-    // We deliberately ignore vv.offsetTop and only listen to "resize" (NOT
-    // "scroll"): listening to scroll made the fixed bars slide up/down as the
-    // user dragged/over-scrolled the chat (offsetTop changes during the bounce).
-    const inset = Math.max(0, window.innerHeight - vv.height);
+    // Ignore vv.offsetTop (we pin the document on focus, so it stays ~0; using
+    // offsetTop made the fixed bars slide during over-scroll bounce).
+    const inset = Math.max(0, Math.round(window.innerHeight - vv.height));
     document.documentElement.style.setProperty('--coach-kb-inset', inset + 'px');
+    // When the keyboard is up it already covers the home-indicator zone, so drop
+    // the composer's safe-area bottom padding to give back that dead space.
+    document.body.classList.toggle('coach-kb-open', inset > 40);
   };
+  // Expose so onChatInputFocus() can drive it from a poll — iOS frequently does
+  // NOT fire 'resize' when the keyboard opens on focus, which left the inset at 0
+  // and hid the composer behind the keyboard. Polling on focus catches it.
+  window._coachApplyInset = update;
   vv.addEventListener('resize', update);
+  vv.addEventListener('scroll', update);
   update();
 
   // Backgrounding the app (app switch / lock) while the composer is focused
@@ -17100,13 +17110,15 @@ function autoResizeChatInput(el) {
   el.style.height = Math.min(el.scrollHeight, cap) + 'px';
 }
 
-// On iOS, focusing the composer (especially when scrolled to the very bottom)
-// makes Safari scroll the whole page to "reveal" the input, which drags the
-// fixed top nav off-screen, blanks the chat, and misplaces the cursor. The page
-// is supposed to be locked (overflow:hidden) but iOS scrolls it anyway during
-// the keyboard animation. Counteract by pinning the document back to 0 across
-// the keyboard-open animation frames. We do NOT touch the messages scroll, so
-// wherever the user was reading stays put.
+// iOS keyboard handling on focus. Two problems this solves:
+//   1. iOS scrolls the whole page to "reveal" the focused input, dragging the
+//      fixed top nav off-screen + blanking the chat. We pin the document to 0.
+//   2. iOS frequently does NOT fire a visualViewport 'resize' when the keyboard
+//      opens on focus (you can tell: the keyboard renders see-through because
+//      the page never resized). When that happens the composer inset stays 0 and
+//      the composer hides BEHIND the keyboard ("no box"). We can't trust the
+//      event, so we POLL the viewport for ~750ms and re-apply the inset every
+//      frame-ish — this catches the keyboard whether or not the event fires.
 function onChatInputFocus() {
   const pin = () => {
     try {
@@ -17115,11 +17127,15 @@ function onChatInputFocus() {
       if (document.body) document.body.scrollTop = 0;
     } catch (_) {}
   };
-  pin();
-  setTimeout(pin, 50);
-  setTimeout(pin, 150);
-  setTimeout(pin, 300);
-  setTimeout(pin, 500);
+  if (window._coachFocusPoll) clearInterval(window._coachFocusPoll);
+  let ticks = 0;
+  const step = () => {
+    pin();
+    if (typeof window._coachApplyInset === 'function') window._coachApplyInset();
+    if (++ticks >= 16) { clearInterval(window._coachFocusPoll); window._coachFocusPoll = null; }
+  };
+  step();
+  window._coachFocusPoll = setInterval(step, 50); // ~750ms of polling
 }
 
 // Chat input keyboard:
