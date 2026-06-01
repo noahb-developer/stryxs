@@ -16308,7 +16308,7 @@ function renderCoachInputRow(gate) {
         <div id="coachAttachPreview"></div>
         <div class="coach-composer">
           <button type="button" id="coachAttachBtn" class="composer-plus" onclick="coachPickAttachment()" aria-label="Add a photo or file">+</button>
-          <textarea id="chatInput" class="composer-input" placeholder="${t('coach.input.placeholder')}" rows="1" oninput="onChatInputChange(this)" onkeydown="handleChatInputKeydown(event)"></textarea>
+          <textarea id="chatInput" class="composer-input" placeholder="${t('coach.input.placeholder')}" rows="1" oninput="onChatInputChange(this)" onkeydown="handleChatInputKeydown(event)" onfocus="onChatInputFocus()"></textarea>
           <button type="button" id="coachSendBtn" class="composer-send" onclick="sendChatMsg()" aria-label="Send" disabled>↑</button>
         </div>
         <input type="file" id="coachFileInput" accept="image/*,application/pdf,.pdf" style="display: none;" onchange="onCoachFileChosen(this)" />
@@ -16652,59 +16652,27 @@ async function renderCoachChat(el, intake) {
     const allMsgs = chatEl.querySelectorAll('.chat-msg');
     const lastMsg = allMsgs[allMsgs.length - 1];
 
-    // ═══ READ-RECEIPT TRACKING ═══
-    // Each .chat-msg gets data-msg-id={message id}. We track the last-read message ID
-    // in localStorage per user. On Coach tab open, scroll to the FIRST message after
-    // last-read. If all messages are read, scroll to TOP of the last message.
+    // Always land on the LATEST message. If it's long (e.g. a workout analysis),
+    // anchor at its TOP so you read it from the start; if short, go to the bottom.
+    // Retried across a few frames because offsetTop/scrollHeight aren't final until
+    // layout + fonts settle — that timing bug was landing us on the 2nd-to-last msg.
+    const anchorLatest = () => {
+      if (!lastMsg) { chatEl.scrollTop = chatEl.scrollHeight; return; }
+      const long = (lastMsg.textContent || '').length > 500;
+      chatEl.scrollTop = long ? Math.max(0, lastMsg.offsetTop - 16) : chatEl.scrollHeight;
+    };
+    anchorLatest();
+    requestAnimationFrame(anchorLatest);
+    setTimeout(anchorLatest, 60);
+    setTimeout(anchorLatest, 220);
+    window._stryxsCoachLoadedThisSession = true;
+
+    // Mark everything read now that the user is viewing Coach (the unread state is
+    // only a scroll-anchor hint, so eager-on-view is fine).
     const lastReadKey = state.user ? `stryxs_coach_last_read_${state.user.id}` : null;
-    const lastReadId = lastReadKey ? localStorage.getItem(lastReadKey) : null;
-    let firstUnread = null;
-    if (lastReadId) {
-      let foundLastRead = false;
-      for (const m of allMsgs) {
-        if (foundLastRead) {
-          firstUnread = m;
-          break;
-        }
-        if (m.getAttribute('data-msg-id') === lastReadId) {
-          foundLastRead = true;
-        }
-      }
-    } else if (allMsgs.length > 0) {
-      // No last-read recorded yet, treat the first message as first-unread on initial load
-      firstUnread = allMsgs[0];
-    }
-
-    if (!window._stryxsCoachLoadedThisSession) {
-      // First load this session, anchor at TOP of first unread (preferred) or top of last message
-      if (firstUnread) {
-        chatEl.scrollTop = Math.max(0, firstUnread.offsetTop - 16);
-      } else if (lastMsg) {
-        // Everything read, scroll to top of last message so user re-reads it cleanly
-        chatEl.scrollTop = Math.max(0, lastMsg.offsetTop - 16);
-      } else {
-        chatEl.scrollTop = 0;
-      }
-      window._stryxsCoachLoadedThisSession = true;
-    } else {
-      // Subsequent renders within session, anchor at top of last message (so newly arriving
-      // long Coach replies start from their top, not the bottom)
-      const lastMsgText = lastMsg?.textContent || '';
-      if (lastMsg && lastMsgText.length > 500) {
-        chatEl.scrollTop = Math.max(0, lastMsg.offsetTop - 16);
-      } else {
-        chatEl.scrollTop = chatEl.scrollHeight;
-      }
-    }
-
-    // Mark all messages as read NOW that user is viewing the Coach tab.
-    // We mark on view (eager), the alternative (mark on scroll-past) is fiddly and
-    // doesn't add much value here since the unread state is just "scroll-anchor hint."
     if (lastReadKey && lastMsg) {
       const lastMsgId = lastMsg.getAttribute('data-msg-id');
-      if (lastMsgId) {
-        localStorage.setItem(lastReadKey, lastMsgId);
-      }
+      if (lastMsgId) localStorage.setItem(lastReadKey, lastMsgId);
     }
   }
 }
@@ -17126,7 +17094,32 @@ function formatElevation(meters) {
 function autoResizeChatInput(el) {
   if (!el) return;
   el.style.height = 'auto';
-  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+  // Cap the composer shorter on phones so a few typed lines don't eat the chat
+  // reading area on top of the keyboard + nav. Roomier on desktop.
+  const cap = window.innerWidth <= 720 ? 88 : 120;
+  el.style.height = Math.min(el.scrollHeight, cap) + 'px';
+}
+
+// On iOS, focusing the composer (especially when scrolled to the very bottom)
+// makes Safari scroll the whole page to "reveal" the input, which drags the
+// fixed top nav off-screen, blanks the chat, and misplaces the cursor. The page
+// is supposed to be locked (overflow:hidden) but iOS scrolls it anyway during
+// the keyboard animation. Counteract by pinning the document back to 0 across
+// the keyboard-open animation frames. We do NOT touch the messages scroll, so
+// wherever the user was reading stays put.
+function onChatInputFocus() {
+  const pin = () => {
+    try {
+      window.scrollTo(0, 0);
+      document.documentElement.scrollTop = 0;
+      if (document.body) document.body.scrollTop = 0;
+    } catch (_) {}
+  };
+  pin();
+  setTimeout(pin, 50);
+  setTimeout(pin, 150);
+  setTimeout(pin, 300);
+  setTimeout(pin, 500);
 }
 
 // Chat input keyboard:
