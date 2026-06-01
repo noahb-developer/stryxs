@@ -2568,6 +2568,13 @@ body.coach-chat-active .nav {
   position: fixed; top: 0; left: 0; right: 0; z-index: 120;
   padding-top: calc(12px + var(--safe-top));
   will-change: transform;
+  /* Frosted, near-transparent in chat so the messages show through behind the
+     buttons (more open feel) while the logo + 3 buttons stay legible + tappable.
+     No hard bottom border so there's no "bar" line. */
+  background: rgba(10, 14, 26, 0.32);
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  border-bottom: none;
 }
 body.coach-chat-active #page-coach.active {
   position: fixed;
@@ -2577,8 +2584,8 @@ body.coach-chat-active #page-coach.active {
      than against it, so the page doesn't bounce up-then-down on focus. The values
      here are a sane pre-JS fallback. */
   top: 0; left: 0; right: 0;
-  height: calc(100% - var(--coach-nav-h, 56px));
-  transform: translateY(var(--coach-nav-h, 56px));
+  height: 100%;
+  transform: translateY(0px);
   padding: 0;
   display: flex; flex-direction: column;
   overflow: hidden;
@@ -2597,7 +2604,9 @@ body.coach-chat-active .coach-chat {
 /* Centered reading column on wide screens, full width on phones */
 body.coach-chat-active .chat-messages {
   max-width: 780px; width: 100%; margin: 0 auto;
-  padding: 22px 20px 28px;
+  /* Top padding clears the (now transparent) fixed nav so the first message
+     doesn't start under the buttons; messages scroll up behind it. */
+  padding: calc(var(--coach-nav-h, 56px) + 14px) 20px 28px;
   gap: 22px;
 }
 body.coach-chat-active .chat-input-row {
@@ -2643,7 +2652,7 @@ body.coach-chat-active .chat-msg.user .msg-bubble {
 }
 body.coach-chat-active .chat-msg.user .msg-bubble strong { color: var(--text); }
 @media (max-width: 720px) {
-  body.coach-chat-active .chat-messages { padding: 16px 14px 22px; gap: 20px; }
+  body.coach-chat-active .chat-messages { padding: calc(var(--coach-nav-h, 56px) + 10px) 14px 22px; gap: 20px; }
   body.coach-chat-active .chat-input-row { padding: 8px 12px max(12px, var(--safe-bottom)); }
   body.coach-chat-active .chat-msg.user { max-width: 88%; }
 }
@@ -16578,8 +16587,11 @@ function trackCoachViewport() {
   if (navH > 0) document.documentElement.style.setProperty('--coach-nav-h', navH + 'px');
   if (nav) nav.style.transform = `translateY(${offset}px)`;
   if (page) {
-    page.style.transform = `translateY(${offset + navH}px)`;
-    page.style.height = Math.max(0, Math.round(vv.height - navH)) + 'px';
+    // Chat spans the FULL visible area (behind the now-transparent nav) so a line
+    // or two of messages shows through above the buttons for a more open feel. The
+    // messages container is padded down by navH so the first line clears the nav.
+    page.style.transform = `translateY(${offset}px)`;
+    page.style.height = Math.max(0, Math.round(vv.height)) + 'px';
   }
   // Keyboard up → it already covers the home-indicator zone, so drop the
   // composer's safe-area bottom padding to give back that dead space.
