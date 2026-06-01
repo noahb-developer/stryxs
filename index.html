@@ -2568,13 +2568,25 @@ body.coach-chat-active .nav {
   position: fixed; top: 0; left: 0; right: 0; z-index: 120;
   padding-top: calc(12px + var(--safe-top));
   will-change: transform;
-  /* Frosted, near-transparent in chat so the messages show through behind the
-     buttons (more open feel) while the logo + 3 buttons stay legible + tappable.
-     No hard bottom border so there's no "bar" line. */
-  background: rgba(10, 14, 26, 0.32);
-  backdrop-filter: blur(16px) saturate(160%);
-  -webkit-backdrop-filter: blur(16px) saturate(160%);
-  border-bottom: none;
+  /* FULLY transparent in chat (like Claude's mobile chat): no bar, no frost, no
+     border — the logo + 3 buttons float directly over the messages, which show
+     through completely behind them. Buttons keep their own shape/contrast so they
+     stay tappable + visible. */
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border-bottom: none !important;
+}
+/* No solid notch/status-bar backdrop in chat either, so the very top is blank
+   too (content shows all the way up like Claude). */
+body.coach-chat-active .safe-area-top { background: transparent !important; }
+/* Subtle shadow so the floating logo + buttons stay readable over any text that
+   scrolls behind them (no bar needed). */
+body.coach-chat-active #mainNav .nav-inner { text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6); }
+body.coach-chat-active #mainNav .nav-inner button,
+body.coach-chat-active #mainNav .nav-inner .logo,
+body.coach-chat-active #mainNav .nav-inner .nav-avatar {
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.55));
 }
 body.coach-chat-active #page-coach.active {
   position: fixed;
