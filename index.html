@@ -16662,19 +16662,16 @@ async function renderCoachChat(el, intake) {
     const allMsgs = chatEl.querySelectorAll('.chat-msg');
     const lastMsg = allMsgs[allMsgs.length - 1];
 
-    // Always land on the LATEST message. If it's long (e.g. a workout analysis),
-    // anchor at its TOP so you read it from the start; if short, go to the bottom.
-    // Retried across a few frames because offsetTop/scrollHeight aren't final until
-    // layout + fonts settle — that timing bug was landing us on the 2nd-to-last msg.
-    const anchorLatest = () => {
-      if (!lastMsg) { chatEl.scrollTop = chatEl.scrollHeight; return; }
-      const long = (lastMsg.textContent || '').length > 500;
-      chatEl.scrollTop = long ? Math.max(0, lastMsg.offsetTop - 16) : chatEl.scrollHeight;
-    };
-    anchorLatest();
-    requestAnimationFrame(anchorLatest);
-    setTimeout(anchorLatest, 60);
-    setTimeout(anchorLatest, 220);
+    // Always land at the very BOTTOM (newest message / end of chat). Retried
+    // across several frames because scrollHeight keeps growing until layout +
+    // fonts + any images settle — without the late retries it lands "before" the
+    // end (which is exactly what was happening).
+    const anchorBottom = () => { chatEl.scrollTop = chatEl.scrollHeight; };
+    anchorBottom();
+    requestAnimationFrame(anchorBottom);
+    setTimeout(anchorBottom, 60);
+    setTimeout(anchorBottom, 220);
+    setTimeout(anchorBottom, 500);
     window._stryxsCoachLoadedThisSession = true;
 
     // Mark everything read now that the user is viewing Coach (the unread state is
@@ -17120,6 +17117,24 @@ function autoResizeChatInput(el) {
 //      event, so we POLL the viewport for ~750ms and re-apply the inset every
 //      frame-ish — this catches the keyboard whether or not the event fires.
 function onChatInputFocus() {
+  // Follow the keyboard SMOOTHLY via requestAnimationFrame for ~650ms. We re-apply
+  // the inset each frame (cheap) so the composer tracks the keyboard even if iOS
+  // never fires its 'resize' event — but unlike the old 50ms setInterval, rAF is
+  // smooth so the box doesn't visibly step/bounce. A focus-generation token means
+  // a re-focus supersedes the previous loop instead of stacking.
+  window._coachFocusGen = (window._coachFocusGen || 0) + 1;
+  const myGen = window._coachFocusGen;
+  let frames = 0;
+  const follow = () => {
+    if (myGen !== window._coachFocusGen) return;
+    if (typeof window._coachApplyInset === 'function') window._coachApplyInset();
+    if (++frames < 40) requestAnimationFrame(follow);
+  };
+  requestAnimationFrame(follow);
+  // Correct page-scroll drift only TWICE (on focus + after the keyboard settles),
+  // NOT continuously — resetting scroll every frame was fighting iOS and caused
+  // the oscillation. With the composer now correctly above the keyboard, iOS
+  // rarely needs to scroll at all, so a light touch is enough.
   const pin = () => {
     try {
       window.scrollTo(0, 0);
@@ -17127,15 +17142,8 @@ function onChatInputFocus() {
       if (document.body) document.body.scrollTop = 0;
     } catch (_) {}
   };
-  if (window._coachFocusPoll) clearInterval(window._coachFocusPoll);
-  let ticks = 0;
-  const step = () => {
-    pin();
-    if (typeof window._coachApplyInset === 'function') window._coachApplyInset();
-    if (++ticks >= 16) { clearInterval(window._coachFocusPoll); window._coachFocusPoll = null; }
-  };
-  step();
-  window._coachFocusPoll = setInterval(step, 50); // ~750ms of polling
+  pin();
+  setTimeout(pin, 350);
 }
 
 // Chat input keyboard:
