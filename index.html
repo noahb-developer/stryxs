@@ -493,6 +493,10 @@ body.on-landing #landingNav { display: none !important; }
   transform-origin: top left;
 }
 .nav-menu-panel.open { opacity: 1; transform: translateY(0) scale(1); pointer-events: auto; }
+/* When navigating from the menu we close it INSTANTLY (no fade) so the full-screen
+   backdrop-blur is gone before the new page renders — fading it out over the
+   incoming page (esp. the heavy full-screen Coach) stutters on mobile. */
+.nav-menu-panel.menu-instant, .nav-menu-backdrop.menu-instant { transition: none !important; }
 
 .nav-menu-items {
   display: flex; flex-direction: column; gap: 1px;
@@ -7775,8 +7779,20 @@ function closeNavMenu() {
 }
 
 function navigateAndCloseMenu(page) {
+  // Close the menu INSTANTLY (kill the transition) before navigating so the
+  // full-screen backdrop-blur doesn't linger/fade over the incoming page — that
+  // overlap is what made tapping a menu item (esp. Coach) feel laggy on mobile.
+  const panel = document.getElementById('navMenuPanel');
+  const backdrop = document.getElementById('navMenuBackdrop');
+  if (panel) panel.classList.add('menu-instant');
+  if (backdrop) backdrop.classList.add('menu-instant');
   closeNavMenu();
   navigate(page);
+  // Restore the transition for the next open (after the close has taken effect).
+  requestAnimationFrame(() => {
+    if (panel) panel.classList.remove('menu-instant');
+    if (backdrop) backdrop.classList.remove('menu-instant');
+  });
 }
 
 // Avatar dropdown menu
