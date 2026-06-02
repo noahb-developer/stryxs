@@ -493,10 +493,6 @@ body.on-landing #landingNav { display: none !important; }
   transform-origin: top left;
 }
 .nav-menu-panel.open { opacity: 1; transform: translateY(0) scale(1); pointer-events: auto; }
-/* When navigating from the menu we close it INSTANTLY (no fade) so the full-screen
-   backdrop-blur is gone before the new page renders — fading it out over the
-   incoming page (esp. the heavy full-screen Coach) stutters on mobile. */
-.nav-menu-panel.menu-instant, .nav-menu-backdrop.menu-instant { transition: none !important; }
 
 .nav-menu-items {
   display: flex; flex-direction: column; gap: 1px;
@@ -7779,20 +7775,8 @@ function closeNavMenu() {
 }
 
 function navigateAndCloseMenu(page) {
-  // Close the menu INSTANTLY (kill the transition) before navigating so the
-  // full-screen backdrop-blur doesn't linger/fade over the incoming page — that
-  // overlap is what made tapping a menu item (esp. Coach) feel laggy on mobile.
-  const panel = document.getElementById('navMenuPanel');
-  const backdrop = document.getElementById('navMenuBackdrop');
-  if (panel) panel.classList.add('menu-instant');
-  if (backdrop) backdrop.classList.add('menu-instant');
   closeNavMenu();
   navigate(page);
-  // Restore the transition for the next open (after the close has taken effect).
-  requestAnimationFrame(() => {
-    if (panel) panel.classList.remove('menu-instant');
-    if (backdrop) backdrop.classList.remove('menu-instant');
-  });
 }
 
 // Avatar dropdown menu
@@ -16677,30 +16661,41 @@ async function renderCoachChat(el, intakeMaybe) {
   // applied (the nav gains safe-area padding under .coach-chat-active).
   requestAnimationFrame(() => { measureCoachNav(); trackCoachViewport(); requestAnimationFrame(() => { measureCoachNav(); trackCoachViewport(); }); });
 
-  // 1) Paint the shell INSTANTLY (empty messages area with a spinner + an
-  //    optimistic composer) so the page opens with no wait. Data loads next.
-  el.innerHTML = `
+  const optimisticGate = { allowed: true, remaining: Infinity, isFreeTrial: false };
+  const cacheKey = state.user ? 'stryxs_coach_cache_' + state.user.id : null;
+  const msgsToHTML = (msgs) => msgs.map(m => renderMsg(m.role, m.content, m.context_type, m.id, m.image_url)).join('');
+  const fallbackHTML = (goal) => renderMsg('coach', (() => {
+    const firstName = state.user.name.split(' ')[0];
+    const m = getMethodologyForGoal(goal);
+    return `Hey ${firstName}, ${m.name} in spirit. I built your plan based on what you told me, check the Plan tab to see this week's calendar. Upload your workouts as you do them and I'll give you specific feedback. Ask me anything here.`;
+  })());
+  const shell = (innerHTML, gate) => `
     <div class="coach-chat">
-      <div class="chat-messages" id="chatMessages">
-        <div id="coachLoadingMsgs" style="display:flex; align-items:center; justify-content:center; min-height:160px; flex:1;">
-          <div class="spinner"></div>
-        </div>
-      </div>
-      <div class="chat-input-row" id="coachInputRow">
-        ${renderCoachInputRow({ allowed: true, remaining: Infinity, isFreeTrial: false })}
-      </div>
-    </div>
-  `;
+      <div class="chat-messages" id="chatMessages">${innerHTML}</div>
+      <div class="chat-input-row" id="coachInputRow">${renderCoachInputRow(gate)}</div>
+    </div>`;
+  const anchorBottom = () => {
+    const c = document.getElementById('chatMessages'); if (!c) return;
+    const f = () => { c.scrollTop = c.scrollHeight; };
+    f(); requestAnimationFrame(f); setTimeout(f, 60); setTimeout(f, 220); setTimeout(f, 500);
+  };
 
-  // 2) Load intake (only if not already known), the recent messages, and the
-  //    free-trial gate ALL IN PARALLEL. Rendering only the last 50 messages (older
-  //    ones stay in the DB + still feed Coach's context) + lean columns keeps the
-  //    payload small. This + the shell-first paint is the Coach-open speed fix.
+  // 1) INSTANT paint from cached messages (no spinner, no network wait) — this is
+  //    what makes REOPENING Coach feel immediate regardless of DB/network latency.
+  //    First-ever open (no cache) shows a brief spinner.
+  let cached = null;
+  if (cacheKey) { try { cached = JSON.parse(localStorage.getItem(cacheKey) || 'null'); } catch (_) {} }
+  const haveCache = Array.isArray(cached) && cached.length > 0;
+  el.innerHTML = haveCache
+    ? shell(msgsToHTML(cached), optimisticGate)
+    : shell('<div style="display:flex;align-items:center;justify-content:center;min-height:160px;flex:1;"><div class="spinner"></div></div>', optimisticGate);
+  if (haveCache) anchorBottom();
+
+  // 2) Refresh in the background: intake (if unknown) + recent messages + gate, in parallel.
   const COACH_RENDER_LIMIT = 50;
   const intakePromise = intakeMaybe
     ? Promise.resolve(intakeMaybe)
     : sb.from('athlete_intake').select('*').eq('user_id', state.user.id).single().then(r => r && r.data).catch(() => null);
-  const _coachT0 = (typeof performance !== 'undefined') ? performance.now() : 0;
   const [intake, historyRes, coachGate] = await Promise.all([
     intakePromise,
     sb.from('coach_messages')
@@ -16710,9 +16705,6 @@ async function renderCoachChat(el, intakeMaybe) {
       .limit(COACH_RENDER_LIMIT),
     canSendCoachMsg(),
   ]);
-  // Diagnostic: how long the parallel data load took. If Coach still feels slow,
-  // this number tells us whether it's the network/DB (high) or something else (low).
-  try { console.log('[Stryxs] Coach data loaded in', Math.round(performance.now() - _coachT0), 'ms ·', ((historyRes && historyRes.data) || []).length, 'msgs'); } catch (_) {}
 
   // If onboarding isn't finished, swap the chat shell for the intake form.
   if (!intake || !intake.completed) {
@@ -16723,30 +16715,27 @@ async function renderCoachChat(el, intakeMaybe) {
     return;
   }
 
-  // 3) Populate messages + the real composer gate. Bail if the user navigated away
-  //    while loading (the chat container would be gone).
+  const fresh = ((historyRes && historyRes.data) || []).slice().reverse();
+  // Update the cache for next time (store only the fields we render).
+  if (cacheKey) {
+    try { localStorage.setItem(cacheKey, JSON.stringify(fresh.map(m => ({ id: m.id, role: m.role, content: m.content, context_type: m.context_type, image_url: m.image_url })))); } catch (_) {}
+  }
+
   const chatEl = document.getElementById('chatMessages');
-  if (!chatEl) return;
-  const recentMessages = ((historyRes && historyRes.data) || []).slice().reverse();
-  chatEl.innerHTML = (recentMessages.length > 0)
-    ? recentMessages.map(m => renderMsg(m.role, m.content, m.context_type, m.id, m.image_url)).join('')
-    : renderMsg('coach', (() => {
-        // Persona-flavored fallback when no Coach messages exist yet.
-        const firstName = state.user.name.split(' ')[0];
-        const m = getMethodologyForGoal(intake?.goal_event);
-        return `Hey ${firstName}, ${m.name} in spirit. I built your plan based on what you told me, check the Plan tab to see this week's calendar. Upload your workouts as you do them and I'll give you specific feedback. Ask me anything here.`;
-      })());
+  if (!chatEl) return; // user navigated away while loading
+
+  // 3) Re-render ONLY if the fresh messages differ from what we painted from cache
+  //    (no flicker/scroll-jump when the cache was already current).
+  const cachedIds = haveCache ? cached.map(m => m.id).join(',') : '';
+  const freshIds = fresh.map(m => m.id).join(',');
+  if (!haveCache || freshIds !== cachedIds) {
+    chatEl.innerHTML = fresh.length ? msgsToHTML(fresh) : fallbackHTML(intake?.goal_event);
+    anchorBottom();
+  }
+  // Patch the composer with the real gate (the instant paint used an optimistic one).
   const inputRow = document.getElementById('coachInputRow');
   if (inputRow) inputRow.innerHTML = renderCoachInputRow(coachGate);
 
-  // Always land at the very BOTTOM (newest message). Retried across several frames
-  // because scrollHeight keeps growing until layout + fonts + images settle.
-  const anchorBottom = () => { chatEl.scrollTop = chatEl.scrollHeight; };
-  anchorBottom();
-  requestAnimationFrame(anchorBottom);
-  setTimeout(anchorBottom, 60);
-  setTimeout(anchorBottom, 220);
-  setTimeout(anchorBottom, 500);
   window._stryxsCoachLoadedThisSession = true;
 
   // Mark everything read (the unread state is only a scroll-anchor hint).
