@@ -16664,17 +16664,22 @@ async function renderCoachChat(el, intake) {
   // applied (the nav gains safe-area padding under .coach-chat-active).
   requestAnimationFrame(() => { measureCoachNav(); trackCoachViewport(); requestAnimationFrame(() => { measureCoachNav(); trackCoachViewport(); }); });
 
-  // Load the latest 300 messages. Anything older stays in the DB (Coach can still
-  // query it for context) but isn't rendered, so the chat never becomes an endless
-  // scroll. Ordered newest-first then flipped back to chronological for display.
-  const { data: history } = await sb.from('coach_messages')
-    .select('*')
-    .eq('user_id', state.user.id)
-    .order('created_at', { ascending: false })
-    .limit(300);
-
-  // Free-user Coach chat trial: 3 messages in past 30 days before Pro wall.
-  const coachGate = await canSendCoachMsg();
+  // Render only the most recent messages for a FAST open. Rendering hundreds of
+  // markdown messages (the old limit was 300) was the cause of the slow Coach
+  // open, especially on phones. Older messages stay in the DB and still feed
+  // Coach's context — they just don't need to be drawn. We also fetch the message
+  // page + the free-trial gate in PARALLEL (was sequential) and select only the
+  // columns we actually render (was select('*'), a big payload).
+  const COACH_RENDER_LIMIT = 50;
+  const [historyRes, coachGate] = await Promise.all([
+    sb.from('coach_messages')
+      .select('id, role, content, context_type, image_url, created_at')
+      .eq('user_id', state.user.id)
+      .order('created_at', { ascending: false })
+      .limit(COACH_RENDER_LIMIT),
+    canSendCoachMsg(),
+  ]);
+  const history = historyRes && historyRes.data;
 
   const recentMessages = (history || []).slice().reverse();
 
