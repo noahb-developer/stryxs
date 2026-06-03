@@ -494,6 +494,25 @@ body.on-landing #landingNav { display: none !important; }
 }
 .nav-menu-panel.open { opacity: 1; transform: translateY(0) scale(1); pointer-events: auto; }
 
+/* Segmented tab bar for the Training section (Log / History / Trends) — iOS-style
+   so the three views read as ONE section you switch between, not separate pages. */
+.training-tabs {
+  display: flex; gap: 3px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  border-radius: 12px; padding: 3px;
+  margin-bottom: 18px;
+}
+.training-tab {
+  flex: 1; padding: 9px 6px; border: 0; background: transparent;
+  color: var(--text-dim); font-size: 13px; font-weight: 600; font-family: inherit;
+  border-radius: 9px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  transition: background 0.15s, color 0.15s; -webkit-tap-highlight-color: transparent;
+}
+.training-tab.active { background: rgba(0, 229, 160, 0.14); color: var(--accent); }
+.training-tab:not(.active):active { background: rgba(255, 255, 255, 0.04); }
+
 .nav-menu-items {
   display: flex; flex-direction: column; gap: 1px;
 }
@@ -4346,17 +4365,9 @@ body.on-auth .container {
       <span class="nav-menu-icon">🏁</span>
       <span class="nav-menu-label" data-i18n="nav.race_plan">Race Plan</span>
     </button>
-    <button class="nav-menu-item" data-page="upload" onclick="navigateAndCloseMenu('upload')">
-      <span class="nav-menu-icon">📤</span>
-      <span class="nav-menu-label" data-i18n="nav.analyze">Analyze</span>
-    </button>
-    <button class="nav-menu-item" data-page="history" onclick="navigateAndCloseMenu('history')">
-      <span class="nav-menu-icon">📂</span>
-      <span class="nav-menu-label" data-i18n="nav.history">History</span>
-    </button>
-    <button class="nav-menu-item" data-page="trends" onclick="navigateAndCloseMenu('trends')">
-      <span class="nav-menu-icon">📈</span>
-      <span class="nav-menu-label" data-i18n="nav.trends">Trends</span>
+    <button class="nav-menu-item" data-page="upload" data-page-group="training" onclick="navigateAndCloseMenu('upload')">
+      <span class="nav-menu-icon">🏋️</span>
+      <span class="nav-menu-label">Training</span>
     </button>
   </div>
 </div>
@@ -4786,8 +4797,13 @@ body.on-auth .container {
 
 <!-- UPLOAD -->
 <div class="page" id="page-upload">
-  <div class="section-title" data-i18n="analyze.title">Analyze Workout</div>
-  <p class="section-sub" data-i18n="analyze.subtitle">Sync, upload, or review today's workouts.</p>
+  <div class="training-tabs">
+    <button class="training-tab active" onclick="navigate('upload')">➕ Log</button>
+    <button class="training-tab" onclick="navigate('history')">📂 History</button>
+    <button class="training-tab" onclick="navigate('trends')">📈 Trends</button>
+  </div>
+  <div class="section-title">Log a workout</div>
+  <p class="section-sub">Sync from Strava, upload a file, or enter it by hand.</p>
 
   <!-- ═══ THREE COLLAPSIBLE TOGGLE BUTTONS ═══ -->
   <div class="analyze-toggles">
@@ -4805,11 +4821,6 @@ body.on-auth .container {
       <span class="analyze-toggle-icon">📁</span>
       <span class="analyze-toggle-label" data-i18n="analyze.toggle.upload">Upload file</span>
       <span class="analyze-toggle-chev">▾</span>
-    </button>
-    <button class="analyze-toggle" id="toggleFromHistory" onclick="navigate('history')">
-      <span class="analyze-toggle-icon">📂</span>
-      <span class="analyze-toggle-label" data-i18n="analyze.toggle.history">From history</span>
-      <span class="analyze-toggle-chev">→</span>
     </button>
   </div>
 
@@ -4874,6 +4885,11 @@ body.on-auth .container {
 
 <!-- HISTORY -->
 <div class="page" id="page-history">
+  <div class="training-tabs">
+    <button class="training-tab" onclick="navigate('upload')">➕ Log</button>
+    <button class="training-tab active" onclick="navigate('history')">📂 History</button>
+    <button class="training-tab" onclick="navigate('trends')">📈 Trends</button>
+  </div>
   <div class="section-title" data-i18n="history.title">Workout History</div>
   <p class="section-sub" id="historyCount">Your recent workouts</p>
   <div id="historyList"></div>
@@ -4881,6 +4897,11 @@ body.on-auth .container {
 
 <!-- TRENDS -->
 <div class="page" id="page-trends">
+  <div class="training-tabs">
+    <button class="training-tab" onclick="navigate('upload')">➕ Log</button>
+    <button class="training-tab" onclick="navigate('history')">📂 History</button>
+    <button class="training-tab active" onclick="navigate('trends')">📈 Trends</button>
+  </div>
   <div class="section-title" data-i18n="trends.title">Training Trends</div>
   <p class="section-sub" data-i18n="trends.subtitle">Patterns across your recent training. The bigger picture Strava and Garmin don't show.</p>
   <div id="trendsContent"></div>
@@ -7649,6 +7670,11 @@ function navigate(page) {
   const target = document.getElementById(`page-${page}`);
   if (target) target.classList.add('active');
   document.querySelectorAll('.nav-menu-item').forEach(t => t.classList.toggle('active', t.dataset.page === page));
+  // The single "Training" menu item covers the Log/History/Trends sub-tabs.
+  if (['upload', 'history', 'trends'].includes(page)) {
+    const trainingItem = document.querySelector('.nav-menu-item[data-page-group="training"]');
+    if (trainingItem) trainingItem.classList.add('active');
+  }
   window.scrollTo({ top: 0, behavior: 'instant' });
 
   // Add body class so we know which page is active (for full-width landing styling)
@@ -11414,11 +11440,16 @@ async function deleteWorkoutFeedback(btn) {
   btn.disabled = true;
   btn.textContent = 'Deleting...';
   try {
-    const { error } = await sb.from('workout_feedback')
+    // .select() so we can VERIFY a row was actually removed. If RLS has no DELETE
+    // policy the delete matches 0 rows with no error (the old bug: reopening then
+    // showed the stale row). Treat 0-rows-deleted as a failure.
+    const { data: del, error } = await sb.from('workout_feedback')
       .delete()
       .eq('user_id', state.user.id)
-      .eq('workout_id', workoutId);
+      .eq('workout_id', workoutId)
+      .select('id');
     if (error) throw error;
+    if (!del || del.length === 0) throw new Error('Delete removed 0 rows (missing RLS DELETE policy? run migrate_v12.sql)');
     wrap._savedFeedback = null;
     const body = wrap.querySelector('.feedback-form-body');
     const trigger = wrap.querySelector('.feedback-trigger');
