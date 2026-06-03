@@ -12670,11 +12670,21 @@ function _deriveRunThresholdPace(intake) {
 }
 
 function _formStatus(tsb) {
-  if (tsb >= 15) return { label: 'Fresh', color: '#4ade80', note: 'Tapered and race-ready.' };
-  if (tsb >= 5) return { label: 'Recovered', color: '#34d399', note: 'Rested, good time to load up.' };
-  if (tsb >= -10) return { label: 'Productive', color: '#facc15', note: 'Healthy training balance.' };
-  if (tsb >= -30) return { label: 'Overloaded', color: '#fb923c', note: 'Deep in a hard block, watch recovery and fuel.' };
-  return { label: 'Very fatigued', color: '#f87171', note: 'Back off and prioritize recovery before you dig a hole.' };
+  if (tsb >= 15) return { label: 'Fresh', color: '#4ade80', emoji: '🟢',
+    headline: "You're fresh and race-ready",
+    plain: "You've rested more than you've trained lately. Perfect for a race, but if you're mid-training it may be time to load up again before you lose fitness." };
+  if (tsb >= 5) return { label: 'Rested', color: '#34d399', emoji: '🟢',
+    headline: "You're well recovered",
+    plain: "Leaning rested with fitness intact. A good window to add a harder session or a long day." };
+  if (tsb >= -10) return { label: 'Building', color: '#facc15', emoji: '🟡',
+    headline: "You're in a healthy training rhythm",
+    plain: "Training and recovery are balanced, this is the sweet spot where fitness actually gets built. Keep going." };
+  if (tsb >= -30) return { label: 'Loaded', color: '#fb923c', emoji: '🟠',
+    headline: "You're carrying real fatigue",
+    plain: "You're deep in a hard block. Fine for a few days, but sleep and fuel well and keep an easy day close. Don't stack hard sessions back-to-back right now." };
+  return { label: 'Very tired', color: '#f87171', emoji: '🔴',
+    headline: "You're very fatigued, ease up",
+    plain: "Tiredness has built faster than you're recovering. Take an easy or rest day before you dig a deeper hole, this is where injury and burnout start." };
 }
 
 function renderLoadFormCard() {
@@ -12684,33 +12694,41 @@ function renderLoadFormCard() {
   if (!m || m.counted < 6) { card.innerHTML = ''; return; } // not enough data to be meaningful
   const st = _formStatus(m.tsb);
   const acwrColor = m.acwr == null ? 'var(--text-mute)' : m.acwr > 1.5 ? '#f87171' : m.acwr < 0.8 ? '#facc15' : '#4ade80';
-  const acwrNote = m.acwr == null ? '' : m.acwr > 1.5 ? 'high injury risk, cap next week' : m.acwr < 0.8 ? 'detrained, ramp gently' : 'safe loading zone';
+  const acwrNote = m.acwr == null ? '' : m.acwr > 1.5 ? 'a big jump, ease off next week to avoid injury' : m.acwr < 0.8 ? 'lighter than usual, you can ramp back up' : 'a safe, steady increase';
   card.innerHTML = `
     <div class="panel" style="margin-bottom: 14px;">
       <div class="panel-header">
         <div>
-          <div class="panel-title">📈 Training load & form</div>
-          <div class="panel-sub">How fit, how fatigued, and how fresh you are right now</div>
+          <div class="panel-title">📈 Your training load</div>
+          <div class="panel-sub">Your fitness vs how tired you are right now</div>
         </div>
       </div>
-      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px;">
+      <!-- Plain-language headline: the one thing the user should take away -->
+      <div style="background: ${st.color}14; border: 1px solid ${st.color}40; border-radius: 10px; padding: 12px 14px; margin-bottom: 12px;">
+        <div style="font-size: 14px; font-weight: 800; color: ${st.color}; letter-spacing: -0.2px;">${st.emoji} ${st.headline}</div>
+        <div style="font-size: 12.5px; color: var(--text-dim); line-height: 1.55; margin-top: 5px;">${st.plain}</div>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 10px;">
         <div style="background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; padding: 12px;">
           <div style="font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.8px; font-weight: 700;">Fitness</div>
           <div style="font-size: 22px; font-weight: 800; font-family: 'JetBrains Mono', monospace; margin-top: 2px;">${m.ctl}</div>
-          <div style="font-size: 10px; color: var(--text-mute);">42-day</div>
+          <div style="font-size: 10px; color: var(--text-mute);">your base</div>
         </div>
         <div style="background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; padding: 12px;">
-          <div style="font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.8px; font-weight: 700;">Fatigue</div>
+          <div style="font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.8px; font-weight: 700;">Tiredness</div>
           <div style="font-size: 22px; font-weight: 800; font-family: 'JetBrains Mono', monospace; margin-top: 2px;">${m.atl}</div>
-          <div style="font-size: 10px; color: var(--text-mute);">7-day</div>
+          <div style="font-size: 10px; color: var(--text-mute);">this past week</div>
         </div>
         <div style="background: var(--bg-3); border: 1px solid ${st.color}55; border-radius: 10px; padding: 12px;">
-          <div style="font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.8px; font-weight: 700;">Form</div>
+          <div style="font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.8px; font-weight: 700;">Freshness</div>
           <div style="font-size: 22px; font-weight: 800; font-family: 'JetBrains Mono', monospace; margin-top: 2px; color: ${st.color};">${m.tsb > 0 ? '+' : ''}${m.tsb}</div>
           <div style="font-size: 10px; color: ${st.color};">${st.label}</div>
         </div>
       </div>
-      <div style="font-size: 12px; color: var(--text-dim); line-height: 1.5;">${st.note}${m.acwr != null ? ` · <span style="color: ${acwrColor};">load ratio ${m.acwr.toFixed(2)}</span> (${acwrNote})` : ''}</div>
+      <div style="font-size: 11px; color: var(--text-mute); line-height: 1.5; margin-bottom: 10px;">
+        <strong style="color: var(--text-dim);">Fitness</strong> is the base you've built over weeks. <strong style="color: var(--text-dim);">Tiredness</strong> is how hard the last few days were. <strong style="color: var(--text-dim);">Freshness</strong> = fitness minus tiredness (positive = rested, negative = fatigued).
+      </div>
+      ${m.acwr != null ? `<div style="font-size: 12px; color: var(--text-dim); line-height: 1.5;">This week vs your recent average: <span style="color: ${acwrColor}; font-weight: 700;">${m.acwr.toFixed(2)}×</span> — ${acwrNote}.</div>` : ''}
       ${(() => {
         // "Data quality" line: shows how the sessions were scored, so users can
         // see when the number is built on solid data vs estimated. The more
@@ -12725,7 +12743,7 @@ function renderLoadFormCard() {
         if (mt.fallback > 0) bits.push(`<span style="color:var(--text-mute);">${mt.fallback} estimated from duration</span>`);
         return `<div style="font-size: 11px; color: var(--text-mute); margin-top: 8px; display:flex; flex-wrap:wrap; gap:6px 12px; line-height:1.5;"><span style="color: var(--text-dim);">Built from ${total} sessions:</span>${bits.map(b => `<span>${b}</span>`).join('')}</div>`;
       })()}
-      <div style="font-size: 10px; color: var(--text-mute); margin-top: 8px; line-height: 1.45;">An estimate from your training data (TrainingPeaks-style PMC). Read the trend and your form state more than the exact number, it is not on the same scale as Garmin or a power meter.${!m.lthrSet ? ' Set your run/bike LTHR in Settings to sharpen it.' : ''}${!m.ftpSet ? ' Set your Bike FTP in Settings for more accurate cycling load.' : ''}${m.lthrSet && m.ftpSet ? ' Syncing more HR + power data keeps it sharp.' : ''}</div>
+      <div style="font-size: 10px; color: var(--text-mute); margin-top: 8px; line-height: 1.45;">These are estimates from your logged training. Watch the trend and your freshness state more than the exact numbers, they are not on the same scale as Garmin.${!m.lthrSet ? ' Set your run/bike LTHR in Settings to sharpen it.' : ''}${!m.ftpSet ? ' Set your Bike FTP in Settings for more accurate cycling load.' : ''}${m.lthrSet && m.ftpSet ? ' Logging more HR + power keeps it sharp.' : ''}</div>
     </div>
   `;
 }
