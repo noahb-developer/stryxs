@@ -7775,8 +7775,21 @@ function closeNavMenu() {
 }
 
 function navigateAndCloseMenu(page) {
+  // Close the menu INSTANTLY (kill the fade) so the destination page — which now
+  // paints immediately from cache — is revealed at once. The 0.22s backdrop
+  // fade-out was the only remaining delay between tapping a menu item and seeing
+  // the page (it used to be hidden by the slow content load).
+  const panel = document.getElementById('navMenuPanel');
+  const backdrop = document.getElementById('navMenuBackdrop');
+  if (panel) panel.style.transition = 'none';
+  if (backdrop) backdrop.style.transition = 'none';
   closeNavMenu();
   navigate(page);
+  // Restore the fade for the NEXT time the menu opens.
+  requestAnimationFrame(() => {
+    if (panel) panel.style.transition = '';
+    if (backdrop) backdrop.style.transition = '';
+  });
 }
 
 // Avatar dropdown menu
