@@ -11493,47 +11493,64 @@ function renderAnalysis(a) {
 // Coach for a conversation. The workout is stashed in a registry keyed by a
 // generated id so it works regardless of whether the row has a _dbId yet.
 let _stryxsAnalyzeCounter = 0;
+const _wkAnalysisKey = (a) => (a && a._dbId) ? ('stryxs_wkanalysis_' + a._dbId) : null;
+function _getCachedAnalysis(a) {
+  const k = _wkAnalysisKey(a);
+  if (!k) return null;
+  try { return localStorage.getItem(k); } catch (_) { return null; }
+}
+function _analyzeButtonHTML(key) {
+  return `<button class="btn" style="width: 100%; padding: 12px; font-size: 14px; font-weight: 600; background: linear-gradient(135deg, rgba(0,229,160,0.16), rgba(80,130,255,0.10)); border: 1px solid rgba(0,229,160,0.35); color: var(--accent); display: flex; align-items: center; justify-content: center; gap: 8px;" onclick="analyzeWorkoutWithCoach('${key}', this)">🔍 Analyze this workout with Coach</button>`;
+}
+function _coachAnalysisBoxHTML(commentary, key) {
+  return `
+    <div class="coach-box" style="margin-top: 14px;">
+      <div class="coach-title">💬 Coach's analysis</div>
+      <div class="coach-text">${formatMarkdown(commentary)}</div>
+      <div style="margin-top: 12px; display: flex; gap: 18px; align-items: center; flex-wrap: wrap;">
+        <a style="color: var(--accent); cursor: pointer; font-size: 13px; font-weight: 600;" onclick="navigate('coach')">Ask Coach a follow-up →</a>
+        <a style="color: var(--text-mute); cursor: pointer; font-size: 12px;" onclick="analyzeWorkoutWithCoach('${key}', this, true)">↻ Re-analyze</a>
+      </div>
+    </div>`;
+}
 function renderAnalyzeBtn(a) {
   if (!a || !a.sport) return '';
   const key = 'awk_' + (++_stryxsAnalyzeCounter);
   (window._stryxsAnalyzeWorkouts = window._stryxsAnalyzeWorkouts || {})[key] = a;
+  // If this workout was already analyzed (cached on this device), show the saved
+  // analysis instead of the button so returning to it doesn't re-spend tokens.
+  const cached = _getCachedAnalysis(a);
   return `
     <div class="analyze-coach-slot" style="margin-top: 14px;">
-      <button class="btn" style="width: 100%; padding: 12px; font-size: 14px; font-weight: 600; background: linear-gradient(135deg, rgba(0,229,160,0.16), rgba(80,130,255,0.10)); border: 1px solid rgba(0,229,160,0.35); color: var(--accent); display: flex; align-items: center; justify-content: center; gap: 8px;" onclick="analyzeWorkoutWithCoach('${key}', this)">
-        🔍 Analyze this workout with Coach
-      </button>
+      ${cached ? _coachAnalysisBoxHTML(cached, key) : _analyzeButtonHTML(key)}
     </div>`;
 }
-async function analyzeWorkoutWithCoach(key, btn) {
+async function analyzeWorkoutWithCoach(key, el, force) {
   const a = (window._stryxsAnalyzeWorkouts || {})[key];
   if (!a) return;
-  const slot = btn ? btn.closest('.analyze-coach-slot') : null;
-  if (btn) {
-    btn.disabled = true;
-    btn.style.opacity = '0.7';
-    btn.innerHTML = '<span class="spinner" style="width:16px;height:16px;border-width:2px;"></span> Coach is analyzing...';
+  const slot = el ? el.closest('.analyze-coach-slot') : document.querySelector('.analyze-coach-slot');
+  if (!slot) return;
+  // If we already have a saved analysis and this isn't an explicit re-analyze, show it.
+  if (!force) {
+    const cached = _getCachedAnalysis(a);
+    if (cached) { slot.innerHTML = _coachAnalysisBoxHTML(cached, key); return; }
   }
+  slot.innerHTML = `<div class="coach-box" style="margin-top: 14px;"><div class="coach-title">💬 Coach's analysis</div><div class="coach-text" style="color: var(--text-dim);"><span class="spinner" style="width:16px;height:16px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:6px;"></span>Coach is analyzing...</div></div>`;
   try {
     const { data: intake } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).single();
     const commentary = await callCoach('workout_commentary', { workout: a, intake, activeInsights: [] });
-    // Persist as a coach message so it shows in the chat history too.
+    // Persist as a coach message so it also shows in the chat history.
     try {
       await sb.from('coach_messages').insert({ user_id: state.user.id, role: 'coach', content: commentary, context_type: 'workout_commentary' });
     } catch (_) {}
-    const html = `
-      <div class="coach-box" style="margin-top: 14px;">
-        <div class="coach-title">💬 Coach's analysis</div>
-        <div class="coach-text">${formatMarkdown(commentary)}</div>
-        <div style="margin-top: 12px;"><a style="color: var(--accent); cursor: pointer; font-size: 13px; font-weight: 600;" onclick="navigate('coach')">Ask Coach a follow-up →</a></div>
-      </div>`;
-    if (slot) slot.innerHTML = html;
+    // Persist on this device so returning to the workout shows the saved analysis
+    // (no re-spend). Keyed by the workout's DB id.
+    const cacheK = _wkAnalysisKey(a);
+    if (cacheK) { try { localStorage.setItem(cacheK, commentary); } catch (_) {} }
+    slot.innerHTML = _coachAnalysisBoxHTML(commentary, key);
   } catch (e) {
     console.error('[Stryxs] workout analysis failed:', e);
-    if (btn) {
-      btn.disabled = false;
-      btn.style.opacity = '1';
-      btn.innerHTML = '🔍 Analyze this workout with Coach';
-    }
+    slot.innerHTML = _analyzeButtonHTML(key);
     toast('Coach is busy right now, try again in a moment.', 4000);
   }
 }
