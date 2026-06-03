@@ -11123,7 +11123,7 @@ function renderWorkoutMeta(a) {
     bits.push(`<span style="padding: 4px 10px; background: rgba(0, 229, 160, 0.1); border-radius: 6px; font-size: 11px; color: var(--accent); font-weight: 600;">🏆 ${a.pr_count} PR${a.pr_count > 1 ? 's' : ''}</span>`);
   }
   if (typeof a.perceived_exertion === 'number' && a.perceived_exertion > 0) {
-    bits.push(`<span style="padding: 4px 10px; background: rgba(80,130,255,0.08); border-radius: 6px; font-size: 11px; color: var(--text-dim);">RPE ${a.perceived_exertion}/10</span>`);
+    bits.push(`<span style="padding: 4px 10px; background: rgba(80,130,255,0.08); border-radius: 6px; font-size: 11px; color: var(--text-dim);">Effort ${a.perceived_exertion}/10</span>`);
   }
   if (typeof a.suffer_score === 'number' && a.suffer_score > 0) {
     bits.push(`<span style="padding: 4px 10px; background: rgba(252, 76, 2, 0.08); border-radius: 6px; font-size: 11px; color: var(--text-dim);">Suffer ${a.suffer_score}</span>`);
@@ -11160,8 +11160,23 @@ function renderWorkoutMeta(a) {
 // the user's subjective effort signal (separate from HR/pace data)
 // feeds into Coach's advice and per-workout commentary.
 
-const FELT_KEYS = ['easy', 'hard', 'strong', 'flat', 'sore', 'sick'];
-const FELT_EMOJI = { easy: '😌', hard: '😤', strong: '💪', flat: '😐', sore: '🦵', sick: '🤒' };
+// "How did your body feel" options, in a sensible progression (weak → sick). The
+// `key` is the EXISTING workout_feedback.felt_* column so NO migration is needed:
+// Weak→felt_flat, Normal→felt_easy; strong/sore/sick map directly. (felt_hard is
+// no longer offered; that column just goes unused.)
+const FELT_OPTIONS = [
+  { key: 'flat', label: 'Weak', emoji: '🥱' },
+  { key: 'easy', label: 'Normal', emoji: '😌' },
+  { key: 'strong', label: 'Strong', emoji: '💪' },
+  { key: 'sore', label: 'Sore', emoji: '🦵' },
+  { key: 'sick', label: 'Sick', emoji: '🤒' },
+];
+const FELT_ALL_COLS = ['easy', 'hard', 'strong', 'flat', 'sore', 'sick']; // every DB column
+const _feltLabel = (key) => (FELT_OPTIONS.find(o => o.key === key) || {}).label || key;
+const _feltEmoji = (key) => (FELT_OPTIONS.find(o => o.key === key) || {}).emoji || '';
+function _feedbackHasData(fb) {
+  return !!(fb && (fb.rpe || fb.notes || FELT_ALL_COLS.some(k => fb['felt_' + k])));
+}
 
 function renderWorkoutFeedbackForm(workoutDbId) {
   if (!workoutDbId) return '';
@@ -11200,6 +11215,8 @@ async function openWorkoutFeedbackForm(triggerBtn) {
     console.warn('[Stryxs] Could not fetch existing feedback:', err);
   }
 
+  // Stash the saved row so Cancel can restore the summary instead of wiping it.
+  wrap._savedFeedback = _feedbackHasData(existing) ? existing : null;
   body.innerHTML = buildWorkoutFeedbackFormHtml(workoutId, existing);
   body.style.display = '';
   triggerBtn.style.display = 'none';
@@ -11210,21 +11227,22 @@ function buildWorkoutFeedbackFormHtml(workoutId, existing) {
   const rpeButtons = Array.from({ length: 10 }, (_, i) => i + 1).map(n => {
     const active = rpe === n;
     return `
-      <button type="button" data-rpe="${n}" onclick="selectFeedbackRpe(this, ${n})" style="flex: 1 1 0; min-width: 0; padding: 9px 0; background: ${active ? 'var(--accent)' : 'rgba(255,255,255,0.04)'}; border: 1px solid ${active ? 'var(--accent)' : 'var(--border)'}; border-radius: 6px; color: ${active ? 'var(--bg)' : 'var(--text-dim)'}; font-size: 12px; font-weight: 700; cursor: pointer;">${n}</button>
+      <button type="button" data-rpe="${n}" data-sel="${active ? '1' : '0'}" onclick="selectFeedbackRpe(this)" style="flex: 1 1 0; min-width: 0; padding: 9px 0; background: ${active ? 'var(--accent)' : 'rgba(255,255,255,0.04)'}; border: 1px solid ${active ? 'var(--accent)' : 'var(--border)'}; border-radius: 6px; color: ${active ? 'var(--bg)' : 'var(--text-dim)'}; font-size: 12px; font-weight: 700; cursor: pointer;">${n}</button>
     `;
   }).join('');
 
-  const chipFor = (key, label) => {
+  const chipFor = ({ key, label, emoji }) => {
     const on = !!existing?.['felt_' + key];
     return `
-      <button type="button" data-felt="${key}" data-on="${on ? '1' : '0'}" onclick="toggleFeedbackFeltChip(this)" style="padding: 7px 13px; background: ${on ? 'rgba(0, 229, 160, 0.18)' : 'rgba(255,255,255,0.04)'}; border: 1px solid ${on ? 'var(--accent)' : 'var(--border)'}; border-radius: 999px; color: ${on ? 'var(--accent)' : 'var(--text-dim)'}; font-size: 12px; font-weight: 600; cursor: pointer; line-height: 1;">${FELT_EMOJI[key]} ${label}</button>
+      <button type="button" data-felt="${key}" data-on="${on ? '1' : '0'}" onclick="toggleFeedbackFeltChip(this)" style="padding: 7px 13px; background: ${on ? 'rgba(0, 229, 160, 0.18)' : 'rgba(255,255,255,0.04)'}; border: 1px solid ${on ? 'var(--accent)' : 'var(--border)'}; border-radius: 999px; color: ${on ? 'var(--accent)' : 'var(--text-dim)'}; font-size: 12px; font-weight: 600; cursor: pointer; line-height: 1;">${emoji} ${label}</button>
     `;
   };
+  const hasSaved = _feedbackHasData(existing);
 
   return `
     <div data-workout-id="${workoutId}">
       <div style="margin-bottom: 14px;">
-        <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px;">Effort (RPE)</div>
+        <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px;">How hard did it feel?</div>
         <div style="display: flex; gap: 3px;">${rpeButtons}</div>
         <div style="font-size: 10px; color: var(--text-mute); display: flex; justify-content: space-between; margin-top: 4px;">
           <span>1 = very easy</span><span>10 = max effort</span>
@@ -11233,33 +11251,31 @@ function buildWorkoutFeedbackFormHtml(workoutId, existing) {
       <div style="margin-bottom: 14px;">
         <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 8px;">How did your body feel? <span style="text-transform: none; letter-spacing: 0; color: var(--text-mute); font-weight: 400;">(tap any)</span></div>
         <div style="display: flex; flex-wrap: wrap; gap: 6px;">
-          ${chipFor('easy', 'Easy')}
-          ${chipFor('hard', 'Hard')}
-          ${chipFor('strong', 'Strong')}
-          ${chipFor('flat', 'Flat')}
-          ${chipFor('sore', 'Sore')}
-          ${chipFor('sick', 'Sick')}
+          ${FELT_OPTIONS.map(chipFor).join('')}
         </div>
       </div>
       <div style="margin-bottom: 14px;">
         <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px;">Notes <span style="text-transform: none; letter-spacing: 0; color: var(--text-mute); font-weight: 400;">(optional)</span></div>
         <textarea data-notes placeholder="Anything to remember about this one?" rows="2" style="width: 100%; box-sizing: border-box; padding: 9px 11px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 13px; resize: vertical; font-family: inherit;">${escapeHtml(existing?.notes || '')}</textarea>
       </div>
-      <div style="display: flex; gap: 8px;">
+      <div style="display: flex; gap: 8px; align-items: center;">
         <button class="btn" onclick="saveWorkoutFeedback(this)" style="flex: 1; font-size: 13px; padding: 10px 14px;">Save</button>
         <button class="btn ghost" onclick="cancelWorkoutFeedback(this)" style="font-size: 13px; padding: 10px 14px;">Cancel</button>
+        ${hasSaved ? `<button class="btn ghost" onclick="deleteWorkoutFeedback(this)" title="Remove this feedback" style="font-size: 13px; padding: 10px 14px; color: var(--danger); border-color: rgba(239,68,68,0.4);">Delete</button>` : ''}
       </div>
     </div>
   `;
 }
 
-function selectFeedbackRpe(btn, n) {
+function selectFeedbackRpe(btn) {
   const row = btn.parentElement;
   row.querySelectorAll('[data-rpe]').forEach(b => {
+    b.dataset.sel = '0';
     b.style.background = 'rgba(255,255,255,0.04)';
     b.style.borderColor = 'var(--border)';
     b.style.color = 'var(--text-dim)';
   });
+  btn.dataset.sel = '1';
   btn.style.background = 'var(--accent)';
   btn.style.borderColor = 'var(--accent)';
   btn.style.color = 'var(--bg)';
@@ -11286,20 +11302,16 @@ async function saveWorkoutFeedback(btn) {
   const workoutId = form?.dataset.workoutId;
   if (!workoutId) return;
 
-  // Read RPE (selected button has accent border)
-  let rpe = null;
-  form.querySelectorAll('[data-rpe]').forEach(b => {
-    if (b.style.background.indexOf('229') !== -1 || b.style.borderColor.indexOf('229') !== -1) {
-      rpe = parseInt(b.dataset.rpe, 10);
-    }
-  });
+  // RPE: read the selected button via its data-sel flag. (The old code matched
+  // inline-style strings for '229', but the style is the literal 'var(--accent)',
+  // so it never matched — that's why RPE wasn't persisting.)
+  const selRpeBtn = form.querySelector('[data-rpe][data-sel="1"]');
+  const rpe = selRpeBtn ? parseInt(selRpeBtn.dataset.rpe, 10) : null;
 
-  // Read felt chips
+  // Felt chips: initialize every column false, then set whichever chips are present + on.
   const felts = {};
-  FELT_KEYS.forEach(k => {
-    const chip = form.querySelector(`[data-felt="${k}"]`);
-    felts['felt_' + k] = chip?.dataset.on === '1';
-  });
+  FELT_ALL_COLS.forEach(k => { felts['felt_' + k] = false; });
+  form.querySelectorAll('[data-felt]').forEach(chip => { felts['felt_' + chip.dataset.felt] = chip.dataset.on === '1'; });
 
   const notes = (form.querySelector('[data-notes]')?.value || '').trim() || null;
 
@@ -11327,11 +11339,13 @@ async function saveWorkoutFeedback(btn) {
     }
 
     const wrap = btn.closest('.workout-feedback');
+    const saved = { rpe, notes, ...felts };
+    if (wrap) wrap._savedFeedback = _feedbackHasData(saved) ? saved : null;
     const body = wrap.querySelector('.feedback-form-body');
-    body.innerHTML = renderFeedbackSummary(workoutId, { rpe, notes, ...felts });
+    body.innerHTML = renderFeedbackSummary(workoutId, saved);
 
     toast('Feedback saved');
-    try { trackEvent('workout_feedback_saved', { rpe, has_notes: !!notes, felts_set: FELT_KEYS.filter(k => felts['felt_' + k]).length }); } catch (_) {}
+    try { trackEvent('workout_feedback_saved', { rpe, has_notes: !!notes, felts_set: FELT_ALL_COLS.filter(k => felts['felt_' + k]).length }); } catch (_) {}
   } catch (err) {
     console.error('[Stryxs] Save feedback failed:', err);
     toast('Could not save feedback. Try again.');
@@ -11341,10 +11355,10 @@ async function saveWorkoutFeedback(btn) {
 }
 
 function renderFeedbackSummary(workoutId, fb) {
-  const feltLabels = FELT_KEYS.filter(k => fb['felt_' + k]);
+  const feltCols = FELT_ALL_COLS.filter(k => fb['felt_' + k]);
   return `
     <div data-workout-id="${workoutId}" style="font-size: 13px; color: var(--text-dim); line-height: 1.55;">
-      <strong style="color: var(--text);">Logged${fb.rpe ? ': RPE ' + fb.rpe + '/10' : ''}</strong>${feltLabels.length ? ' · ' + feltLabels.map(k => FELT_EMOJI[k] + ' ' + k).join(', ') : ''}
+      <strong style="color: var(--text);">Logged${fb.rpe ? ': Effort ' + fb.rpe + '/10' : ''}</strong>${feltCols.length ? ' · ' + feltCols.map(k => _feltEmoji(k) + ' ' + _feltLabel(k)).join(', ') : ''}
       ${fb.notes ? `<div style="margin-top: 6px; padding: 8px 10px; background: rgba(255,255,255,0.03); border-radius: 6px; font-size: 12px; font-style: italic; color: var(--text-dim);">"${escapeHtml(fb.notes)}"</div>` : ''}
       <button onclick="reopenWorkoutFeedbackForm(this)" style="background: none; border: 0; color: var(--text-mute); font-size: 11px; cursor: pointer; padding: 6px 0 0; text-decoration: underline;">Edit</button>
     </div>
@@ -11365,6 +11379,7 @@ async function reopenWorkoutFeedbackForm(btn) {
     .eq('workout_id', workoutId)
     .maybeSingle();
 
+  wrap._savedFeedback = _feedbackHasData(existing) ? existing : null;
   body.innerHTML = buildWorkoutFeedbackFormHtml(workoutId, existing);
 }
 
@@ -11372,6 +11387,14 @@ function cancelWorkoutFeedback(btn) {
   const wrap = btn.closest('.workout-feedback');
   if (!wrap) return;
   const body = wrap.querySelector('.feedback-form-body');
+  const workoutId = wrap.dataset.workoutId;
+  // If something was already saved, restore its SUMMARY (don't wipe it). Only
+  // collapse back to the "How did that feel?" trigger when nothing was ever saved.
+  if (wrap._savedFeedback) {
+    body.innerHTML = renderFeedbackSummary(workoutId, wrap._savedFeedback);
+    body.style.display = '';
+    return;
+  }
   const trigger = wrap.querySelector('.feedback-trigger');
   body.style.display = 'none';
   body.innerHTML = '';
@@ -11379,6 +11402,35 @@ function cancelWorkoutFeedback(btn) {
     trigger.style.display = '';
     trigger.disabled = false;
     trigger.style.opacity = '';
+  }
+}
+
+// Explicit removal of saved feedback (the Cancel button no longer deletes).
+async function deleteWorkoutFeedback(btn) {
+  const wrap = btn.closest('.workout-feedback');
+  if (!wrap || !state.user) return;
+  const workoutId = wrap.dataset.workoutId;
+  if (!workoutId) return;
+  btn.disabled = true;
+  btn.textContent = 'Deleting...';
+  try {
+    const { error } = await sb.from('workout_feedback')
+      .delete()
+      .eq('user_id', state.user.id)
+      .eq('workout_id', workoutId);
+    if (error) throw error;
+    wrap._savedFeedback = null;
+    const body = wrap.querySelector('.feedback-form-body');
+    const trigger = wrap.querySelector('.feedback-trigger');
+    body.style.display = 'none';
+    body.innerHTML = '';
+    if (trigger) { trigger.style.display = ''; trigger.disabled = false; trigger.style.opacity = ''; }
+    toast('Feedback removed');
+  } catch (err) {
+    console.error('[Stryxs] Delete feedback failed:', err);
+    toast('Could not remove feedback. Try again.');
+    btn.disabled = false;
+    btn.textContent = 'Delete';
   }
 }
 
