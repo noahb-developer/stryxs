@@ -16696,13 +16696,31 @@ async function renderCoachChat(el, intakeMaybe) {
   // 1) INSTANT paint from cached messages (no spinner, no network wait) — this is
   //    what makes REOPENING Coach feel immediate regardless of DB/network latency.
   //    First-ever open (no cache) shows a brief spinner.
+  // Render ONLY the most recent ~14 messages first (what fills the screen), then
+  // add the older ones above off-screen on the next frame. Laying out all 50 tall
+  // messages forced a ~100ms+ synchronous layout (the scroll-to-bottom reads
+  // scrollHeight) BEFORE the page could paint — that was the "click takes a long
+  // time then pops" delay. Tail-first makes the first layout cheap = instant pop.
+  const INITIAL_PAINT = 14;
+  const lazyFillHead = (headMsgs) => {
+    if (!headMsgs || !headMsgs.length) return;
+    requestAnimationFrame(() => {
+      const c = document.getElementById('chatMessages');
+      if (!c) return;
+      c.insertAdjacentHTML('afterbegin', msgsToHTML(headMsgs));
+      c.scrollTop = c.scrollHeight; // we're at the bottom; keep it there after prepend
+    });
+  };
   let cached = null;
   if (cacheKey) { try { cached = JSON.parse(localStorage.getItem(cacheKey) || 'null'); } catch (_) {} }
   const haveCache = Array.isArray(cached) && cached.length > 0;
-  el.innerHTML = haveCache
-    ? shell(msgsToHTML(cached), optimisticGate)
-    : shell('<div style="display:flex;align-items:center;justify-content:center;min-height:160px;flex:1;"><div class="spinner"></div></div>', optimisticGate);
-  if (haveCache) anchorBottom();
+  if (haveCache) {
+    el.innerHTML = shell(msgsToHTML(cached.slice(-INITIAL_PAINT)), optimisticGate);
+    anchorBottom();
+    lazyFillHead(cached.slice(0, Math.max(0, cached.length - INITIAL_PAINT)));
+  } else {
+    el.innerHTML = shell('<div style="display:flex;align-items:center;justify-content:center;min-height:160px;flex:1;"><div class="spinner"></div></div>', optimisticGate);
+  }
 
   // 2) Refresh in the background: intake (if unknown) + recent messages + gate, in parallel.
   const COACH_RENDER_LIMIT = 50;
@@ -16742,8 +16760,15 @@ async function renderCoachChat(el, intakeMaybe) {
   const cachedIds = haveCache ? cached.map(m => m.id).join(',') : '';
   const freshIds = fresh.map(m => m.id).join(',');
   if (!haveCache || freshIds !== cachedIds) {
-    chatEl.innerHTML = fresh.length ? msgsToHTML(fresh) : fallbackHTML(intake?.goal_event);
-    anchorBottom();
+    if (!fresh.length) {
+      chatEl.innerHTML = fallbackHTML(intake?.goal_event);
+      anchorBottom();
+    } else {
+      // Same tail-first trick for the background refresh re-render.
+      chatEl.innerHTML = msgsToHTML(fresh.slice(-INITIAL_PAINT));
+      anchorBottom();
+      lazyFillHead(fresh.slice(0, Math.max(0, fresh.length - INITIAL_PAINT)));
+    }
   }
   // Patch the composer with the real gate (the instant paint used an optimistic one).
   const inputRow = document.getElementById('coachInputRow');
