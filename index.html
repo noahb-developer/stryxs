@@ -2586,11 +2586,9 @@ body.coach-chat-active #feedbackFab { display: none !important; }
 body.coach-chat-active .nav {
   position: fixed; top: 0; left: 0; right: 0; z-index: 120;
   padding-top: calc(12px + var(--safe-top));
-  /* FULLY transparent in chat (like Claude's mobile chat): no bar, no frost, no
-     border — the logo + 3 buttons float directly over the messages, which show
-     through completely behind them. Buttons keep their own shape/contrast so they
-     stay tappable + visible. */
-  background: transparent !important;
+  /* TEMP DIAGNOSTIC: solid opaque nav (was transparent) to test if the
+     transparent-nav-over-scrolling-content compositing is the ~3s paint cost. */
+  background: var(--bg) !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
   border-bottom: none !important;
@@ -16800,18 +16798,13 @@ if (typeof window !== 'undefined' && !window._coachNavResizeBound) {
 }
 
 async function renderCoachChat(el, intakeMaybe) {
-  // TEMP DIAGNOSTIC: skip the full-screen coach-chat-active treatment to test if
-  // that CSS is the ~3s paint. If the timer's html->paint drops, it's this CSS.
-  const _COACH_PLAIN_TEST = true;
   // Full-screen Claude-style chat: lock the page to the viewport + float the composer.
-  if (!_COACH_PLAIN_TEST) {
   document.body.classList.add('coach-chat-active');
   document.documentElement.classList.add('coach-html-lock');
   setupCoachKeyboardInset();
   // Measure the fixed nav + glue the chat to the visual viewport once styles have
   // applied (the nav gains safe-area padding under .coach-chat-active).
   requestAnimationFrame(() => { measureCoachNav(); trackCoachViewport(); requestAnimationFrame(() => { measureCoachNav(); trackCoachViewport(); }); });
-  }
 
   const optimisticGate = { allowed: true, remaining: Infinity, isFreeTrial: false };
   const cacheKey = state.user ? 'stryxs_coach_cache_' + state.user.id : null;
