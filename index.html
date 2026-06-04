@@ -3023,10 +3023,15 @@ body.coach-chat-active .chat-msg.user .msg-bubble strong { color: var(--text); }
   border-top-color: var(--accent);
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
-  /* Promote to its own compositor layer so the rotation is GPU-composited on a
-     stable pixel grid. Without this the spinner samples at sub-pixel positions
-     each frame (especially when flex-centered next to text) and appears to
-     "wobble"/orbit instead of spinning perfectly in place. */
+  /* The REAL wobble cause: .loading is display:flex with a gap and the spinner
+     sits next to text ("Coach is analyzing…"). Without flex-shrink:0 the spinner
+     gets horizontally compressed on narrow screens into an ELLIPSE, and a
+     rotating ellipse looks like "a circle but not a perfect circle". Locking
+     both axes keeps it a true 20x20 circle. The layer/origin hints below keep
+     the rotation crisp on a stable pixel grid. */
+  flex-shrink: 0;
+  flex-grow: 0;
+  box-sizing: border-box;
   will-change: transform;
   transform-origin: 50% 50%;
   -webkit-backface-visibility: hidden;
@@ -4901,7 +4906,7 @@ body.on-auth .container {
         <div class="connect-name">Strava</div>
         <div class="connect-desc">Auto-sync every workout from any watch via Strava.</div>
       </div>
-      <button class="btn" style="background: #FC4C02; border-color: #FC4C02; color: white;" onclick="navigate('settings'); setTimeout(() => toggleSettingsSection('connections'), 100);">Connect</button>
+      <button class="btn" style="background: #FC4C02; border-color: #FC4C02; color: white;" onclick="openSettingsSection('connections');">Connect</button>
     </div>
   </div>
   <div id="sourceUpload" style="display: none;"></div>
@@ -8763,7 +8768,7 @@ async function renderAutoSyncPanel() {
             <div style="font-size: 12px; color: var(--text-dim); line-height: 1.45;">Auto-sync every workout. Works with any watch via Strava.</div>
           </div>
         </div>
-        <button class="btn" style="background: #FC4C02; border-color: #FC4C02; color: white; font-size: 13px; padding: 10px 14px; width: 100%; justify-content: center; margin-bottom: 8px;" onclick="navigate('settings'); setTimeout(() => toggleSettingsSection('connections'), 100);">Connect Strava</button>
+        <button class="btn" style="background: #FC4C02; border-color: #FC4C02; color: white; font-size: 13px; padding: 10px 14px; width: 100%; justify-content: center; margin-bottom: 8px;" onclick="openSettingsSection('connections');">Connect Strava</button>
         <div style="text-align: center;">
           <a style="color: var(--text-dim); cursor: pointer; font-size: 12px;" onclick="toggleAnalyzeSection('uploadCsv')">Or upload CSV files manually →</a>
         </div>
@@ -8798,7 +8803,7 @@ async function updateStravaConnectCard() {
           </div>
           <div class="connect-desc">Connected as ${fullName}. New workouts auto-sync within seconds.</div>
         </div>
-        <button class="btn ghost" style="font-size: 13px; padding: 8px 14px;" onclick="navigate('settings'); setTimeout(() => toggleSettingsSection('connections'), 100);">Manage</button>
+        <button class="btn ghost" style="font-size: 13px; padding: 8px 14px;" onclick="openSettingsSection('connections');">Manage</button>
       `;
     }
     // If not connected, leave the original card as-is (it already shows Connect button)
@@ -12207,7 +12212,7 @@ async function renderDashboard() {
           <div class="empty-title">${t('dash.empty.title')}</div>
           <div class="empty-desc" style="margin-bottom: 18px;">${t('dash.empty.subtitle')}</div>
           <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
-            <button class="btn" style="background: #FC4C02; border-color: #FC4C02; color: white;" onclick="navigate('settings'); setTimeout(() => toggleSettingsSection('connections'), 100);">${t('dash.empty.cta_strava')}</button>
+            <button class="btn" style="background: #FC4C02; border-color: #FC4C02; color: white;" onclick="openSettingsSection('connections');">${t('dash.empty.cta_strava')}</button>
             <button class="btn ghost" onclick="navigate('upload')">${t('dash.empty.cta_manual')}</button>
             <button class="btn ghost" onclick="navigate('upload')">${t('dash.empty.cta_upload')}</button>
           </div>
@@ -13625,7 +13630,7 @@ function renderTrends() {
           <div class="empty-title">No workouts yet</div>
           <div class="empty-desc" style="margin-bottom: 18px;">Trends show patterns across your training, drift, intensity distribution, volume changes. Connect Strava or upload a workout to start.</div>
           <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
-            <button class="btn" style="background: #FC4C02; border-color: #FC4C02; color: white;" onclick="navigate('settings'); setTimeout(() => toggleSettingsSection('connections'), 100);">Connect Strava</button>
+            <button class="btn" style="background: #FC4C02; border-color: #FC4C02; color: white;" onclick="openSettingsSection('connections');">Connect Strava</button>
             <button class="btn ghost" onclick="navigate('upload')">Upload a workout</button>
           </div>
         </div>`;
@@ -23666,9 +23671,17 @@ function openSettingsSection(id) {
       if (id === 'connections' && typeof renderConnections === 'function') renderConnections();
     } catch (_) {}
     setTimeout(() => {
-      try { section.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
-      catch (_) { section.scrollIntoView(); }
-    }, 80);
+      try {
+        // scrollIntoView({block:'start'}) tucks the header under the fixed ~56px
+        // nav (looks like you landed partway down the card). Scroll to the
+        // computed top minus a nav offset so the section starts cleanly below it.
+        const NAV_OFFSET = 72;
+        const absoluteTop = section.getBoundingClientRect().top + window.scrollY;
+        window.scrollTo({ top: Math.max(0, absoluteTop - NAV_OFFSET), behavior: 'smooth' });
+      } catch (_) {
+        try { section.scrollIntoView(); } catch (__) {}
+      }
+    }, 120);
   };
   setTimeout(() => tryOpen(0), 120);
 }
