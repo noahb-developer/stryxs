@@ -12880,6 +12880,123 @@ function _aerobicEfficiency(loDays, hiDays) {
   }
   return n >= 2 ? sumEff / n : null;
 }
+
+// Average session SPEED (km/h) for a sport across a day-window [loDays, hiDays),
+// from distance ÷ duration ONLY — no heart rate required. This is the basis of
+// the no-HR fitness signal: many athletes' Strava data has no usable HR, but
+// distance + time are always present. Returns { speed, n }.
+function _avgSpeedWindow(sport, loDays, hiDays) {
+  const now = Date.now();
+  let sum = 0, n = 0;
+  for (const w of (state.workouts || [])) {
+    const sp = (typeof normalizeSport === 'function') ? normalizeSport(w.sport) : (w.sport || '');
+    if (sp !== sport) continue;
+    if (w.activity_classification === 'daily_activity') continue;
+    const dist = parseFloat(w.distance);
+    const x = parseFloat(w.duration);
+    if (!(dist > 0) || isNaN(x) || x <= 0) continue;
+    const durH = (x > 600 ? x / 60 : x) / 60; // duration may be sec (>600) or min
+    if (durH <= 0) continue;
+    const dStr = (w.date || w.created_at || '').split('T')[0]; if (!dStr) continue;
+    const ago = (now - new Date(dStr + 'T12:00:00').getTime()) / 86400000;
+    if (ago < loDays || ago >= hiDays) continue;
+    const kmh = dist / durH;
+    if (kmh < 2 || kmh > 80) continue; // drop GPS junk / paused-timer artifacts
+    sum += kmh; n++;
+  }
+  return { speed: n ? sum / n : null, n };
+}
+
+// Format a speed (km/h) as the way an athlete reads that sport: bike → km/h,
+// run → min/km, swim → min/100m.
+function _fmtSpeedForSport(kmh, mode) {
+  if (!kmh || kmh <= 0) return '—';
+  if (mode === 'speed') return kmh.toFixed(1) + ' km/h';
+  if (mode === 'pace100') {
+    const sec = 360 / kmh; // seconds per 100m
+    const m = Math.floor(sec / 60), s = Math.round(sec % 60);
+    return `${m}:${String(s).padStart(2, '0')} /100m`;
+  }
+  // pace per km
+  const sec = 3600 / kmh;
+  const m = Math.floor(sec / 60), s = Math.round(sec % 60);
+  return `${m}:${String(s).padStart(2, '0')} /km`;
+}
+
+// "Pace & speed trend" Stats card — a fitness read that needs NO heart rate.
+// Compares the last 4 weeks vs the prior 4 weeks per sport (avg session speed),
+// so the Stats page stays useful when HR is missing. Honest by design: it's an
+// average across all efforts (we can't isolate easy vs hard without HR), so it's
+// framed as a rough trend. Returns '' (card hidden) when there isn't enough data.
+function renderPaceSpeedTrendCard() {
+  const W = 28;
+  const sports = [
+    { key: 'run',  icon: '🏃', label: 'Run',  mode: 'pace' },
+    { key: 'bike', icon: '🚴', label: 'Bike', mode: 'speed' },
+    { key: 'swim', icon: '🏊', label: 'Swim', mode: 'pace100' },
+  ];
+  const rows = [];
+  for (const s of sports) {
+    const recent = _avgSpeedWindow(s.key, 0, W);
+    if (!recent.speed || recent.n < 2) continue; // need a current read to show anything
+    const prior = _avgSpeedWindow(s.key, W, W * 2);
+    rows.push({ ...s, recent, prior });
+  }
+  if (rows.length === 0) return '';
+
+  const rowHtml = rows.map(r => {
+    const cur = _fmtSpeedForSport(r.recent.speed, r.mode);
+    const hasPrior = r.prior.speed && r.prior.n >= 2;
+    let trend = '';
+    if (hasPrior) {
+      const deltaPct = ((r.recent.speed - r.prior.speed) / r.prior.speed) * 100;
+      const improving = deltaPct > 1.5, declining = deltaPct < -1.5;
+      const color = improving ? 'var(--accent)' : declining ? '#fbbf24' : 'var(--text-dim)';
+      const arrow = improving ? '↑' : declining ? '↓' : '→';
+      const word = improving ? 'faster' : declining ? 'slower' : 'steady';
+      const prev = _fmtSpeedForSport(r.prior.speed, r.mode);
+      // tiny two-bar viz (prior vs recent), height proportional to speed
+      const maxV = Math.max(r.recent.speed, r.prior.speed) || 1;
+      const h1 = Math.max(8, Math.round((r.prior.speed / maxV) * 26));
+      const h2 = Math.max(8, Math.round((r.recent.speed / maxV) * 26));
+      trend = `
+        <div style="display: flex; align-items: flex-end; gap: 4px; height: 28px;" title="Prior 4 wks vs last 4 wks">
+          <div style="width: 8px; height: ${h1}px; background: var(--border-light); border-radius: 2px;"></div>
+          <div style="width: 8px; height: ${h2}px; background: ${color}; border-radius: 2px;"></div>
+        </div>
+        <div style="text-align: right; min-width: 86px;">
+          <div style="font-size: 12px; font-weight: 700; color: ${color};">${arrow} ${Math.abs(deltaPct).toFixed(0)}% ${word}</div>
+          <div style="font-size: 10px; color: var(--text-mute); font-family: 'JetBrains Mono', monospace;">${prev} → ${cur.split(' ')[0]}</div>
+        </div>`;
+    } else {
+      trend = `<div style="text-align: right;"><div style="font-size: 11px; color: var(--text-mute);">building baseline</div></div>`;
+    }
+    return `
+      <div style="display: flex; align-items: center; gap: 12px; padding: 10px 0; ${r === rows[rows.length - 1] ? '' : 'border-bottom: 1px solid var(--border);'}">
+        <div style="display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0;">
+          <span style="font-size: 16px;">${r.icon}</span>
+          <div style="min-width: 0;">
+            <div style="font-size: 13px; font-weight: 600; color: var(--text);">${r.label}</div>
+            <div style="font-size: 11px; color: var(--text-dim); font-family: 'JetBrains Mono', monospace;">${cur}</div>
+          </div>
+        </div>
+        ${trend}
+      </div>`;
+  }).join('');
+
+  return `
+    <div class="panel" style="padding: 18px; margin-bottom: 14px;">
+      <div class="panel-header" style="margin-bottom: 6px;">
+        <div style="flex: 1; min-width: 0;">
+          <div class="panel-title" style="font-size: 14px;">Pace &amp; speed trend</div>
+          <div class="panel-sub" style="font-size: 11px;">Last 4 weeks vs the 4 before — no HR needed</div>
+        </div>
+      </div>
+      ${rowHtml}
+      <div style="font-size: 10px; color: var(--text-mute); margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); line-height: 1.5;">Average speed across all your sessions, so it mixes easy and hard days — read it as a rough direction, not a lab test. Add a recent benchmark or HR to sharpen it.</div>
+    </div>`;
+}
+
 function renderGeneralFitnessCard(intake) {
   const card = document.getElementById('raceProjectionMini');
   if (!card) return;
@@ -13692,11 +13809,28 @@ function renderTrends() {
             })()}
             <div style="font-size: 11px; color: var(--text-mute); padding-top: 10px; border-top: 1px solid var(--border);">Based on ${driftSet.length} ${state.trendsDriftSport === 'overall' ? '' : state.trendsDriftSport + ' '}workout${driftSet.length === 1 ? '' : 's'}</div>
           </div>
-        ` : `
-          <div style="font-size: 12px; color: var(--text-dim); padding: 14px 0;">No drift data for ${state.trendsDriftSport === 'overall' ? 'any sport yet' : state.trendsDriftSport} yet.</div>
-        `}
+        ` : (() => {
+          // Cardiac drift IS a heart-rate metric — without HR there's nothing to
+          // compute. Be honest about WHY it's empty (rather than a vague "no data"),
+          // and point to the pace-based trends below that work without HR. Strava
+          // HR is unreliable/absent for many athletes, so this is the common case.
+          const anyHr = recent.some(w => (w.sport === 'run' || w.sport === 'bike' || w.sport === 'swim') && (w.avgHr || w.avg_hr));
+          return anyHr ? `
+            <div style="font-size: 12px; color: var(--text-dim); padding: 14px 0; line-height: 1.55;">No drift data for ${state.trendsDriftSport === 'overall' ? 'this selection' : state.trendsDriftSport} yet — pick another sport, or log a steady ${state.trendsDriftSport === 'overall' ? 'cardio' : state.trendsDriftSport} session with HR.</div>
+          ` : `
+            <div style="font-size: 12px; color: var(--text-dim); padding: 14px 0; line-height: 1.55;">
+              <div style="color: var(--text); font-weight: 600; margin-bottom: 4px;">💓 Needs heart-rate data</div>
+              Cardiac drift measures how your HR climbs over a steady effort, so it only appears when a workout includes heart rate (chest strap or watch). None of your recent sessions have HR. It fills in automatically the moment one does — and your pace &amp; speed trends below work without it.
+            </div>
+          `;
+        })()}
       </div>
     </div>
+
+    <!-- Pace & speed trend — a fitness signal that needs NO heart rate (uses
+         distance ÷ time only), so the Stats page is useful even when Strava
+         doesn't give us HR. -->
+    ${renderPaceSpeedTrendCard()}
 
     <div class="panel" style="padding: 18px;">
       <div class="panel-header" style="margin-bottom: 14px;">
