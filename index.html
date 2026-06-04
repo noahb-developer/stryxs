@@ -2586,12 +2586,15 @@ body.coach-chat-active #feedbackFab { display: none !important; }
 body.coach-chat-active .nav {
   position: fixed; top: 0; left: 0; right: 0; z-index: 120;
   padding-top: calc(12px + var(--safe-top));
-  /* TEMP DIAGNOSTIC: solid opaque nav (was transparent) to test if the
-     transparent-nav-over-scrolling-content compositing is the ~3s paint cost. */
+  /* SOLID opaque nav. We tried a fully transparent nav (messages showing through
+     behind the floating buttons, Claude-style) but a transparent fixed bar over
+     the scrolling chat forced a ~2.9s GPU paint on mobile every time Coach opened
+     (the messages had to composite behind it). Solid = the chat opens instantly.
+     No backdrop-filter (also a mobile paint cost). */
   background: var(--bg) !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
-  border-bottom: none !important;
+  border-bottom: 1px solid var(--border) !important;
 }
 /* No solid notch/status-bar backdrop in chat either, so the very top is blank
    too (content shows all the way up like Claude). */
@@ -7656,27 +7659,7 @@ function checkCoachUnreadOnLoad() {
   } catch (e) {}
 }
 
-// TEMP DIAGNOSTIC: shows the Coach-open timing breakdown on screen (Noah is on
-// mobile, can't easily read the console). Remove once the slow-open cause is found.
-function _showCoachOpenTiming() {
-  const t = window._coachOpenT;
-  if (!t) return;
-  const d = (a, b) => (t[a] != null && t[b] != null) ? Math.round(t[b] - t[a]) : '?';
-  const total = (t.t0 != null && t.painted != null) ? Math.round(t.painted - t.t0) : (t.navStart != null && t.painted != null ? Math.round(t.painted - t.navStart) : '?');
-  const msg = `COACH OPEN ${total}ms ${t.cacheHit ? '(cache HIT)' : '(NO cache — hit network!)'}\n`
-    + `menu→nav ${d('t0', 'navStart')} · nav→render ${d('navStart', 'renderStart')} · render→html ${d('renderStart', 'htmlSet')} · html→paint ${d('htmlSet', 'painted')}`;
-  let el = document.getElementById('_coachTimingOverlay');
-  if (!el) { el = document.createElement('div'); el.id = '_coachTimingOverlay'; document.body.appendChild(el); }
-  el.style.cssText = 'position:fixed; left:8px; right:8px; top:calc(8px + env(safe-area-inset-top,0px)); z-index:99999; background:#000; color:#0f0; font:11px/1.45 monospace; white-space:pre-wrap; padding:8px 10px; border:1px solid #0f0; border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,.6);';
-  el.textContent = msg;
-  el.onclick = () => el.remove();
-  clearTimeout(window._coachTimingTO);
-  window._coachTimingTO = setTimeout(() => { try { el.remove(); } catch (_) {} }, 20000);
-  window._coachOpenT = null;
-}
-
 function navigate(page) {
-  if (page === 'coach') { if (!window._coachOpenT) window._coachOpenT = {}; window._coachOpenT.navStart = performance.now(); }
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   const target = document.getElementById(`page-${page}`);
   if (target) target.classList.add('active');
@@ -7812,8 +7795,6 @@ function closeNavMenu() {
 }
 
 function navigateAndCloseMenu(page) {
-  // TEMP DIAGNOSTIC: time the Coach open from the moment the menu item is tapped.
-  if (page === 'coach') window._coachOpenT = { t0: performance.now() };
   // Close the menu INSTANTLY (kill the fade) so the destination page — which now
   // paints immediately from cache — is revealed at once. The 0.22s backdrop
   // fade-out was the only remaining delay between tapping a menu item and seeing
@@ -15224,7 +15205,6 @@ const intakeQuestions = [
 ];
 
 async function renderCoach() {
-  if (window._coachOpenT) window._coachOpenT.renderStart = performance.now();
   const el = document.getElementById('coachContent');
   if (!state.user) { el.innerHTML = ''; return; }
   // Open the chat shell IMMEDIATELY and load everything in the background, instead
@@ -16835,7 +16815,6 @@ async function renderCoachChat(el, intakeMaybe) {
   // time then pops" delay. Tail-first makes the first layout cheap = instant pop.
   const INITIAL_PAINT = 14;
   const lazyFillHead = (headMsgs) => {
-    return; // TEMP DIAGNOSTIC: disabled to test if the older messages are the slow paint
     if (!headMsgs || !headMsgs.length) return;
     requestAnimationFrame(() => {
       const c = document.getElementById('chatMessages');
@@ -16854,16 +16833,6 @@ async function renderCoachChat(el, intakeMaybe) {
   } else {
     el.innerHTML = shell('<div style="display:flex;align-items:center;justify-content:center;min-height:160px;flex:1;"><div class="spinner"></div></div>', optimisticGate);
   }
-  // TEMP DIAGNOSTIC: mark when the cache HTML is set, and when it actually paints.
-  if (window._coachOpenT) {
-    window._coachOpenT.htmlSet = performance.now();
-    window._coachOpenT.cacheHit = haveCache;
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      window._coachOpenT.painted = performance.now();
-      try { _showCoachOpenTiming(); } catch (_) {}
-    }));
-  }
-
   // 2) Refresh in the background: intake (if unknown) + recent messages + gate, in parallel.
   const COACH_RENDER_LIMIT = 50;
   const intakePromise = intakeMaybe
