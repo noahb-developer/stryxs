@@ -1386,6 +1386,24 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 #manualDate::-webkit-datetime-edit { padding: 0; }
 #manualDate::-webkit-calendar-picker-indicator { opacity: 0.5; cursor: pointer; }
 
+/* Race-planner form fields: every input has width:100% + 14px side padding, so
+   without border-box the padding is ADDED to 100% and the box overflows the
+   card by ~28px on the right (most visible on the date input, which iOS also
+   inflates). Force border-box on all of them + normalize the date input the
+   same way #manualDate does so it lines up and stays on-screen. */
+#rpRaceName, #rpRaceDate, #rpGoalTime, #rpTerrain, #rpWeather, #rpNotes {
+  box-sizing: border-box;
+}
+#rpRaceDate {
+  -webkit-appearance: none;
+  appearance: none;
+  text-align: left;
+  color-scheme: dark;
+}
+#rpRaceDate::-webkit-date-and-time-value { text-align: left; margin: 0; }
+#rpRaceDate::-webkit-datetime-edit { padding: 0; }
+#rpRaceDate::-webkit-calendar-picker-indicator { opacity: 0.5; cursor: pointer; }
+
 .auth-switch {
   text-align: center; margin-top: 20px; color: var(--text-dim); font-size: 13px;
 }
@@ -3005,8 +3023,16 @@ body.coach-chat-active .chat-msg.user .msg-bubble strong { color: var(--text); }
   border-top-color: var(--accent);
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
+  /* Promote to its own compositor layer so the rotation is GPU-composited on a
+     stable pixel grid. Without this the spinner samples at sub-pixel positions
+     each frame (especially when flex-centered next to text) and appears to
+     "wobble"/orbit instead of spinning perfectly in place. */
+  will-change: transform;
+  transform-origin: 50% 50%;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
 }
-@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
 /* TOAST */
 .toast {
@@ -21109,7 +21135,7 @@ function openRacePlanForm() {
 
         <div>
           <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--text);">Race name (optional)</label>
-          <input type="text" id="rpRaceName" placeholder="e.g., IRONMAN Jacksonville 2027" style="width: 100%; padding: 12px 14px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-family: inherit;">
+          <input type="text" id="rpRaceName" placeholder="e.g., IRONMAN Nice 2027" style="width: 100%; padding: 12px 14px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-family: inherit;">
         </div>
 
         <div>
@@ -21143,7 +21169,7 @@ function openRacePlanForm() {
 
         <div>
           <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--text);">Notes (optional)</label>
-          <textarea id="rpNotes" placeholder="Anything specific about this race, flat course, known to be hot, no aero bars allowed, etc." style="width: 100%; min-height: 80px; padding: 12px 14px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-family: inherit; resize: vertical; line-height: 1.55;"></textarea>
+          <textarea id="rpNotes" placeholder="e.g., my first race ever, 3rd of 5 races this season, coming back from injury, A-race I've trained all year for, nervous about the swim start" style="width: 100%; min-height: 80px; padding: 12px 14px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-family: inherit; resize: vertical; line-height: 1.55;"></textarea>
         </div>
 
         <div style="display: flex; gap: 10px;">
@@ -23643,10 +23669,17 @@ function toggleSettingsSection(id) {
   if (!wasExpanded && section.classList.contains('expanded')) {
     setTimeout(() => {
       try {
-        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        // scrollIntoView({block:'start'}) aligns the section to the very top of
+        // the viewport, which tucks its header UNDER the fixed ~56px top nav so
+        // it looks like you landed partway down the card. Compute the absolute
+        // top and scroll to it minus a nav-height offset so the header sits just
+        // below the nav, cleanly at the start of the section. (Same approach the
+        // spotlight tour uses.)
+        const NAV_OFFSET = 72;
+        const absoluteTop = section.getBoundingClientRect().top + window.scrollY;
+        window.scrollTo({ top: Math.max(0, absoluteTop - NAV_OFFSET), behavior: 'smooth' });
       } catch (_) {
-        // Older browsers without smooth-scroll support
-        section.scrollIntoView();
+        try { section.scrollIntoView(); } catch (__) {}
       }
     }, 80);
   }
