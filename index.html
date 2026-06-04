@@ -6466,6 +6466,25 @@ async function loadWorkouts() {
   try { if (typeof refreshShareSnapshot === 'function') refreshShareSnapshot(); } catch (_) {}
 }
 
+// The `workouts` table stores every metric (avgHr, distance, duration, drift,
+// type, date, splits, etc.) nested inside the `workout_data` JSONB column;
+// only sport/source/activity_classification/created_at are real columns.
+// loadWorkouts() flattens this for state.workouts, but any path that re-queries
+// raw rows and sends them to the edge MUST flatten too — otherwise the edge
+// (which reads w.avgHr / w.distance / w.duration / w.drift / w.date at the top
+// level) sees blanks for every workout and can't find anything (the cause of
+// "I hit Generate Insights and see nothing"). Mirror the loadWorkouts mapping.
+function _flattenWorkoutRows(rows) {
+  return (rows || []).map(w => ({
+    ...(w.workout_data || {}),
+    _dbId: w.id,
+    sport: w.sport || w.workout_data?.sport,
+    created_at: w.created_at,
+    date: (w.workout_data && w.workout_data.date) || (w.created_at ? String(w.created_at).split('T')[0] : null),
+    activity_classification: w.activity_classification || w.workout_data?.activity_classification || 'unclassified',
+  }));
+}
+
 // Denormalize the athlete's recent COMPLETED workout stats (duration/distance/avg HR,
 // keyed by date+sport) onto their active shared_plans row, so the anonymous public-share
 // viewer can show actual-vs-planned (the viewer cannot read the private `workouts` table).
@@ -13987,7 +14006,7 @@ async function regenerateInsights() {
 
     const result = await callCoach('analyze_patterns', {
       intake,
-      allWorkouts: rawWorkouts || [],
+      allWorkouts: _flattenWorkoutRows(rawWorkouts),
       userDismissalHistory,
       clientToday: getClientToday(),
       clientTimezone: getClientTimezone(),
@@ -14383,7 +14402,7 @@ async function explainInsightInChat(insightId, btnEl) {
     const result = await callCoach('explain_insight', {
       insight,
       intake,
-      recentWorkouts: rawWorkouts || [],
+      recentWorkouts: _flattenWorkoutRows(rawWorkouts),
     }, { timeoutMs: 45000 });
 
     const explanation = result?.explanation || "I'm having trouble explaining this one in detail. Try refreshing your insights.";
