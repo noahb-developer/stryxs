@@ -4351,13 +4351,9 @@ body.on-auth .container {
       <span class="nav-menu-label" data-i18n="nav.coach">Coach</span>
       <span class="nav-menu-badge" id="coachUnreadBadge" style="display: none;"></span>
     </button>
-    <button class="nav-menu-item" data-page="plan" onclick="navigateAndCloseMenu('plan')">
+    <button class="nav-menu-item" data-page="plan" data-page-group="plan" onclick="navigateAndCloseMenu('plan')">
       <span class="nav-menu-icon">📅</span>
       <span class="nav-menu-label" data-i18n="nav.plan">Plan</span>
-    </button>
-    <button class="nav-menu-item" data-page="race-planner" onclick="navigateAndCloseMenu('race-planner')">
-      <span class="nav-menu-icon">🏁</span>
-      <span class="nav-menu-label" data-i18n="nav.race_plan">Race Plan</span>
     </button>
     <button class="nav-menu-item" data-page="upload" data-page-group="training" onclick="navigateAndCloseMenu('upload')">
       <span class="nav-menu-icon">🏋️</span>
@@ -4781,11 +4777,19 @@ body.on-auth .container {
 
 <!-- PLAN -->
 <div class="page" id="page-plan">
+  <div class="training-tabs">
+    <button class="training-tab active" onclick="navigate('plan')">📅 Plan</button>
+    <button class="training-tab" onclick="navigate('race-planner')">🏁 Race Plan</button>
+  </div>
   <div id="planContent"></div>
 </div>
 
 <!-- RACE PLANNER -->
 <div class="page" id="page-race-planner">
+  <div class="training-tabs">
+    <button class="training-tab" onclick="navigate('plan')">📅 Plan</button>
+    <button class="training-tab active" onclick="navigate('race-planner')">🏁 Race Plan</button>
+  </div>
   <div id="racePlannerContent"></div>
 </div>
 
@@ -7668,6 +7672,11 @@ function navigate(page) {
   if (['upload', 'history', 'trends'].includes(page)) {
     const trainingItem = document.querySelector('.nav-menu-item[data-page-group="training"]');
     if (trainingItem) trainingItem.classList.add('active');
+  }
+  // The "Plan" menu item covers the Plan / Race Plan sub-tabs.
+  if (['plan', 'race-planner'].includes(page)) {
+    const planItem = document.querySelector('.nav-menu-item[data-page-group="plan"]');
+    if (planItem) planItem.classList.add('active');
   }
   window.scrollTo({ top: 0, behavior: 'instant' });
 
