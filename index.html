@@ -2586,7 +2586,6 @@ body.coach-chat-active #feedbackFab { display: none !important; }
 body.coach-chat-active .nav {
   position: fixed; top: 0; left: 0; right: 0; z-index: 120;
   padding-top: calc(12px + var(--safe-top));
-  will-change: transform;
   /* FULLY transparent in chat (like Claude's mobile chat): no bar, no frost, no
      border — the logo + 3 buttons float directly over the messages, which show
      through completely behind them. Buttons keep their own shape/contrast so they
@@ -2602,11 +2601,6 @@ body.coach-chat-active .safe-area-top { background: transparent !important; }
 /* Subtle shadow so the floating logo + buttons stay readable over any text that
    scrolls behind them (no bar needed). */
 body.coach-chat-active #mainNav .nav-inner { text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6); }
-body.coach-chat-active #mainNav .nav-inner button,
-body.coach-chat-active #mainNav .nav-inner .logo,
-body.coach-chat-active #mainNav .nav-inner .nav-avatar {
-  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.55));
-}
 body.coach-chat-active #page-coach.active {
   position: fixed;
   /* Glued to the VISUAL viewport by JS (trackCoachViewport): top:0 + a transform
@@ -2621,7 +2615,6 @@ body.coach-chat-active #page-coach.active {
   display: flex; flex-direction: column;
   overflow: hidden;
   animation: none;
-  will-change: transform, height;
 }
 body.coach-chat-active .chat-messages { overscroll-behavior: contain; }
 body.coach-chat-active #coachContent {
