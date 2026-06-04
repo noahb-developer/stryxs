@@ -16837,6 +16837,7 @@ async function renderCoachChat(el, intakeMaybe) {
   // time then pops" delay. Tail-first makes the first layout cheap = instant pop.
   const INITIAL_PAINT = 14;
   const lazyFillHead = (headMsgs) => {
+    return; // TEMP DIAGNOSTIC: disabled to test if the older messages are the slow paint
     if (!headMsgs || !headMsgs.length) return;
     requestAnimationFrame(() => {
       const c = document.getElementById('chatMessages');
