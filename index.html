@@ -22428,7 +22428,6 @@ async function renderPlan() {
     ` : ''}
 
     ${hasPlan ? `
-    <div id="planBarSentinel" style="height:1px;"></div>
     <div class="plan-bar" id="planBar">
       <button class="plan-bar-btn" onclick="scrollToTodayWorkout()">📋 Today's workout</button>
       <button class="plan-bar-btn" onclick="openShareModal()">Share</button>
@@ -22706,7 +22705,12 @@ function _planDoScroll(y) {
 function scrollToTodayWorkout() {
   const t = document.getElementById('pf-today') || document.querySelector('#planFeed .pf-day');
   if (!t) return;
-  const y = t.getBoundingClientRect().top + _planCurY() - _planNavBottom() - 64;
+  // Land today's card just below whatever's pinned at the top. When scrolled the
+  // fixed clone bar is showing → use its actual bottom; at the top use the nav.
+  const clone = document.getElementById('planBarFixed');
+  const pinned = clone && getComputedStyle(clone).display !== 'none';
+  const off = pinned ? (clone.getBoundingClientRect().bottom + 14) : (_planNavBottom() + 60);
+  const y = t.getBoundingClientRect().top + _planCurY() - off;
   _planDoScroll(y);
 }
 function planScrollTop() { _planDoScroll(0); }
@@ -22714,33 +22718,31 @@ function planScrollTop() { _planDoScroll(0); }
 let _planBarObserver = null;
 function initPlanBar() {
   const bar = document.getElementById('planBar');
-  const sentinel = document.getElementById('planBarSentinel');
-  if (!bar || !sentinel) return;
-  const navBottom = _planNavBottom();
+  if (!bar) return;
 
   // Build/refresh a FIXED clone of the bar appended to <body> (NOT inside
   // #page-plan, whose overflow ancestor makes iOS clip a fixed/sticky child —
-  // the reason the bar never appeared on phone). The clone shows once you scroll
-  // past the in-flow bar; it carries the same buttons + onclicks, plus Top.
+  // the reason the bar never appeared on phone). The clone carries the same
+  // buttons + onclicks, plus Top, and sits at top:var(--safe-top) (very top).
   let clone = document.getElementById('planBarFixed');
   if (!clone) { clone = document.createElement('div'); clone.id = 'planBarFixed'; document.body.appendChild(clone); }
   clone.className = 'plan-bar plan-bar-fixed';
-  // Position is handled by CSS: top:var(--safe-top) → sits at the very top of the
-  // screen (just under the notch). The app nav scrolls away on this page, so the
-  // bar belongs at the top, not at the nav's old offset.
   clone.style.display = 'none';
   clone.innerHTML = bar.innerHTML; // same buttons (onclick attrs call the same globals)
 
+  // Show the clone ONLY once the in-flow bar has fully scrolled BEHIND where the
+  // clone sits (so the buttons aren't briefly doubled). Trigger line = the clone's
+  // bottom ≈ safe-top + the bar's height. We observe the in-flow bar itself: when
+  // it's entirely above that line (!isIntersecting), reveal the clone.
+  const safeTopPx = parseFloat(getComputedStyle(clone).top) || 0;
+  const triggerY = Math.round(safeTopPx + (bar.offsetHeight || 44) + 10);
   if (_planBarObserver) { try { _planBarObserver.disconnect(); } catch (_) {} }
   try {
-    // Show the fixed clone when the sentinel (just above the in-flow bar) scrolls
-    // above the nav line. IntersectionObserver tracks viewport intersection no
-    // matter which element scrolls (window / body / the page) — robust on iOS.
     _planBarObserver = new IntersectionObserver((entries) => {
       const onPlan = document.getElementById('page-plan')?.classList.contains('active');
       for (const e of entries) clone.style.display = (!e.isIntersecting && onPlan) ? 'flex' : 'none';
-    }, { rootMargin: `-${navBottom + 1}px 0px 0px 0px`, threshold: 0 });
-    _planBarObserver.observe(sentinel);
+    }, { rootMargin: `-${triggerY}px 0px 0px 0px`, threshold: 0 });
+    _planBarObserver.observe(bar);
   } catch (_) { /* IO unsupported: in-flow bar still works, just no pinned clone */ }
 }
 
