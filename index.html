@@ -12532,7 +12532,7 @@ async function renderDashTodayCard(intake) {
   card.innerHTML = `
     <div class="panel" style="margin-bottom: 14px; background: linear-gradient(135deg, rgba(0, 229, 160, 0.04), transparent); border-color: rgba(0, 229, 160, 0.2); cursor: pointer;" onclick="openPlanWorkout('${today}')">
       <div style="display: flex; align-items: center; gap: 14px;">
-        <div style="font-size: 32px; flex-shrink: 0;">${sportEmoji}</div>
+        ${typeof _sportIconHTML === 'function' ? _sportIconHTML(todaysPlanned.sport, 40) : `<div style="font-size: 32px; flex-shrink: 0;">${sportEmoji}</div>`}
         <div style="flex: 1; min-width: 0;">
           <div style="font-size: 10px; color: var(--accent); text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; margin-bottom: 4px;">Today</div>
           <div style="font-size: 15px; font-weight: 700; margin-bottom: 2px;">${escapeHtml(title)}</div>
@@ -13480,6 +13480,12 @@ function renderHistoryItem(w, idx) {
   const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   const icons = { run: '🏃', bike: '🚴', swim: '🏊', strength: '💪', other: '⚡' };
   const icon = icons[w.sport] || '⚡';
+  // Clean SVG sport glyph (same as the plan feed) in a sport-tinted box; falls
+  // back to the emoji if the helpers aren't available.
+  const _hsk = (typeof _pfSportKey === 'function') ? _pfSportKey(w.sport) : 'run';
+  const _hGlyph = (typeof _PF_ICON !== 'undefined' && _PF_ICON[_hsk])
+    ? `<svg viewBox="0 0 24 24" style="width:22px;height:22px;stroke:#fff;stroke-width:1.9;fill:none;stroke-linecap:round;stroke-linejoin:round">${_PF_ICON[_hsk]}</svg>` : icon;
+  const _hBg = (typeof _SPORT_RGB !== 'undefined' && _SPORT_RGB[_hsk]) ? `background:rgba(${_SPORT_RGB[_hsk]},.92);border-color:transparent;` : '';
   let sub;
   if (w.sport === 'swim') {
     sub = w.sets ? `${w.sets.length} sets · ${w.avgHr || 0} bpm` : `${formatDistance(w.distance || 0, 2)} · ${w.time || ''}`;
@@ -13515,7 +13521,7 @@ function renderHistoryItem(w, idx) {
   const ref = w._dbId ? `'${w._dbId}'` : idx;
   return `
     <div class="history-item" style="${itemStyle}" onclick="viewHistoryDetail(${ref})">
-      <div class="history-icon">${icon}</div>
+      <div class="history-icon" style="${_hBg}">${_hGlyph}</div>
       <div class="history-info">
         <div class="history-title-row">
           <span class="history-title-text">${w.type || w.name || w.sport}</span>
@@ -22509,10 +22515,10 @@ function _findActualForPlanned(pw) {
 // Clean, recognizable line glyphs (abstract but complete — Lucide/Tabler-style).
 const _PF_ICON = {
   bike: '<circle cx="5.5" cy="17.5" r="3.3"/><circle cx="18.5" cy="17.5" r="3.3"/><path d="M15 5.5a1 1 0 1 0 0-2 1 1 0 0 0 0 2"/><path d="M12 17.5V14l-3-3 4-3 2.2 3.2H17"/>',
-  // Tabler-style running stick figure: head + trailing back leg + body/front-leg/arm.
-  run: '<circle cx="13" cy="4" r="1.6"/><path d="M4 17l5 1 1-2"/><path d="M15 21l-.5-4-3-2.5 3.5-4 2 3 3 1"/>',
-  // Swimmer: head + freestyle arm arcing over + a wave (water) below.
-  swim: '<circle cx="8" cy="10" r="1.7"/><path d="M10.5 10.5q3-4.5 6-1"/><path d="M3 17c1.9-1.5 3.4-1.5 5.3 0s3.4 1.5 5.3 0 3.4-1.5 5.4 0"/>',
+  // Tabler "run" — a clean recognizable runner (head + legs + arms).
+  run: '<path d="M11 5a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M4 17l5 1l.75 -1.5"/><path d="M15 21v-4l-4 -3l1 -6"/><path d="M7 12v-3l5 -1l3 3l3 1"/>',
+  // Tabler "swimming" — head + freestyle arm stroke + two water waves.
+  swim: '<path d="M15 9a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"/><path d="M6 11l4 -2l3.5 3l-1.5 2"/><path d="M3 16.5a2.4 2.4 0 0 0 1 .25a2.4 2.4 0 0 0 2 -1a2.4 2.4 0 0 1 2 -1a2.4 2.4 0 0 1 2 1a2.4 2.4 0 0 0 2 1a2.4 2.4 0 0 0 2 -1a2.4 2.4 0 0 1 2 -1a2.4 2.4 0 0 1 2 1a2.4 2.4 0 0 0 2 1a2.4 2.4 0 0 0 1 -.25"/><path d="M3 20a2.4 2.4 0 0 0 1 .25a2.4 2.4 0 0 0 2 -1a2.4 2.4 0 0 1 2 -1a2.4 2.4 0 0 1 2 1a2.4 2.4 0 0 0 2 1a2.4 2.4 0 0 0 2 -1a2.4 2.4 0 0 1 2 -1a2.4 2.4 0 0 1 2 1a2.4 2.4 0 0 0 2 1a2.4 2.4 0 0 0 1 -.25"/>',
   strength: '<path d="M4 9v6M7 7v10M17 7v10M20 9v6M7 12h10"/>',
   rest: '<path d="M19 13.5A7 7 0 1 1 10.5 5 5.5 5.5 0 0 0 19 13.5z"/>',
 };
@@ -22523,6 +22529,17 @@ function _pfSportKey(sport) {
   if (['run', 'bike', 'swim', 'rest'].includes(s)) return s;
   if (s === 'rest') return 'rest';
   return 'run';
+}
+// Reusable tinted sport-icon box (same clean glyphs as the plan feed) — use
+// anywhere we previously showed a sport emoji (dashboard today card, history…).
+// Fixed per-sport colours (water-blue swim, etc.) since there's no intensity context.
+const _SPORT_RGB = { run: '34,197,94', bike: '251,146,60', swim: '56,160,255', strength: '167,139,250', rest: '90,100,120', other: '90,100,120' };
+function _sportIconHTML(sport, px) {
+  const k = _pfSportKey(sport);
+  const glyph = _PF_ICON[k] || _PF_ICON.run;
+  const c = _SPORT_RGB[k] || _SPORT_RGB.other;
+  const s = px || 34, r = Math.round(s * 0.3), gs = Math.round(s * 0.56);
+  return `<div style="width:${s}px;height:${s}px;border-radius:${r}px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;background:rgba(${c},.92)"><svg viewBox="0 0 24 24" style="width:${gs}px;height:${gs}px;stroke:#fff;stroke-width:1.9;fill:none;stroke-linecap:round;stroke-linejoin:round">${glyph}</svg></div>`;
 }
 // Map a planned workout to an intensity tag {label, key(colour)}.
 function _pfTagFor(w) {
