@@ -12175,6 +12175,10 @@ async function renderDashboard() {
   // ═══ STEP 6b: Training Load & Form (fitness/fatigue/form + ACWR) ═══
   try { renderLoadFormCard(); } catch (e) { console.warn('[Stryxs] load card failed:', e); }
 
+  // #9: on app open (dashboard is home), top the plan up to ~a month ahead.
+  // Fire-and-forget; self-throttles so it's a cheap no-op when already buffered.
+  try { if (typeof maybeAutoExtendPlan === 'function') maybeAutoExtendPlan(); } catch (_) {}
+
   // ═══ STEP 7: Recent workouts (existing logic, kept) ═══
   if (!state.dashRecentRange) state.dashRecentRange = 'week';
   const rangePicker = document.getElementById('recentRangePicker');
@@ -19766,6 +19770,204 @@ async function generateNextWeekFromAck(intake, activePlan) {
   console.log('[Stryxs] Plan saved from ack, Week', nextWeekNumber, 'starting', nextStartStr);
 }
 
+// ═══════════════════════════════════════════════════════════
+// AUTO-EXTENDING PLAN (#9): the plan builds itself ~a month ahead, on app open.
+// _extendPlanByOneWeek is a UI-free, faithful copy of generateNextWeek's proven
+// generation core (steps: find next Monday → week number → recent-load context →
+// generate_plan → save). Kept SEPARATE from generateNextWeek so the existing
+// manual button path is untouched. maybeAutoExtendPlan loops it to keep a ~28-day
+// buffer, with guards so it never spams, never builds past the race, and only
+// runs for Pro users with zones set.
+// ═══════════════════════════════════════════════════════════
+async function _extendPlanByOneWeek(intake, activePlan) {
+  if (!state.user) throw new Error('Not authenticated');
+
+  // 1. Next week starts the Monday AFTER the last scheduled day.
+  const { data: latestPlanned } = await sb.from('planned_workouts')
+    .select('scheduled_date')
+    .eq('user_id', state.user.id)
+    .order('scheduled_date', { ascending: false })
+    .limit(1);
+  if (!latestPlanned || latestPlanned.length === 0) throw new Error('No existing plan to extend');
+
+  const lastDate = new Date(latestPlanned[0].scheduled_date + 'T12:00:00');
+  const nextStart = new Date(lastDate);
+  nextStart.setDate(lastDate.getDate() + 1);
+  const nextStartDow = nextStart.getDay();
+  if (nextStartDow !== 1) {
+    const daysToMon = nextStartDow === 0 ? 1 : (8 - nextStartDow);
+    nextStart.setDate(nextStart.getDate() + daysToMon);
+  }
+  const nextStartStr = nextStart.toISOString().split('T')[0];
+
+  // 2. Week number = existing weeks + 1 (imported plans derive from stored week).
+  const { data: allPlanned } = await sb.from('planned_workouts')
+    .select('scheduled_date')
+    .eq('user_id', state.user.id)
+    .order('scheduled_date', { ascending: true });
+  const uniqueDays = new Set((allPlanned || []).map(p => p.scheduled_date));
+  const existingWeeks = Math.ceil(uniqueDays.size / 7);
+  let nextWeekNumber = existingWeeks + 1;
+  if (activePlan?.plan_data?._imported_plan && activePlan?.plan_data?._imported_current_week) {
+    nextWeekNumber = activePlan.plan_data._imported_current_week + existingWeeks;
+  }
+
+  // 3. Last 14d completed TRAINING workouts → adaptive (fatigue) adjustment context.
+  const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 14);
+  const { data: recentRaw } = await sb.from('workouts')
+    .select('*')
+    .eq('user_id', state.user.id)
+    .neq('activity_classification', 'daily_activity')
+    .gte('created_at', cutoff.toISOString())
+    .order('created_at', { ascending: false })
+    .limit(10);
+  const recentWorkouts = (recentRaw || []).map(w => {
+    const wd = w.workout_data || {};
+    return {
+      sport: w.sport,
+      type: wd.workout_type || wd.type || null,
+      distance: parseFloat(wd.distance || wd.distance_km || 0) || null,
+      avgHr: parseInt(wd.avgHr || wd.avg_hr || 0) || null,
+      drift: parseFloat(wd.drift || wd.cardiac_drift || 0) || null,
+    };
+  });
+
+  // 4. Imported profile + Sunday alternation (mirrors generateNextWeek).
+  const skeleton = activePlan?.plan_data?.skeleton || null;
+  const importedProfile = activePlan?.plan_data?._plan_profile || null;
+  if (importedProfile) intake._plan_profile = importedProfile;
+
+  let lastSundaySport = null;
+  if (importedProfile?.weekly_structure?.sunday?.primary_sport === 'swim_or_run') {
+    try {
+      const ns = new Date(nextStartStr + 'T12:00:00');
+      const prevSunday = new Date(ns); prevSunday.setDate(prevSunday.getDate() - 1);
+      const prevSundayStr = prevSunday.toISOString().split('T')[0];
+      const { data: lastSun } = await sb.from('planned_workouts')
+        .select('sport').eq('user_id', state.user.id).eq('scheduled_date', prevSundayStr).maybeSingle();
+      if (lastSun?.sport) lastSundaySport = lastSun.sport;
+    } catch (_) {}
+  }
+
+  // 5. Generate + 6. Save.
+  const plan = await callCoach('generate_plan', {
+    intake, weekNumber: nextWeekNumber, recentWorkouts, skeleton, lastSundaySport,
+  }, { timeoutMs: 90000 });
+  if (!plan || !plan.workouts || plan.workouts.length === 0) throw new Error('Coach returned an empty plan');
+
+  if (importedProfile) plan._plan_profile = importedProfile;
+  if (activePlan?.plan_data?._imported_plan) {
+    plan._imported_plan = true;
+    plan._imported_current_week = activePlan.plan_data._imported_current_week || null;
+    plan._imported_latest_generated_week = nextWeekNumber;
+    plan._imported_total_weeks = activePlan.plan_data._imported_total_weeks || null;
+    if (activePlan.plan_data.plan_start_date) plan.plan_start_date = activePlan.plan_data.plan_start_date;
+  }
+  if (skeleton) plan.skeleton = skeleton;
+
+  await savePlanToDb(plan, state.user.id, nextStartStr);
+  return { weekNumber: nextWeekNumber, startStr: nextStartStr };
+}
+
+let _autoExtendInFlight = false;
+let _lastAutoExtendCheck = 0;
+const AUTO_EXTEND_TARGET_DAYS = 28; // keep ~a month built ahead
+async function maybeAutoExtendPlan() {
+  // Cheap throttle so the dashboard/plan renders don't re-query every paint.
+  const nowMs = Date.now();
+  if (_autoExtendInFlight || (nowMs - _lastAutoExtendCheck < 5 * 60 * 1000)) return;
+  _lastAutoExtendCheck = nowMs;
+  try {
+    if (!state.user || !isUserPro()) return; // ongoing weeks are Pro
+
+    const { data: activePlan } = await sb.from('training_plans')
+      .select('plan_data').eq('user_id', state.user.id).eq('active', true)
+      .order('created_at', { ascending: false }).limit(1).maybeSingle();
+    if (!activePlan) return;
+
+    const { data: intake } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).single();
+    if (!intake) return;
+
+    // Don't auto-generate Friel-persona weeks without zones (same gate as the button).
+    const isFriel = ['ironman', '70_3', 'olympic_tri', 'sprint_tri'].includes(intake.goal_event);
+    if (isFriel && (!intake.run_lthr || !intake.bike_lthr)) return;
+
+    const todayStr = (typeof getClientToday === 'function') ? getClientToday() : new Date().toISOString().split('T')[0];
+    const todayMs = new Date(todayStr + 'T12:00:00').getTime();
+    const raceMs = intake.race_date ? new Date(intake.race_date + 'T12:00:00').getTime() : null;
+
+    const daysAheadOfToday = async () => {
+      const { data: fut } = await sb.from('planned_workouts')
+        .select('scheduled_date').eq('user_id', state.user.id).gte('scheduled_date', todayStr);
+      let last = null;
+      (fut || []).forEach(p => { if (!last || p.scheduled_date > last) last = p.scheduled_date; });
+      return { ahead: last ? Math.round((new Date(last + 'T12:00:00').getTime() - todayMs) / 86400000) : 0, last };
+    };
+
+    let { ahead, last } = await daysAheadOfToday();
+    // Already buffered, or the plan already reaches the race → nothing to do.
+    if (ahead >= AUTO_EXTEND_TARGET_DAYS) return;
+    if (raceMs && last && new Date(last + 'T12:00:00').getTime() >= raceMs) return;
+
+    _autoExtendInFlight = true;
+    let built = 0; const CAP = 5; // never build more than ~5 weeks in one pass
+    let curActive = activePlan;
+    while (built < CAP && ahead < AUTO_EXTEND_TARGET_DAYS) {
+      // Stop before scheduling weeks that start after the race.
+      if (raceMs && last && new Date(last + 'T12:00:00').getTime() >= raceMs) break;
+      await _extendPlanByOneWeek(intake, curActive);
+      built++;
+      const { data: ap } = await sb.from('training_plans')
+        .select('plan_data').eq('user_id', state.user.id).eq('active', true)
+        .order('created_at', { ascending: false }).limit(1).maybeSingle();
+      if (ap) curActive = ap;
+      ({ ahead, last } = await daysAheadOfToday());
+    }
+
+    if (built > 0) {
+      try { if (typeof loadWorkouts === 'function') await loadWorkouts(); } catch (_) {}
+
+      // Announce ONCE per user (don't spam every catch-up). After that, silent.
+      const announcedKey = `stryxs_autoextend_announced_${state.user.id}`;
+      let alreadyAnnounced = false;
+      try { alreadyAnnounced = localStorage.getItem(announcedKey) === '1'; } catch (_) {}
+      // Fatigue check from the load model — if recent load is high, Coach flags it
+      // and offers the choice (Noah's "ready to continue or take the alternative").
+      let fatigueNote = '';
+      try {
+        const m = window._stryxsLoadModel || (typeof computeLoadModel === 'function' ? computeLoadModel() : null);
+        if (m && (m.acwr > 1.5 || m.tsb < -25)) {
+          fatigueNote = `\n\nHeads up: your recent training load is running high, so I kept the new weeks on the easier side to protect you. If you're feeling fresh and want to push instead, just say so here and I'll firm them up.`;
+        }
+      } catch (_) {}
+
+      if (!alreadyAnnounced || fatigueNote) {
+        try {
+          await sb.from('coach_messages').insert({
+            user_id: state.user.id,
+            role: 'coach',
+            content: (alreadyAnnounced
+              ? `I've topped up your plan so you've still got about a month mapped out ahead.`
+              : `I've set your plan to build itself, you'll always have about a month mapped out ahead, and I'll keep adjusting the upcoming weeks to how your training is actually going. No need to tap "generate" anymore.`) + fatigueNote,
+            context_type: 'plan_auto_extended',
+          });
+          if (typeof setCoachUnread === 'function') setCoachUnread(true);
+        } catch (_) {}
+        try { localStorage.setItem(announcedKey, '1'); } catch (_) {}
+      }
+
+      if (document.getElementById('page-plan')?.classList.contains('active') && typeof renderPlan === 'function') {
+        renderPlan();
+      }
+      console.log(`[Stryxs] Auto-extended plan by ${built} week(s); now ~${ahead}d ahead`);
+    }
+  } catch (e) {
+    console.warn('[Stryxs] auto-extend skipped (non-fatal):', e?.message || e);
+  } finally {
+    _autoExtendInFlight = false;
+  }
+}
+
 async function generateNextWeek() {
   if (!state.user) return;
   // Defense in depth, Generate next week is Pro-only (after starter)
@@ -22184,26 +22386,40 @@ async function renderPlan() {
     </div>
 
     ${hasPlan ? `
-      <div style="margin-top: 24px; padding: 20px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 14px;">
-        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
-          <div style="font-size: 20px;">📅</div>
-          <div>
-            <div style="font-weight: 700; font-size: 15px;">Need more weeks?</div>
-            <div style="font-size: 13px; color: var(--text-dim);">${planLockedByLthr
-              ? 'Complete your LTHR tests + enter values in Settings to unlock next-week generation.'
-              : `Coach will build the next 7 days starting <strong style="color: var(--text);">${nextWeekStartLabel}</strong>, adjusted to your recent training.`}</div>
+      ${planLockedByLthr ? `
+        <div style="margin-top: 24px; padding: 20px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 14px;">
+          <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+            <div style="font-size: 20px;">📅</div>
+            <div>
+              <div style="font-weight: 700; font-size: 15px;">Plan paused</div>
+              <div style="font-size: 13px; color: var(--text-dim);">Complete your LTHR tests + enter values in Settings, then your plan builds itself automatically.</div>
+            </div>
           </div>
+          <button class="btn" style="width: 100%; font-size: 13px;" onclick="navigate('settings')">Enter LTHR in Settings →</button>
         </div>
-        ${planLockedByLthr ? `
-          <button class="btn ghost" id="generateNextWeekBtn" disabled style="width: 100%; opacity: 0.55; cursor: not-allowed;" title="Enter LTHR in Settings to unlock">🔒 LTHR required first</button>
-          <button class="btn" style="width: 100%; margin-top: 8px; font-size: 13px;" onclick="navigate('settings')">Enter LTHR in Settings →</button>
-        ` : (isUserPro() ? `
-          <button class="btn" id="generateNextWeekBtn" onclick="generateNextWeek()" style="width: 100%;">Generate next week →</button>
-        ` : `
-          <button class="btn ghost" id="generateNextWeekBtn" onclick="navigate('upgrade')" style="width: 100%; opacity: 0.85;">⭐ Generate next week (Pro)</button>
-          <div style="margin-top: 8px; font-size: 11px; color: var(--text-mute); text-align: center; line-height: 1.5;">Free includes your starter week. Upgrade for ongoing periodized weeks.</div>
-        `)}
-      </div>
+      ` : (isUserPro() ? `
+        <div style="margin-top: 24px; padding: 18px 20px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 14px;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="font-size: 20px;">♾️</div>
+            <div style="flex: 1; min-width: 0;">
+              <div style="font-weight: 700; font-size: 15px;">Your plan builds itself</div>
+              <div style="font-size: 13px; color: var(--text-dim); line-height: 1.5;">Coach keeps about a month mapped out ahead and adjusts upcoming weeks to your recent training. No button needed.</div>
+            </div>
+          </div>
+          <div style="margin-top: 10px; text-align: right;"><a style="font-size: 11px; color: var(--text-mute); cursor: pointer; text-decoration: underline;" onclick="generateNextWeek()">Build the next week now →</a></div>
+        </div>
+      ` : `
+        <div style="margin-top: 24px; padding: 20px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 14px;">
+          <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+            <div style="font-size: 20px;">♾️</div>
+            <div>
+              <div style="font-weight: 700; font-size: 15px;">Keep your plan going</div>
+              <div style="font-size: 13px; color: var(--text-dim);">Free includes your starter week. Upgrade and Coach builds and adjusts a fresh month ahead, automatically.</div>
+            </div>
+          </div>
+          <button class="btn" onclick="navigate('upgrade')" style="width: 100%; opacity: 0.95;">⭐ Upgrade for an ongoing plan</button>
+        </div>
+      `)}
 
       <div style="margin-top: 14px; padding: 20px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 14px;">
         <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
@@ -22268,6 +22484,9 @@ async function renderPlan() {
   renderCalendarGrid(planned || []);
   // Plan Management help auto-open (only on first visit per user)
   initPlanMgmtHelpAutoOpen();
+  // #9: keep ~a month of plan built ahead, automatically (fire-and-forget;
+  // self-throttles + in-flight lock, so re-renders it triggers won't loop).
+  try { if (typeof maybeAutoExtendPlan === 'function') maybeAutoExtendPlan(); } catch (_) {}
 }
 
 let currentPlannedWorkouts = {};
