@@ -557,15 +557,20 @@ body.on-landing #landingNav { display: none !important; }
 .pf-skipped { opacity: .6; }
 .pf-skipbadge { font-size: 10px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: rgba(234,179,8,.16); color: #eab308; }
 
-/* Plan action bar — pins to the top on scroll, slides back on the way up. */
-.plan-bar { display: flex; gap: 6px; margin-bottom: 14px; align-items: center; flex-wrap: nowrap; }
+/* Plan action bar. The in-flow bar lives at the top of the feed. A FIXED CLONE
+   (.plan-bar-fixed) is appended to <body> and shown when you scroll past it —
+   it must be a <body> child because #page-plan has overflow (x:hidden → y:auto),
+   and on iOS an overflow ancestor clips/contains position:fixed/sticky children,
+   which is why an in-#page-plan pinned bar showed on desktop but not on phone. */
+.plan-bar { display: flex; gap: 6px; margin-bottom: 14px; padding: 0; align-items: center; flex-wrap: nowrap; }
 .plan-bar-btn { background: var(--bg-3); border: 1px solid var(--border-light); color: var(--text); font-size: 12.5px; font-weight: 600; border-radius: 999px; padding: 8px 12px; display: inline-flex; align-items: center; gap: 5px; cursor: pointer; font-family: inherit; white-space: nowrap; -webkit-tap-highlight-color: transparent; transition: background .15s; }
 .plan-bar-btn:active { background: var(--bg-2); }
 .plan-bar-icon { width: 34px; padding: 8px 0; justify-content: center; font-weight: 800; flex-shrink: 0; }
-.plan-bar-top { display: none; margin-left: auto; color: var(--text-dim); flex-shrink: 0; }
-.plan-bar.pinned { position: fixed; left: 0; right: 0; z-index: 90; margin: 0; padding: 10px 16px; background: rgba(10, 14, 26, 0.92); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); animation: planBarSlide .22s ease; }
-.plan-bar.pinned .plan-bar-top { display: inline-flex; }
-@keyframes planBarSlide { from { transform: translateY(-10px); opacity: .35; } to { transform: translateY(0); opacity: 1; } }
+.plan-bar-top { margin-left: auto; color: var(--text-dim); flex-shrink: 0; }
+.plan-bar .plan-bar-top { display: none; }            /* in-flow bar: no Back-to-top (you're already at top) */
+.plan-bar-fixed { position: fixed; left: 0; right: 0; z-index: 90; margin: 0; padding: 10px 16px; background: rgba(10, 14, 26, 0.95); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); animation: planBarSlide .2s ease; }
+.plan-bar-fixed .plan-bar-top { display: inline-flex; }
+@keyframes planBarSlide { from { transform: translateY(-8px); opacity: .4; } to { transform: translateY(0); opacity: 1; } }
 
 .nav-menu-items {
   display: flex; flex-direction: column; gap: 1px;
@@ -7795,6 +7800,9 @@ function navigate(page) {
     if (typeof resetCoachViewport === 'function') resetCoachViewport(); // clear inline transforms
   }
   try { if (typeof closeNotifPanel === 'function') closeNotifPanel(); } catch (_) {}
+  // Hide the Plan action-bar fixed clone when leaving the Plan page (the
+  // IntersectionObserver only fires on scroll, not on navigation).
+  if (page !== 'plan') { const _pbf = document.getElementById('planBarFixed'); if (_pbf) _pbf.style.display = 'none'; }
 
   // Hide old landingNav, auth pages now have their own embedded nav
   const landingNav = document.getElementById('landingNav');
@@ -22420,7 +22428,7 @@ async function renderPlan() {
     ` : ''}
 
     ${hasPlan ? `
-    <div id="planBarSentinel"></div>
+    <div id="planBarSentinel" style="height:1px;"></div>
     <div class="plan-bar" id="planBar">
       <button class="plan-bar-btn" onclick="scrollToTodayWorkout()">📋 Today's workout</button>
       <button class="plan-bar-btn" onclick="openShareModal()">Share</button>
@@ -22703,51 +22711,35 @@ function scrollToTodayWorkout() {
 }
 function planScrollTop() { _planDoScroll(0); }
 
-let _planBarPinned = false;
-function _planBarOnScroll() {
-  const sentinel = document.getElementById('planBarSentinel');
-  const bar = document.getElementById('planBar');
-  if (!sentinel || !bar) return;
-  // Only act on the Plan page (the bar persists in #planContent across navigations).
-  const onPlan = document.getElementById('page-plan')?.classList.contains('active');
-  if (!onPlan) { if (_planBarPinned) _planBarUnpin(bar, sentinel); return; }
-  const navBottom = _planNavBottom();
-  const shouldPin = sentinel.getBoundingClientRect().top < navBottom;
-  if (shouldPin && !_planBarPinned) {
-    _planBarPinned = true;
-    sentinel.style.height = bar.offsetHeight + 'px'; // reserve space so content doesn't jump
-    bar.style.top = navBottom + 'px';
-    bar.classList.add('pinned');
-  } else if (!shouldPin && _planBarPinned) {
-    _planBarUnpin(bar, sentinel);
-  }
-}
-function _planBarUnpin(bar, sentinel) {
-  _planBarPinned = false;
-  bar.classList.remove('pinned');
-  bar.style.top = '';
-  if (sentinel) sentinel.style.height = '0px';
-}
-let _planBarListenerAttached = false;
+let _planBarObserver = null;
 function initPlanBar() {
-  // Reset pin state for the freshly-rendered bar, then ensure one scroll listener.
-  _planBarPinned = false;
   const bar = document.getElementById('planBar');
   const sentinel = document.getElementById('planBarSentinel');
-  if (bar) { bar.classList.remove('pinned'); bar.style.top = ''; }
-  if (sentinel) sentinel.style.height = '0px';
-  if (!_planBarListenerAttached) {
-    // Capture-phase + multiple targets: on mobile the app scrolls on <body>
-    // (body{overflow-y:auto}), and a plain window 'scroll' listener doesn't fire
-    // for body's scroll on iOS — so the bar never pinned on phone. Capture phase
-    // catches scroll from ANY element (it doesn't bubble but does capture), and
-    // we also bind body/documentElement directly as a belt-and-suspenders.
-    window.addEventListener('scroll', _planBarOnScroll, { capture: true, passive: true });
-    document.addEventListener('scroll', _planBarOnScroll, { capture: true, passive: true });
-    try { document.body.addEventListener('scroll', _planBarOnScroll, { passive: true }); } catch (_) {}
-    window.addEventListener('resize', _planBarOnScroll, { passive: true });
-    _planBarListenerAttached = true;
-  }
+  if (!bar || !sentinel) return;
+  const navBottom = _planNavBottom();
+
+  // Build/refresh a FIXED clone of the bar appended to <body> (NOT inside
+  // #page-plan, whose overflow ancestor makes iOS clip a fixed/sticky child —
+  // the reason the bar never appeared on phone). The clone shows once you scroll
+  // past the in-flow bar; it carries the same buttons + onclicks, plus Top.
+  let clone = document.getElementById('planBarFixed');
+  if (!clone) { clone = document.createElement('div'); clone.id = 'planBarFixed'; document.body.appendChild(clone); }
+  clone.className = 'plan-bar plan-bar-fixed';
+  clone.style.top = navBottom + 'px';
+  clone.style.display = 'none';
+  clone.innerHTML = bar.innerHTML; // same buttons (onclick attrs call the same globals)
+
+  if (_planBarObserver) { try { _planBarObserver.disconnect(); } catch (_) {} }
+  try {
+    // Show the fixed clone when the sentinel (just above the in-flow bar) scrolls
+    // above the nav line. IntersectionObserver tracks viewport intersection no
+    // matter which element scrolls (window / body / the page) — robust on iOS.
+    _planBarObserver = new IntersectionObserver((entries) => {
+      const onPlan = document.getElementById('page-plan')?.classList.contains('active');
+      for (const e of entries) clone.style.display = (!e.isIntersecting && onPlan) ? 'flex' : 'none';
+    }, { rootMargin: `-${navBottom + 1}px 0px 0px 0px`, threshold: 0 });
+    _planBarObserver.observe(sentinel);
+  } catch (_) { /* IO unsupported: in-flow bar still works, just no pinned clone */ }
 }
 
 // "?" popup — explains the self-building plan (moved off the page body).
