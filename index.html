@@ -513,6 +513,50 @@ body.on-landing #landingNav { display: none !important; }
 .training-tab.active { background: rgba(0, 229, 160, 0.14); color: var(--accent); }
 .training-tab:not(.active):active { background: rgba(255, 255, 255, 0.04); }
 
+/* ═══ PLAN FEED (day-by-day card stack, replaces the cramped month grid) ═══ */
+.pf-feed { margin-top: 4px; }
+.pf-day { display: flex; gap: 12px; position: relative; }
+.pf-rail { width: 44px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; padding-top: 2px; }
+.pf-chip { width: 44px; text-align: center; line-height: 1.05; }
+.pf-chip .dow { font-size: 10px; color: var(--text-mute); text-transform: uppercase; letter-spacing: .8px; font-weight: 700; }
+.pf-chip .num { font-size: 20px; font-weight: 800; letter-spacing: -.5px; }
+.pf-day.today .pf-chip .num, .pf-day.today .pf-chip .dow { color: var(--accent); }
+.pf-railline { flex: 1; width: 2px; background: var(--border); margin-top: 6px; border-radius: 2px; min-height: 8px; }
+.pf-day:last-child .pf-railline { display: none; }
+.pf-col { flex: 1; min-width: 0; padding-bottom: 14px; }
+
+.pf-card { background: var(--bg-2); border: 1px solid var(--border); border-radius: 16px; padding: 14px; margin-bottom: 8px; cursor: pointer; transition: border-color .15s; }
+.pf-card:active { border-color: var(--border-light); }
+.pf-card.done { border-color: rgba(0, 229, 160, .22); }
+.pf-card.rest { background: transparent; border-style: dashed; padding: 11px 14px; display: flex; align-items: center; gap: 10px; cursor: default; }
+.pf-crow { display: flex; align-items: center; gap: 11px; }
+.pf-ico { width: 38px; height: 38px; border-radius: 11px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+.pf-ico svg { width: 20px; height: 20px; stroke: #fff; stroke-width: 1.9; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.pf-meta { flex: 1; min-width: 0; }
+.pf-src { font-size: 10px; color: var(--text-mute); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 2px; }
+.pf-title { font-size: 14.5px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pf-tagrow { display: flex; align-items: center; gap: 8px; margin-top: 7px; flex-wrap: wrap; }
+.pf-tag { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; }
+.pf-dur { font-size: 12px; color: var(--text-dim); font-weight: 600; }
+.pf-check { margin-left: auto; color: var(--accent); font-size: 15px; font-weight: 800; flex-shrink: 0; }
+.pf-chev { margin-left: auto; color: var(--text-mute); font-size: 13px; flex-shrink: 0; align-self: center; }
+
+.pf-stats { display: flex; margin-top: 12px; border-top: 1px solid var(--border); padding-top: 11px; }
+.pf-stat { flex: 1; text-align: center; }
+.pf-stat .v { font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.pf-stat .l { font-size: 9.5px; color: var(--text-mute); text-transform: uppercase; letter-spacing: .5px; margin-top: 2px; }
+
+.pf-exp { margin-top: 13px; border-top: 1px solid var(--border); padding-top: 12px; }
+.pf-exp .desc { font-size: 13px; color: var(--text-dim); line-height: 1.55; white-space: pre-wrap; }
+.pf-exp .it { font-size: 12px; color: var(--text); margin-top: 10px; padding: 9px 11px; background: rgba(0,229,160,.06); border-left: 3px solid var(--accent); border-radius: 6px; }
+.pf-exp .acts { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.pf-exp .acts .btn { flex: 1; min-width: 130px; text-align: center; justify-content: center; }
+
+.pf-wkdiv { display: flex; align-items: center; gap: 10px; margin: 4px 0 16px; color: var(--text-mute); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; }
+.pf-wkdiv .ln { flex: 1; height: 1px; background: var(--border); }
+.pf-skipped { opacity: .6; }
+.pf-skipbadge { font-size: 10px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: rgba(234,179,8,.16); color: #eab308; }
+
 .nav-menu-items {
   display: flex; flex-direction: column; gap: 1px;
 }
@@ -22113,15 +22157,17 @@ async function renderPlan() {
     return;
   }
 
-  // Load planned workouts for this month
-  const monthStart = new Date(calMonth.getFullYear(), calMonth.getMonth(), 1);
-  const monthEnd = new Date(calMonth.getFullYear(), calMonth.getMonth() + 1, 0);
+  // Load planned workouts for the feed window: last 7 days through everything
+  // built ahead (the auto-extender keeps ~a month). Wider than the old month grid.
+  const _winStart = new Date(); _winStart.setDate(_winStart.getDate() - 10);
+  const _winEnd = new Date(); _winEnd.setDate(_winEnd.getDate() + 120);
 
   const { data: planned } = await sb.from('planned_workouts')
     .select('*')
     .eq('user_id', state.user.id)
-    .gte('scheduled_date', monthStart.toISOString().split('T')[0])
-    .lte('scheduled_date', monthEnd.toISOString().split('T')[0]);
+    .gte('scheduled_date', _winStart.toISOString().split('T')[0])
+    .lte('scheduled_date', _winEnd.toISOString().split('T')[0])
+    .order('scheduled_date', { ascending: true });
 
   // Find the LATEST scheduled workout overall to detect when "next week" should start
   const { data: latestPlanned } = await sb.from('planned_workouts')
@@ -22363,27 +22409,12 @@ async function renderPlan() {
       </div>
     ` : ''}
 
-    <div class="plan-header">
-      <div class="plan-month">
-        <button class="month-nav" onclick="changeMonth(-1)">←</button>
-        <div class="month-label">${calMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</div>
-        <button class="month-nav" onclick="changeMonth(1)">→</button>
-      </div>
-      <button class="btn ghost" style="padding: 8px 14px; font-size: 13px;" onclick="goToday()">Today</button>
+    <div class="plan-header" style="margin-bottom: 12px;">
+      <div style="font-size: 13px; color: var(--text-dim);">${hasPlan ? 'Your week, day by day. Tap a session for details.' : ''}</div>
+      <button class="btn ghost" style="padding: 8px 14px; font-size: 13px;" onclick="renderPlan()">Today</button>
     </div>
 
-    <div class="calendar">
-      <div class="cal-header-row">
-        <div class="cal-header-cell">Mon</div>
-        <div class="cal-header-cell">Tue</div>
-        <div class="cal-header-cell">Wed</div>
-        <div class="cal-header-cell">Thu</div>
-        <div class="cal-header-cell">Fri</div>
-        <div class="cal-header-cell">Sat</div>
-        <div class="cal-header-cell">Sun</div>
-      </div>
-      <div class="cal-grid" id="calGrid"></div>
-    </div>
+    <div class="pf-feed" id="planFeed"></div>
 
     ${hasPlan ? `
       ${planLockedByLthr ? `
@@ -22481,7 +22512,7 @@ async function renderPlan() {
     </div>
   `;
 
-  renderCalendarGrid(planned || []);
+  renderPlanDayList(planned || []);
   // Plan Management help auto-open (only on first visit per user)
   initPlanMgmtHelpAutoOpen();
   // #9: keep ~a month of plan built ahead, automatically (fire-and-forget;
@@ -22533,6 +22564,188 @@ function _findActualForPlanned(pw) {
     source: w.source || w._source || null,
     extraCount: candidates.length - 1, // other same-sport sessions that day
   };
+}
+
+// ═══ PLAN FEED — day-by-day card stack (replaces the month grid) ═══
+const _PF_ICON = {
+  bike: '<circle cx="6" cy="17" r="3.4"/><circle cx="18" cy="17" r="3.4"/><path d="M6 17l4-7h5l3 7M9 10h5"/>',
+  run: '<circle cx="14" cy="5" r="2"/><path d="M13 8l-3 4 3 2 1 5M10 12l-4 1M14 14l3 2"/>',
+  swim: '<circle cx="17" cy="7.5" r="1.8"/><path d="M4 17c2-1.6 3.5-1.6 5.5 0s3.5 1.6 5.5 0 3.5-1.6 5.5 0M6 12l5 2 3-3"/>',
+  strength: '<path d="M4 9v6M7 7v10M17 7v10M20 9v6M7 12h10"/>',
+  rest: '<path d="M19 13.5A7 7 0 1 1 10.5 5 5.5 5.5 0 0 0 19 13.5z"/>',
+};
+const _PF_RGB = { easy: '34,197,94', endur: '45,212,191', tempo: '234,179,8', thr: '251,146,60', vo2: '239,68,68', str: '167,139,250', rest: '90,100,120' };
+function _pfSportKey(sport) {
+  const s = (typeof normalizeSport === 'function') ? normalizeSport(sport) : (sport || '');
+  if (s === 'strength' || s === 'gym') return 'strength';
+  if (['run', 'bike', 'swim', 'rest'].includes(s)) return s;
+  if (s === 'rest') return 'rest';
+  return 'run';
+}
+// Map a planned workout to an intensity tag {label, key(colour)}.
+function _pfTagFor(w) {
+  const t = String(w.workout_type || '').toLowerCase().replace(/[_\s]+/g, '');
+  if (w.sport === 'rest' || t === 'rest') return { label: 'Rest', key: 'rest' };
+  if (w.sport === 'strength' || w.sport === 'gym' || t.includes('strength') || t.includes('gym')) return { label: 'Strength', key: 'str' };
+  if (t.includes('vo2') || t.includes('interval') || t.includes('speed') || t.includes('rep')) return { label: 'VO2', key: 'vo2' };
+  if (t.includes('threshold') || t.includes('racepace') || t.includes('race') || t.includes('brick')) return { label: t.includes('brick') ? 'Brick' : 'Threshold', key: 'thr' };
+  if (t.includes('sweetspot') || t.includes('tempo')) return { label: t.includes('sweetspot') ? 'Sweet Spot' : 'Tempo', key: 'tempo' };
+  if (t.includes('long')) return { label: 'Long', key: 'endur' };
+  if (t.includes('endur')) return { label: 'Endurance', key: 'endur' };
+  if (t.includes('recovery') || t.includes('easy') || t.includes('drill') || t.includes('mobility')) return { label: 'Easy', key: 'easy' };
+  return { label: 'Easy', key: 'easy' };
+}
+function _pfPrettyTitle(w) {
+  if (w.sport === 'rest') return 'Rest day';
+  const sportLabels = { run: 'Run', bike: 'Bike', swim: 'Swim', strength: 'Strength' };
+  const raw = (w.workout_type || '').replace(/[_-]+/g, ' ').trim();
+  const pretty = raw ? raw.replace(/\b\w/g, c => c.toUpperCase()) : (sportLabels[w.sport] || w.sport || 'Session');
+  // Avoid "Strength Strength"; for run/bike/swim append sport if the type doesn't already say it
+  const low = pretty.toLowerCase();
+  const sp = sportLabels[w.sport];
+  if (sp && !low.includes(sp.toLowerCase()) && w.sport !== 'strength') return `${pretty} ${sp}`;
+  return pretty;
+}
+function _pfDurLabel(w) {
+  if (w.duration_minutes) {
+    const m = w.duration_minutes;
+    return m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? ' ' + (m % 60) + 'm' : ''}` : `${m}m`;
+  }
+  if (w.distance_km) return `${parseFloat(w.distance_km).toFixed(1)} km`;
+  return '';
+}
+
+function _pfCardHTML(w) {
+  const sk = _pfSportKey(w.sport);
+  if (w.sport === 'rest') {
+    return `<div class="pf-card rest"><div class="pf-ico" style="background:rgba(${_PF_RGB.rest},.9);width:30px;height:30px;border-radius:9px"><svg viewBox="0 0 24 24">${_PF_ICON.rest}</svg></div><div style="font-size:13px;color:var(--text-dim);font-weight:600">Rest day · full recovery</div></div>`;
+  }
+  const act = w._actual;
+  const done = !!act;
+  const tag = _pfTagFor(w);
+  const icoBg = `background:rgba(${_PF_RGB[tag.key] || _PF_RGB.easy},.9)`;
+  const eid = `pfexp-${w.id}`;
+
+  if (done) {
+    const hr = act.avgHr ? `${act.avgHr}` : '—';
+    const dist = (act.distanceKm != null && act.distanceKm > 0) ? `${act.distanceKm.toFixed(1)}km` : '—';
+    const dur = (act.durationMin != null) ? `${act.durationMin}m` : '—';
+    return `<div class="pf-card done">
+      <div class="pf-crow" onclick="togglePlanCard('${eid}', this)">
+        <div class="pf-ico" style="${icoBg}"><svg viewBox="0 0 24 24">${_PF_ICON[sk]}</svg></div>
+        <div class="pf-meta"><div class="pf-src">${act.source === 'file_upload' ? 'Uploaded' : 'via Strava'} · completed</div><div class="pf-title">${escapeHtml(_pfPrettyTitle(w))}</div></div>
+        <div class="pf-check">✓</div>
+      </div>
+      <div class="pf-stats">
+        <div class="pf-stat"><div class="v">${dur}</div><div class="l">Time</div></div>
+        <div class="pf-stat"><div class="v">${dist}</div><div class="l">Dist</div></div>
+        <div class="pf-stat"><div class="v">${hr}</div><div class="l">Avg HR</div></div>
+      </div>
+      <div class="pf-exp" id="${eid}" style="display:none">
+        ${w.description ? `<div class="desc">${escapeHtml(w.description)}</div>` : ''}
+        <div class="acts">
+          <button class="btn" onclick="event.stopPropagation(); viewHistoryDetail('${act._dbId}')">📊 View full analysis</button>
+          <button class="btn ghost" onclick="event.stopPropagation(); askCoachAboutWorkout('${w.id}')">💬 Ask Coach</button>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  // planned (not yet done)
+  const skipped = !!w.skipped;
+  return `<div class="pf-card ${skipped ? 'pf-skipped' : ''}">
+    <div class="pf-crow" onclick="togglePlanCard('${eid}', this)">
+      <div class="pf-ico" style="${icoBg}"><svg viewBox="0 0 24 24">${_PF_ICON[sk]}</svg></div>
+      <div class="pf-meta"><div class="pf-title">${escapeHtml(_pfPrettyTitle(w))}</div>
+        <div class="pf-tagrow"><span class="pf-tag" style="background:rgba(${_PF_RGB[tag.key]},.16);color:rgb(${_PF_RGB[tag.key]})">${tag.label}</span>${_pfDurLabel(w) ? `<span class="pf-dur">${_pfDurLabel(w)}</span>` : ''}${skipped ? '<span class="pf-skipbadge">Skipped</span>' : ''}</div>
+      </div>
+      <div class="pf-chev">›</div>
+    </div>
+    <div class="pf-exp" id="${eid}" style="display:none">
+      ${w.description ? `<div class="desc">${escapeHtml(w.description)}</div>` : ''}
+      ${w.intensity_target ? `<div class="it"><strong>Target:</strong> ${escapeHtml(w.intensity_target)}</div>` : ''}
+      <div class="acts">
+        <button class="btn" onclick="event.stopPropagation(); askCoachAboutWorkout('${w.id}')">💬 Ask Coach about this</button>
+        ${skipped
+          ? `<button class="btn ghost" onclick="event.stopPropagation(); undoSkipWorkout('${w.id}')">↶ Un-skip</button>`
+          : `<button class="btn ghost" onclick="event.stopPropagation(); openSkipWorkoutMenu('${w.id}')">⏭️ Skip</button>
+             <button class="btn ghost" onclick="event.stopPropagation(); openSwapWorkoutMenu('${w.id}', '${w.scheduled_date}')">📅 Move</button>`}
+      </div>
+    </div>
+  </div>`;
+}
+
+function togglePlanCard(eid, headerEl) {
+  const el = document.getElementById(eid);
+  if (!el) return;
+  const open = el.style.display !== 'none';
+  el.style.display = open ? 'none' : 'block';
+  const chev = headerEl && headerEl.querySelector('.pf-chev');
+  if (chev) chev.style.transform = open ? '' : 'rotate(90deg)';
+}
+
+// Build the day-by-day feed: last 7 days through everything built ahead, one row
+// per day, grouped by Monday-week, opens scrolled to today.
+function renderPlanDayList(plannedWorkouts) {
+  const feed = document.getElementById('planFeed');
+  if (!feed) return;
+
+  currentPlannedWorkouts = {};
+  (plannedWorkouts || []).forEach(pw => {
+    try { pw._actual = _findActualForPlanned(pw); } catch (_) { pw._actual = null; }
+    if (pw._actual) pw.completed = true;
+    if (!currentPlannedWorkouts[pw.scheduled_date]) currentPlannedWorkouts[pw.scheduled_date] = [];
+    currentPlannedWorkouts[pw.scheduled_date].push(pw);
+  });
+
+  const dates = Object.keys(currentPlannedWorkouts).sort();
+  if (dates.length === 0) { feed.innerHTML = `<div style="padding:24px 0;text-align:center;color:var(--text-dim);font-size:13px;">No sessions scheduled yet.</div>`; return; }
+
+  const toDate = (s) => new Date(s + 'T12:00:00');
+  const todayStr = (typeof getClientToday === 'function') ? getClientToday() : new Date().toISOString().split('T')[0];
+  // Window: from max(first scheduled, today-7d) to the last scheduled day.
+  const windowStart = (() => { const d = toDate(todayStr); d.setDate(d.getDate() - 7); const s = d.toISOString().split('T')[0]; return s < dates[0] ? dates[0] : s; })();
+  const windowEnd = dates[dates.length - 1];
+
+  // Monday-of-week key for dividers.
+  const mondayOf = (s) => { const d = toDate(s); const dow = (d.getDay() + 6) % 7; d.setDate(d.getDate() - dow); return d.toISOString().split('T')[0]; };
+  const thisMonday = mondayOf(todayStr);
+  const wkLabel = (mon) => {
+    if (mon === thisMonday) return 'This week';
+    const diff = Math.round((toDate(mon) - toDate(thisMonday)) / (7 * 86400000));
+    if (diff === 7) return 'Next week';
+    if (diff === -7) return 'Last week';
+    return 'Week of ' + toDate(mon).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+
+  let html = '';
+  let lastMon = null;
+  let todayRendered = false;
+  const cur = toDate(windowStart);
+  const end = toDate(windowEnd);
+  while (cur <= end) {
+    const ds = cur.toISOString().split('T')[0];
+    const items = currentPlannedWorkouts[ds];
+    if (items && items.length) {
+      const mon = mondayOf(ds);
+      if (mon !== lastMon) { html += `<div class="pf-wkdiv"><div class="ln"></div>${wkLabel(mon)}<div class="ln"></div></div>`; lastMon = mon; }
+      const isToday = ds === todayStr;
+      if (isToday) todayRendered = true;
+      const dd = toDate(ds);
+      html += `<div class="pf-day${isToday ? ' today' : ''}"${isToday ? ' id="pf-today"' : ''}>
+        <div class="pf-rail"><div class="pf-chip"><div class="dow">${dd.toLocaleDateString('en-US', { weekday: 'short' })}</div><div class="num">${dd.getDate()}</div></div><div class="pf-railline"></div></div>
+        <div class="pf-col">${items.map(_pfCardHTML).join('')}</div>
+      </div>`;
+    }
+    cur.setDate(cur.getDate() + 1);
+  }
+  feed.innerHTML = html;
+
+  // Open scrolled to today (or the nearest upcoming day).
+  setTimeout(() => {
+    const t = document.getElementById('pf-today') || feed.querySelector('.pf-day');
+    if (t) { const y = t.getBoundingClientRect().top + window.scrollY - 80; window.scrollTo({ top: Math.max(0, y), behavior: 'instant' }); }
+  }, 60);
 }
 
 function renderCalendarGrid(plannedWorkouts) {
