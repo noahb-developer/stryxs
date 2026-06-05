@@ -557,6 +557,16 @@ body.on-landing #landingNav { display: none !important; }
 .pf-skipped { opacity: .6; }
 .pf-skipbadge { font-size: 10px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: rgba(234,179,8,.16); color: #eab308; }
 
+/* Plan action bar — pins to the top on scroll, slides back on the way up. */
+.plan-bar { display: flex; gap: 8px; margin-bottom: 14px; align-items: center; flex-wrap: wrap; }
+.plan-bar-btn { background: var(--bg-3); border: 1px solid var(--border-light); color: var(--text); font-size: 13px; font-weight: 600; border-radius: 999px; padding: 8px 14px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-family: inherit; white-space: nowrap; -webkit-tap-highlight-color: transparent; transition: background .15s; }
+.plan-bar-btn:active { background: var(--bg-2); }
+.plan-bar-icon { width: 36px; padding: 8px 0; justify-content: center; font-weight: 800; }
+.plan-bar-top { display: none; margin-left: auto; color: var(--text-dim); }
+.plan-bar.pinned { position: fixed; left: 0; right: 0; z-index: 90; margin: 0; padding: 10px 16px; background: rgba(10, 14, 26, 0.92); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); animation: planBarSlide .22s ease; }
+.plan-bar.pinned .plan-bar-top { display: inline-flex; }
+@keyframes planBarSlide { from { transform: translateY(-10px); opacity: .35; } to { transform: translateY(0); opacity: 1; } }
+
 .nav-menu-items {
   display: flex; flex-direction: column; gap: 1px;
 }
@@ -22409,63 +22419,34 @@ async function renderPlan() {
       </div>
     ` : ''}
 
-    <div class="plan-header" style="margin-bottom: 12px;">
-      <div style="font-size: 13px; color: var(--text-dim);">${hasPlan ? 'Your week, day by day. Tap a session for details.' : ''}</div>
-      <button class="btn ghost" style="padding: 8px 14px; font-size: 13px;" onclick="renderPlan()">Today</button>
+    ${hasPlan ? `
+    <div id="planBarSentinel"></div>
+    <div class="plan-bar" id="planBar">
+      <button class="plan-bar-btn" onclick="scrollToTodayWorkout()">📋 Today's workout</button>
+      <button class="plan-bar-btn" onclick="openShareModal()">↗ Share</button>
+      <button class="plan-bar-btn plan-bar-icon" onclick="openPlanInfoPopup()" aria-label="How the plan works">?</button>
+      <button class="plan-bar-btn plan-bar-top" id="planBarTop" onclick="planScrollTop()">↑ Top</button>
     </div>
+    ` : ''}
 
     <div class="pf-feed" id="planFeed"></div>
 
-    ${hasPlan ? `
-      ${planLockedByLthr ? `
-        <div style="margin-top: 24px; padding: 20px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 14px;">
-          <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
-            <div style="font-size: 20px;">📅</div>
-            <div>
-              <div style="font-weight: 700; font-size: 15px;">Plan paused</div>
-              <div style="font-size: 13px; color: var(--text-dim);">Complete your LTHR tests + enter values in Settings, then your plan builds itself automatically.</div>
-            </div>
-          </div>
-          <button class="btn" style="width: 100%; font-size: 13px;" onclick="navigate('settings')">Enter LTHR in Settings →</button>
-        </div>
-      ` : (isUserPro() ? `
-        <div style="margin-top: 24px; padding: 18px 20px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 14px;">
-          <div style="display: flex; align-items: center; gap: 12px;">
-            <div style="font-size: 20px;">♾️</div>
-            <div style="flex: 1; min-width: 0;">
-              <div style="font-weight: 700; font-size: 15px;">Your plan builds itself</div>
-              <div style="font-size: 13px; color: var(--text-dim); line-height: 1.5;">Coach keeps about a month mapped out ahead and adjusts upcoming weeks to your recent training. No button needed.</div>
-            </div>
-          </div>
-          <div style="margin-top: 10px; text-align: right;"><a style="font-size: 11px; color: var(--text-mute); cursor: pointer; text-decoration: underline;" onclick="generateNextWeek()">Build the next week now →</a></div>
-        </div>
-      ` : `
-        <div style="margin-top: 24px; padding: 20px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 14px;">
-          <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
-            <div style="font-size: 20px;">♾️</div>
-            <div>
-              <div style="font-weight: 700; font-size: 15px;">Keep your plan going</div>
-              <div style="font-size: 13px; color: var(--text-dim);">Free includes your starter week. Upgrade and Coach builds and adjusts a fresh month ahead, automatically.</div>
-            </div>
-          </div>
-          <button class="btn" onclick="navigate('upgrade')" style="width: 100%; opacity: 0.95;">⭐ Upgrade for an ongoing plan</button>
-        </div>
-      `)}
-
-      <div style="margin-top: 14px; padding: 20px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 14px;">
+    ${hasPlan && planLockedByLthr ? `
+      <div style="margin-top: 18px; padding: 20px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 14px;">
         <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
-          <div style="font-size: 20px;">🔗</div>
+          <div style="font-size: 20px;">📅</div>
           <div>
-            <div style="font-weight: 700; font-size: 15px;">Share your plan</div>
-            <div style="font-size: 13px; color: var(--text-dim);">Send a public read-only link to your coach, friends, or training partners.</div>
+            <div style="font-weight: 700; font-size: 15px;">Plan paused</div>
+            <div style="font-size: 13px; color: var(--text-dim);">Complete your LTHR tests + enter values in Settings, then your plan builds itself automatically.</div>
           </div>
         </div>
-        <button class="btn ghost" onclick="openShareModal()" style="width: 100%;">Share plan →</button>
+        <button class="btn" style="width: 100%; font-size: 13px;" onclick="navigate('settings')">Enter LTHR in Settings →</button>
       </div>
     ` : ''}
   `;
 
   renderPlanDayList(planned || []);
+  if (typeof initPlanBar === 'function') initPlanBar();
   // #9: keep ~a month of plan built ahead, automatically (fire-and-forget;
   // self-throttles + in-flight lock, so re-renders it triggers won't loop).
   try { if (typeof maybeAutoExtendPlan === 'function') maybeAutoExtendPlan(); } catch (_) {}
@@ -22692,12 +22673,89 @@ function renderPlanDayList(plannedWorkouts) {
     cur.setDate(cur.getDate() + 1);
   }
   feed.innerHTML = html;
+  // Land at the TOP of the Plan page (so the Plan/Race-Plan tabs + action bar are
+  // right there). The "Today's workout" button jumps to today on demand.
+}
 
-  // Open scrolled to today (or the nearest upcoming day).
-  setTimeout(() => {
-    const t = document.getElementById('pf-today') || feed.querySelector('.pf-day');
-    if (t) { const y = t.getBoundingClientRect().top + window.scrollY - 80; window.scrollTo({ top: Math.max(0, y), behavior: 'instant' }); }
-  }, 60);
+// ─── Plan action bar (Today's workout / Share / ? / Back to top) ───
+function _planNavBottom() {
+  const nav = document.querySelector('.nav');
+  return nav ? Math.max(0, nav.getBoundingClientRect().bottom) : 56;
+}
+function scrollToTodayWorkout() {
+  const t = document.getElementById('pf-today') || document.querySelector('#planFeed .pf-day');
+  if (!t) return;
+  const y = t.getBoundingClientRect().top + window.scrollY - _planNavBottom() - 64;
+  window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
+}
+function planScrollTop() { window.scrollTo({ top: 0, behavior: 'smooth' }); }
+
+let _planBarPinned = false;
+function _planBarOnScroll() {
+  const sentinel = document.getElementById('planBarSentinel');
+  const bar = document.getElementById('planBar');
+  if (!sentinel || !bar) return;
+  // Only act on the Plan page (the bar persists in #planContent across navigations).
+  const onPlan = document.getElementById('page-plan')?.classList.contains('active');
+  if (!onPlan) { if (_planBarPinned) _planBarUnpin(bar, sentinel); return; }
+  const navBottom = _planNavBottom();
+  const shouldPin = sentinel.getBoundingClientRect().top < navBottom;
+  if (shouldPin && !_planBarPinned) {
+    _planBarPinned = true;
+    sentinel.style.height = bar.offsetHeight + 'px'; // reserve space so content doesn't jump
+    bar.style.top = navBottom + 'px';
+    bar.classList.add('pinned');
+  } else if (!shouldPin && _planBarPinned) {
+    _planBarUnpin(bar, sentinel);
+  }
+}
+function _planBarUnpin(bar, sentinel) {
+  _planBarPinned = false;
+  bar.classList.remove('pinned');
+  bar.style.top = '';
+  if (sentinel) sentinel.style.height = '0px';
+}
+let _planBarListenerAttached = false;
+function initPlanBar() {
+  // Reset pin state for the freshly-rendered bar, then ensure one scroll listener.
+  _planBarPinned = false;
+  const bar = document.getElementById('planBar');
+  const sentinel = document.getElementById('planBarSentinel');
+  if (bar) { bar.classList.remove('pinned'); bar.style.top = ''; }
+  if (sentinel) sentinel.style.height = '0px';
+  if (!_planBarListenerAttached) {
+    window.addEventListener('scroll', _planBarOnScroll, { passive: true });
+    window.addEventListener('resize', _planBarOnScroll, { passive: true });
+    _planBarListenerAttached = true;
+  }
+}
+
+// "?" popup — explains the self-building plan (moved off the page body).
+function openPlanInfoPopup() {
+  const pro = (typeof isUserPro === 'function') ? isUserPro() : false;
+  const isDesktop = window.innerWidth > 720;
+  const modal = document.createElement('div');
+  modal.id = 'planInfoModal';
+  modal.style.cssText = `position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:99999;display:flex;align-items:${isDesktop ? 'center' : 'flex-end'};justify-content:center;padding:${isDesktop ? '20px' : '0'};`;
+  modal.innerHTML = `
+    <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:${isDesktop ? '18px' : '22px 22px 0 0'};padding:24px 20px calc(24px + var(--safe-bottom, 0px));max-width:460px;width:100%;max-height:84vh;overflow-y:auto;">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
+        <div style="font-size:30px;">♾️</div>
+        <div style="font-size:19px;font-weight:800;letter-spacing:-.3px;">Your plan builds itself</div>
+      </div>
+      <div style="font-size:14px;color:var(--text-dim);line-height:1.6;">
+        <p style="margin:0 0 12px;">Coach keeps about <strong style="color:var(--text);">a month of training mapped out ahead</strong> of you and adds the next block automatically as you go — there's no button to tap.</p>
+        <p style="margin:0 0 12px;">Each new week is <strong style="color:var(--text);">adjusted to how your training is actually going</strong>. If your recent load runs high or your easy sessions start drifting, Coach eases the upcoming week and tells you in chat — reply there to push on or take the lighter option.</p>
+        <p style="margin:0 0 12px;">As days pass, finished days roll off the top. Completed sessions show a ✓ with your real numbers; upcoming ones show the plan. Tap any card to expand it.</p>
+        ${pro ? '' : '<p style="margin:0 0 12px;color:var(--accent);">Ongoing auto-built weeks are a Pro feature — free includes your starter week.</p>'}
+      </div>
+      <div style="display:flex;gap:8px;margin-top:18px;">
+        ${pro ? '' : `<button class="btn" style="flex:1;" onclick="document.getElementById('planInfoModal').remove(); navigate('upgrade')">⭐ Upgrade</button>`}
+        <button class="btn ${pro ? '' : 'ghost'}" style="flex:1;" onclick="document.getElementById('planInfoModal').remove()">Got it</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
 }
 
 function renderCalendarGrid(plannedWorkouts) {
