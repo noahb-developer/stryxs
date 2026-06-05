@@ -8039,7 +8039,7 @@ async function buildNotifications() {
     for (const w of (ws || [])) {
       const sport = (w.sport || w.workout_data?.sport || 'workout');
       const cls = w.activity_classification || w.workout_data?.activity_classification || 'unclassified';
-      const ico = _NOTIF_SPORT_EMOJI[sport.toLowerCase()] || '⚡';
+      const ico = (typeof _sportIconHTML === 'function') ? _sportIconHTML(sport, 30) : (_NOTIF_SPORT_EMOJI[sport.toLowerCase()] || '⚡');
       const wid = String(w.id);
       const src = w.workout_data?.source;
       if (cls === 'unclassified') {
@@ -8685,7 +8685,7 @@ function renderTodaysAnalysisCard(w, sportEmojis, idx) {
   return `
     <div class="todays-analysis-wrap" data-workout-idx="${idx}">
       <div class="todays-analysis-card" onclick="toggleTodaysAnalysis(${idx}, this)" style="display: flex; align-items: center; gap: 14px; padding: 14px 16px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 12px; cursor: pointer; transition: all 0.15s;">
-        <div style="font-size: 22px; flex-shrink: 0;">${emoji}</div>
+        ${typeof _sportIconHTML === 'function' ? _sportIconHTML(sport, 38) : `<div style="font-size: 22px; flex-shrink: 0;">${emoji}</div>`}
         <div style="flex: 1; min-width: 0;">
           <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 2px;">
             <div style="font-weight: 600; color: var(--text); font-size: 14px; text-transform: capitalize;">${escapeHtml(sport || 'workout')}</div>
@@ -11740,7 +11740,7 @@ function renderSummaryWorkout(a) {
   return `
     <div class="analysis-card">
       <div class="analysis-hero">
-        <div class="workout-sport">${a.icon || '⚡'} ${sportLabel}${sourceBadge}</div>
+        <div class="workout-sport" style="display: flex; align-items: center; gap: 8px;">${typeof _sportIconHTML === 'function' ? _sportIconHTML(a.sport, 28) : (a.icon || '⚡')}<span>${sportLabel}${sourceBadge}</span></div>
         <div class="workout-name">${a.name || a.type || sportLabel}</div>
         <div class="workout-meta">
           ${a.distance > 0 ? `<span>📍 ${formatDistance(a.distance, 2)}</span>` : ''}
@@ -12316,7 +12316,7 @@ async function renderDashboard() {
           const showDistance = k !== 'strength' && k !== 'other' && g.distance > 0;
           return `
             <div onclick="navigate('history')" style="display: flex; align-items: center; gap: 14px; padding: 14px 16px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 12px; cursor: pointer; transition: all 0.15s;" onmouseover="this.style.borderColor='var(--border-light)'" onmouseout="this.style.borderColor='var(--border)'">
-              <div style="font-size: 22px; flex-shrink: 0;">${emoji}</div>
+              ${typeof _sportIconHTML === 'function' ? _sportIconHTML(k, 38) : `<div style="font-size: 22px; flex-shrink: 0;">${emoji}</div>`}
               <div style="flex: 1; min-width: 0;">
                 <div style="font-weight: 600; color: var(--text); font-size: 15px;">${label}</div>
                 <div style="font-size: 12px; color: var(--text-dim); margin-top: 2px;">
@@ -13045,7 +13045,7 @@ function renderPaceSpeedTrendCard() {
     return `
       <div style="display: flex; align-items: center; gap: 12px; padding: 10px 0; ${r === rows[rows.length - 1] ? '' : 'border-bottom: 1px solid var(--border);'}">
         <div style="display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0;">
-          <span style="font-size: 16px;">${r.icon}</span>
+          ${typeof _sportIconHTML === 'function' ? _sportIconHTML(r.key, 30) : `<span style="font-size: 16px;">${r.icon}</span>`}
           <div style="min-width: 0;">
             <div style="font-size: 13px; font-weight: 600; color: var(--text);">${r.label}</div>
             <div style="font-size: 11px; color: var(--text-dim); font-family: 'JetBrains Mono', monospace;">${cur}</div>
@@ -22521,19 +22521,22 @@ const _PF_ICON = {
   swim: '<path d="M15 9a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"/><path d="M6 11l4 -2l3.5 3l-1.5 2"/><path d="M3 16.5a2.4 2.4 0 0 0 1 .25a2.4 2.4 0 0 0 2 -1a2.4 2.4 0 0 1 2 -1a2.4 2.4 0 0 1 2 1a2.4 2.4 0 0 0 2 1a2.4 2.4 0 0 0 2 -1a2.4 2.4 0 0 1 2 -1a2.4 2.4 0 0 1 2 1a2.4 2.4 0 0 0 2 1a2.4 2.4 0 0 0 1 -.25"/><path d="M3 20a2.4 2.4 0 0 0 1 .25a2.4 2.4 0 0 0 2 -1a2.4 2.4 0 0 1 2 -1a2.4 2.4 0 0 1 2 1a2.4 2.4 0 0 0 2 1a2.4 2.4 0 0 0 2 -1a2.4 2.4 0 0 1 2 -1a2.4 2.4 0 0 1 2 1a2.4 2.4 0 0 0 2 1a2.4 2.4 0 0 0 1 -.25"/>',
   strength: '<path d="M4 9v6M7 7v10M17 7v10M20 9v6M7 12h10"/>',
   rest: '<path d="M19 13.5A7 7 0 1 1 10.5 5 5.5 5.5 0 0 0 19 13.5z"/>',
+  // "other" / cross-training — a clean activity-pulse line.
+  other: '<path d="M3 12h3.5l2-5.5 3.5 11 2.5-7 1.4 1.5H21"/>',
 };
 const _PF_RGB = { easy: '34,197,94', endur: '45,212,191', tempo: '234,179,8', thr: '251,146,60', vo2: '239,68,68', str: '167,139,250', rest: '90,100,120' };
 function _pfSportKey(sport) {
-  const s = (typeof normalizeSport === 'function') ? normalizeSport(sport) : (sport || '');
-  if (s === 'strength' || s === 'gym') return 'strength';
-  if (['run', 'bike', 'swim', 'rest'].includes(s)) return s;
-  if (s === 'rest') return 'rest';
-  return 'run';
+  const s = String((typeof normalizeSport === 'function') ? normalizeSport(sport) : (sport || '')).toLowerCase();
+  if (s === 'strength' || s === 'gym' || s === 'weights') return 'strength';
+  if (['run', 'running', 'bike', 'cycling', 'swim', 'swimming', 'rest'].includes(s)) {
+    return s === 'running' ? 'run' : s === 'cycling' ? 'bike' : s === 'swimming' ? 'swim' : s;
+  }
+  return 'other';
 }
 // Reusable tinted sport-icon box (same clean glyphs as the plan feed) — use
 // anywhere we previously showed a sport emoji (dashboard today card, history…).
 // Fixed per-sport colours (water-blue swim, etc.) since there's no intensity context.
-const _SPORT_RGB = { run: '34,197,94', bike: '251,146,60', swim: '56,160,255', strength: '167,139,250', rest: '90,100,120', other: '90,100,120' };
+const _SPORT_RGB = { run: '34,197,94', bike: '251,146,60', swim: '56,160,255', strength: '167,139,250', rest: '113,123,143', other: '45,212,191' };
 function _sportIconHTML(sport, px) {
   const k = _pfSportKey(sport);
   const glyph = _PF_ICON[k] || _PF_ICON.run;
