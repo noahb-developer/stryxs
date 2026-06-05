@@ -2756,12 +2756,14 @@ body.coach-chat-active .chat-msg:not(.user) .msg-turn-head {
   font-size: 11px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase;
   color: var(--text-mute); margin-bottom: 9px;
 }
-body.coach-chat-active .chat-msg:not(.user) .msg-turn-dot {
-  width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex-shrink: 0;
+body.coach-chat-active .chat-msg:not(.user) .msg-turn-spark {
+  width: 13px; height: 13px; fill: var(--accent); flex-shrink: 0;
+  filter: drop-shadow(0 0 4px rgba(0, 229, 160, 0.35));
 }
-/* A hairline divider where two Coach messages meet, extra separation. */
+/* No hairline between coach messages — the "Coach" tag + spacing separate them
+   cleanly (RestOrTrain-style), so it reads like a capable assistant, not a list. */
 body.coach-chat-active .chat-msg:not(.user) + .chat-msg:not(.user) {
-  border-top: 1px solid var(--border); padding-top: 22px;
+  margin-top: 6px;
 }
 /* Athlete messages: keep a bubble, right-aligned, neutral surface */
 body.coach-chat-active .chat-msg.user { align-self: flex-end; max-width: 84%; gap: 0; }
@@ -17408,7 +17410,9 @@ function closePhotoLightbox() {
 function _lightboxKeyHandler(e) { if (e.key === 'Escape') closePhotoLightbox(); }
 
 function renderMsg(role, content, contextType = null, msgId = null, imageUrl = null) {
-  const avatar = role === 'coach' ? '🧠' : (state.user?.name?.[0]?.toUpperCase() || 'A');
+  const avatar = role === 'coach'
+    ? '<svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:var(--accent)" aria-hidden="true"><path d="M12 2.5c.5 4.2 1.8 5.5 6 6-4.2.5-5.5 1.8-6 6-.5-4.2-1.8-5.5-6-6 4.2-.5 5.5-1.8 6-6z"/></svg>'
+    : (state.user?.name?.[0]?.toUpperCase() || 'A');
   const formatted = role === 'coach' ? formatMarkdown(content) : escapeHtml(content);
   // When the row carries a real image URL, suppress the legacy media-marker
   // captions ("📷 Photo" / "📄 PDF") that we save for back-compat — they were
@@ -17452,7 +17456,7 @@ function renderMsg(role, content, contextType = null, msgId = null, imageUrl = n
   // Small turn label above each Coach message so consecutive boxless replies are
   // clearly separated (you can see where one message ends and the next begins).
   const turnHead = role === 'coach'
-    ? `<div class="msg-turn-head"><span class="msg-turn-dot"></span>Coach</div>`
+    ? `<div class="msg-turn-head"><svg class="msg-turn-spark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5c.5 4.2 1.8 5.5 6 6-4.2.5-5.5 1.8-6 6-.5-4.2-1.8-5.5-6-6 4.2-.5 5.5-1.8 6-6z"/></svg>Coach</div>`
     : '';
   return `
     <div class="chat-msg ${role === 'coach' ? '' : 'user'}"${msgId ? ` data-msg-id="${msgId}"` : ''}>
