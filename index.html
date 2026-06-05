@@ -22463,58 +22463,9 @@ async function renderPlan() {
         <button class="btn ghost" onclick="openShareModal()" style="width: 100%;">Share plan →</button>
       </div>
     ` : ''}
-
-    <div class="panel" style="margin-top: 14px; border-color: rgba(239, 68, 68, 0.15);">
-      <div class="panel-header" style="position: relative;">
-        <div>
-          <div class="panel-title">Plan Management</div>
-          <div class="panel-sub">Change or reset your current plan</div>
-        </div>
-        <button onclick="togglePlanMgmtHelp()" id="planMgmtHelpBtn" style="position: absolute; top: 0; right: 0; background: var(--bg-3); border: 1px solid var(--border); border-radius: 50%; width: 28px; height: 28px; color: var(--text-dim); font-size: 14px; cursor: pointer; padding: 0; display: flex; align-items: center; justify-content: center; flex-shrink: 0;" title="What do these do?">?</button>
-      </div>
-      <div id="planMgmtHelp" style="display: none; padding: 14px 16px; background: rgba(0, 255, 163, 0.04); border: 1px solid rgba(0, 255, 163, 0.15); border-radius: 10px; margin-bottom: 12px; font-size: 13px; color: var(--text-dim); line-height: 1.55;">
-        <div style="margin-bottom: 10px;"><strong style="color: var(--text);">📥 Import existing plan</strong>, paste in a plan you already have (from a coach, another app, or AI). Coach reads it and loads it into your calendar. Replaces your current plan only.</div>
-        <div style="margin-bottom: 10px;"><strong style="color: var(--text);">🔄 Generate new plan</strong>, keeps everything you've told Coach about yourself (intake answers, profile, chat) but throws away the current plan and builds a fresh one. Use this when starting a new training block.</div>
-        <div><strong style="color: var(--text);">🗑 Reset everything</strong>, wipes intake, plan, and chat history. You start over from scratch. Only use this if you want to completely re-do your setup.</div>
-      </div>
-      <div style="display: flex; flex-direction: column; gap: 10px;">
-        <button class="plan-mgmt-card" onclick="${isUserPro() ? 'openImportModal()' : "navigate('upgrade')"}" ${isUserPro() ? '' : 'style="opacity: 0.65; position: relative;"'}>
-          <div class="plan-mgmt-card-head">
-            <span class="plan-mgmt-card-icon">📥</span>
-            <span class="plan-mgmt-card-title">Import existing plan ${isUserPro() ? '' : '<span style="font-size: 10px; padding: 2px 6px; background: var(--accent-soft); color: var(--accent); border-radius: 4px; margin-left: 6px; vertical-align: middle; font-weight: 700;">PRO</span>'}</span>
-          </div>
-          <div class="plan-mgmt-card-body">
-            <div class="plan-mgmt-line plan-mgmt-line-replaces"><span class="plan-mgmt-tag tag-replaces">Replaces</span><span>your current plan calendar</span></div>
-            <div class="plan-mgmt-line plan-mgmt-line-keeps"><span class="plan-mgmt-tag tag-keeps">Keeps</span><span>intake, profile, chat history</span></div>
-          </div>
-        </button>
-        <button class="plan-mgmt-card" onclick="${isUserPro() ? "openResetModal('regenerate')" : "navigate('upgrade')"}" ${isUserPro() ? '' : 'style="opacity: 0.65; position: relative;"'}>
-          <div class="plan-mgmt-card-head">
-            <span class="plan-mgmt-card-icon">🔄</span>
-            <span class="plan-mgmt-card-title">Generate new plan ${isUserPro() ? '' : '<span style="font-size: 10px; padding: 2px 6px; background: var(--accent-soft); color: var(--accent); border-radius: 4px; margin-left: 6px; vertical-align: middle; font-weight: 700;">PRO</span>'}</span>
-          </div>
-          <div class="plan-mgmt-card-body">
-            <div class="plan-mgmt-line plan-mgmt-line-replaces"><span class="plan-mgmt-tag tag-replaces">Replaces</span><span>your current plan calendar</span></div>
-            <div class="plan-mgmt-line plan-mgmt-line-keeps"><span class="plan-mgmt-tag tag-keeps">Keeps</span><span>intake, profile, chat history</span></div>
-          </div>
-        </button>
-        <button class="plan-mgmt-card plan-mgmt-card-danger" onclick="openResetModal('full')">
-          <div class="plan-mgmt-card-head">
-            <span class="plan-mgmt-card-icon">🗑</span>
-            <span class="plan-mgmt-card-title">Reset everything</span>
-          </div>
-          <div class="plan-mgmt-card-body">
-            <div class="plan-mgmt-line plan-mgmt-line-wipes"><span class="plan-mgmt-tag tag-wipes">Wipes</span><span>intake, plan, chat history</span></div>
-            <div class="plan-mgmt-line plan-mgmt-line-keeps"><span class="plan-mgmt-tag tag-keeps">Keeps</span><span>email, name, completed workouts</span></div>
-          </div>
-        </button>
-      </div>
-    </div>
   `;
 
   renderPlanDayList(planned || []);
-  // Plan Management help auto-open (only on first visit per user)
-  initPlanMgmtHelpAutoOpen();
   // #9: keep ~a month of plan built ahead, automatically (fire-and-forget;
   // self-throttles + in-flight lock, so re-renders it triggers won't loop).
   try { if (typeof maybeAutoExtendPlan === 'function') maybeAutoExtendPlan(); } catch (_) {}
@@ -23512,6 +23463,61 @@ async function renderSettings() {
         <label>Injuries / health notes</label>
         <textarea id="settingsInjuries" placeholder="None, or list any current issues" style="width: 100%; min-height: 60px; padding: 13px 14px; background: var(--bg-3); color: var(--text); border: 1px solid var(--border); border-radius: 10px; font-size: 14px; font-family: inherit; outline: none; resize: vertical;">${intake?.injuries || ''}</textarea>
       </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Training Plan management (moved off the Plan page to keep it clean) -->
+    <div class="settings-section" id="section-trainingplan">
+      <div class="settings-section-header" onclick="toggleSettingsSection('trainingplan')">
+        <div class="settings-section-header-left">
+          <div class="settings-section-icon">🗓️</div>
+          <div class="settings-section-text">
+            <div class="settings-section-title">Training plan</div>
+            <div class="settings-section-sub">Import, regenerate, or reset your plan</div>
+          </div>
+        </div>
+        <div class="settings-section-chevron">›</div>
+      </div>
+      <div class="settings-section-body">
+        <div class="settings-section-inner">
+          <div id="planMgmtHelp" style="padding: 14px 16px; background: rgba(0, 255, 163, 0.04); border: 1px solid rgba(0, 255, 163, 0.15); border-radius: 10px; margin-bottom: 14px; font-size: 13px; color: var(--text-dim); line-height: 1.55;">
+            <div style="margin-bottom: 10px;"><strong style="color: var(--text);">📥 Import existing plan</strong> — paste in a plan you already have (from a coach, another app, or AI). Coach reads it and loads it into your calendar. Replaces your current plan only.</div>
+            <div style="margin-bottom: 10px;"><strong style="color: var(--text);">🔄 Generate new plan</strong> — keeps everything you've told Coach about yourself (intake, profile, chat) but throws away the current plan and builds a fresh one. Use this when starting a new training block.</div>
+            <div><strong style="color: var(--text);">🗑 Reset everything</strong> — wipes intake, plan, and chat history. Start over from scratch. Only use this if you want to completely re-do your setup.</div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <button class="plan-mgmt-card" onclick="${isUserPro() ? 'openImportModal()' : "navigate('upgrade')"}" ${isUserPro() ? '' : 'style="opacity: 0.65; position: relative;"'}>
+              <div class="plan-mgmt-card-head">
+                <span class="plan-mgmt-card-icon">📥</span>
+                <span class="plan-mgmt-card-title">Import existing plan ${isUserPro() ? '' : '<span style="font-size: 10px; padding: 2px 6px; background: var(--accent-soft); color: var(--accent); border-radius: 4px; margin-left: 6px; vertical-align: middle; font-weight: 700;">PRO</span>'}</span>
+              </div>
+              <div class="plan-mgmt-card-body">
+                <div class="plan-mgmt-line plan-mgmt-line-replaces"><span class="plan-mgmt-tag tag-replaces">Replaces</span><span>your current plan calendar</span></div>
+                <div class="plan-mgmt-line plan-mgmt-line-keeps"><span class="plan-mgmt-tag tag-keeps">Keeps</span><span>intake, profile, chat history</span></div>
+              </div>
+            </button>
+            <button class="plan-mgmt-card" onclick="${isUserPro() ? "openResetModal('regenerate')" : "navigate('upgrade')"}" ${isUserPro() ? '' : 'style="opacity: 0.65; position: relative;"'}>
+              <div class="plan-mgmt-card-head">
+                <span class="plan-mgmt-card-icon">🔄</span>
+                <span class="plan-mgmt-card-title">Generate new plan ${isUserPro() ? '' : '<span style="font-size: 10px; padding: 2px 6px; background: var(--accent-soft); color: var(--accent); border-radius: 4px; margin-left: 6px; vertical-align: middle; font-weight: 700;">PRO</span>'}</span>
+              </div>
+              <div class="plan-mgmt-card-body">
+                <div class="plan-mgmt-line plan-mgmt-line-replaces"><span class="plan-mgmt-tag tag-replaces">Replaces</span><span>your current plan calendar</span></div>
+                <div class="plan-mgmt-line plan-mgmt-line-keeps"><span class="plan-mgmt-tag tag-keeps">Keeps</span><span>intake, profile, chat history</span></div>
+              </div>
+            </button>
+            <button class="plan-mgmt-card plan-mgmt-card-danger" onclick="openResetModal('full')">
+              <div class="plan-mgmt-card-head">
+                <span class="plan-mgmt-card-icon">🗑</span>
+                <span class="plan-mgmt-card-title">Reset everything</span>
+              </div>
+              <div class="plan-mgmt-card-body">
+                <div class="plan-mgmt-line plan-mgmt-line-wipes"><span class="plan-mgmt-tag tag-wipes">Wipes</span><span>intake, plan, chat history</span></div>
+                <div class="plan-mgmt-line plan-mgmt-line-keeps"><span class="plan-mgmt-tag tag-keeps">Keeps</span><span>email, name, completed workouts</span></div>
+              </div>
+            </button>
+          </div>
         </div>
       </div>
     </div>
