@@ -13002,6 +13002,106 @@ function renderPaceSpeedTrendCard() {
     </div>`;
 }
 
+// ─── Per-sport progress sparkline (race-projection cards, #7) ───
+// A small SMOOTH graph showing whether a sport's speed is trending up over the
+// last ~8 weeks (e.g. bike 26.9 → 31 km/h). Tap-to-expand so the projection
+// card stays short. Built from distance ÷ time only (no HR needed).
+
+// Weekly avg-speed series (km/h) for a sport, oldest → newest, weeks-with-data only.
+function _sportProgressSeries(sport, numWeeks = 8) {
+  const pts = [];
+  for (let wk = numWeeks - 1; wk >= 0; wk--) {
+    const { speed, n } = _avgSpeedWindow(sport, wk * 7, (wk + 1) * 7);
+    if (speed && n >= 1) pts.push(speed);
+  }
+  return pts;
+}
+
+// Catmull-Rom → cubic-bezier smoothing so the line is a smooth curve, not chunky.
+function _smoothLinePath(coords) {
+  if (coords.length < 2) return '';
+  if (coords.length === 2) return `M${coords[0][0]},${coords[0][1]} L${coords[1][0]},${coords[1][1]}`;
+  let d = `M${coords[0][0]},${coords[0][1]}`;
+  const t = 0.18;
+  for (let i = 0; i < coords.length - 1; i++) {
+    const p0 = coords[i - 1] || coords[i];
+    const p1 = coords[i];
+    const p2 = coords[i + 1];
+    const p3 = coords[i + 2] || p2;
+    const c1x = p1[0] + (p2[0] - p0[0]) * t, c1y = p1[1] + (p2[1] - p0[1]) * t;
+    const c2x = p2[0] - (p3[0] - p1[0]) * t, c2y = p2[1] - (p3[1] - p1[1]) * t;
+    d += ` C${c1x.toFixed(1)},${c1y.toFixed(1)} ${c2x.toFixed(1)},${c2y.toFixed(1)} ${p2[0]},${p2[1]}`;
+  }
+  return d;
+}
+
+let _sportProgN = 0;
+// Returns an expandable "See your progress" block for one sport, or '' if there
+// aren't enough weekly data points (need 3+) to draw an honest trend.
+function _sportProgressBlock(sport) {
+  const mode = sport === 'bike' ? 'speed' : sport === 'swim' ? 'pace100' : 'pace';
+  const series = _sportProgressSeries(sport, 8);
+  if (series.length < 3) return ''; // not enough history to show a real trend
+
+  const first = series[0], last = series[series.length - 1];
+  const deltaPct = ((last - first) / first) * 100;
+  const improving = deltaPct > 1.5, declining = deltaPct < -1.5;
+  const color = improving ? 'var(--accent)' : declining ? '#fbbf24' : 'var(--text-dim)';
+  const arrow = improving ? '↑' : declining ? '↓' : '→';
+  const word = improving ? 'faster' : declining ? 'slower' : 'about the same';
+
+  // Map series → SVG coords. Higher speed = higher on the chart (improvement up).
+  const W = 300, H = 64, padX = 10, padY = 12;
+  const min = Math.min(...series), max = Math.max(...series);
+  const span = (max - min) || 1;
+  const coords = series.map((v, i) => {
+    const x = padX + (i / (series.length - 1)) * (W - padX * 2);
+    const y = padY + (1 - (v - min) / span) * (H - padY * 2);
+    return [Math.round(x), Math.round(y)];
+  });
+  const line = _smoothLinePath(coords);
+  const areaD = `${line} L${coords[coords.length - 1][0]},${H} L${coords[0][0]},${H} Z`;
+  const id = `sportprog-${sport}-${++_sportProgN}`;
+  const gradId = `${id}-g`;
+  const lastDot = coords[coords.length - 1];
+  const firstLbl = _fmtSpeedForSport(first, mode).split(' ')[0];
+  const lastLbl = _fmtSpeedForSport(last, mode).split(' ')[0];
+  const unit = mode === 'speed' ? 'km/h' : mode === 'pace100' ? '/100m' : '/km';
+
+  return `
+    <div style="margin-top: 8px;">
+      <button class="btn ghost" style="font-size: 11px; padding: 4px 10px;" onclick="_toggleSportProgress('${id}', this)">📈 See your progress</button>
+      <div id="${id}" style="display: none; margin-top: 10px;">
+        <div style="display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 4px;">
+          <span style="font-size: 11px; color: var(--text-mute);">Last ${series.length} weeks</span>
+          <span style="font-size: 12px; font-weight: 700; color: ${color};">${arrow} ${Math.abs(deltaPct).toFixed(0)}% ${word}</span>
+        </div>
+        <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width: 100%; height: 56px; display: block;">
+          <defs><linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="${color}" stop-opacity="0.28"/>
+            <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
+          </linearGradient></defs>
+          <path d="${areaD}" fill="url(#${gradId})"/>
+          <path d="${line}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="${coords[0][0]}" cy="${coords[0][1]}" r="3" fill="var(--bg)" stroke="${color}" stroke-width="2"/>
+          <circle cx="${lastDot[0]}" cy="${lastDot[1]}" r="3.5" fill="${color}"/>
+        </svg>
+        <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-dim); font-family: 'JetBrains Mono', monospace; margin-top: 2px;">
+          <span>${firstLbl}</span>
+          <span style="color: ${color}; font-weight: 700;">${lastLbl} ${unit}</span>
+        </div>
+      </div>
+    </div>`;
+}
+
+function _toggleSportProgress(id, btn) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const open = el.style.display !== 'none';
+  el.style.display = open ? 'none' : 'block';
+  if (btn) btn.textContent = open ? '📈 See your progress' : '📉 Hide progress';
+}
+
 function renderGeneralFitnessCard(intake) {
   const card = document.getElementById('raceProjectionMini');
   if (!card) return;
@@ -19180,6 +19280,7 @@ function renderRaceDayPlan(intake, paces) {
                 <div style="font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px;">Swim</div>
                 <div style="font-size: 15px; font-weight: 600; font-family: 'JetBrains Mono', monospace; color: var(--text); margin-top: 2px;">${swimPace}</div>
                 <div style="font-size: 11px; color: var(--text-mute); line-height: 1.45; margin-top: 5px;">${whySwim}</div>
+                ${_sportProgressBlock('swim')}
               </div>
             </div>
           ` : ''}
@@ -19196,6 +19297,7 @@ function renderRaceDayPlan(intake, paces) {
                 <div style="font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px;">Bike</div>
                 <div style="font-size: 15px; font-weight: 600; font-family: 'JetBrains Mono', monospace; color: var(--text); margin-top: 2px;">${bikePace}</div>
                 <div style="font-size: 11px; color: var(--text-mute); line-height: 1.45; margin-top: 5px;">${whyBike}</div>
+                ${_sportProgressBlock('bike')}
               </div>
             </div>
           ` : ''}
@@ -19212,6 +19314,7 @@ function renderRaceDayPlan(intake, paces) {
                 <div style="font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px;">Run</div>
                 <div style="font-size: 15px; font-weight: 600; font-family: 'JetBrains Mono', monospace; color: var(--text); margin-top: 2px;">${runPace}</div>
                 <div style="font-size: 11px; color: var(--text-mute); line-height: 1.45; margin-top: 5px;">${whyRun}</div>
+                ${_sportProgressBlock('run')}
               </div>
             </div>
           ` : ''}
@@ -19240,7 +19343,9 @@ function renderRaceDayPlan(intake, paces) {
         </div>
       ` : ''}
 
-      <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; margin-bottom: 10px;">Training paces</div>
+      ${_sportProgressBlock('run')}
+
+      <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; margin: 14px 0 10px;">Training paces</div>
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px;">
         ${easy ? `<div style="padding: 10px 12px; background: var(--bg-3); border-radius: 8px;"><div style="font-size: 11px; color: var(--text-dim);">Easy</div><div style="font-family: 'JetBrains Mono', monospace; font-weight: 600; margin-top: 2px;">${easy}</div></div>` : ''}
         ${tempo ? `<div style="padding: 10px 12px; background: var(--bg-3); border-radius: 8px;"><div style="font-size: 11px; color: var(--text-dim);">Tempo</div><div style="font-family: 'JetBrains Mono', monospace; font-weight: 600; margin-top: 2px;">${tempo}</div></div>` : ''}
