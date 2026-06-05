@@ -547,7 +547,18 @@ body.on-landing #landingNav { display: none !important; }
 .pf-stat .l { font-size: 9.5px; color: var(--text-mute); text-transform: uppercase; letter-spacing: .5px; margin-top: 2px; }
 
 .pf-exp { margin-top: 13px; border-top: 1px solid var(--border); padding-top: 12px; }
-.pf-exp .desc { font-size: 13px; color: var(--text-dim); line-height: 1.55; white-space: pre-wrap; }
+.pf-exp .desc { font-size: 13px; color: var(--text-dim); line-height: 1.55; }
+/* Generic structured-markdown body (workout details, panels) — clean sections. */
+.md-body { white-space: normal; }
+.md-body p { margin: 0 0 9px; line-height: 1.55; }
+.md-body p:last-child { margin-bottom: 0; }
+.md-body .md-h { font-weight: 700; font-size: 13px; color: var(--text); letter-spacing: -0.1px; margin: 13px 0 5px; }
+.md-body .md-h:first-child { margin-top: 0; }
+.md-body ul, .md-body ol { margin: 4px 0 9px; padding-left: 18px; }
+.md-body li { margin-bottom: 4px; line-height: 1.5; }
+.md-body li::marker { color: var(--text-mute); }
+.md-body code { background: rgba(255, 255, 255, 0.07); padding: 1px 5px; border-radius: 4px; font-size: 0.9em; }
+.md-body > *:last-child { margin-bottom: 0; }
 .pf-exp .it { font-size: 12px; color: var(--text); margin-top: 10px; padding: 9px 11px; background: rgba(0,229,160,.06); border-left: 3px solid var(--accent); border-radius: 6px; }
 .pf-exp .acts { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
 .pf-exp .acts .btn { flex: 0 0 auto; min-width: 0; white-space: nowrap; font-size: 12px; padding: 8px 13px; display: inline-flex; align-items: center; gap: 6px; }
@@ -22614,7 +22625,7 @@ function _pfCardHTML(w) {
         <div class="pf-stat"><div class="v">${hr}</div><div class="l">Avg HR</div></div>
       </div>
       <div class="pf-exp" id="${eid}" style="display:none">
-        ${w.description ? `<div class="desc">${escapeHtml(w.description)}</div>` : ''}
+        ${w.description ? `<div class="desc md-body">${typeof formatMarkdown === 'function' ? formatMarkdown(w.description) : escapeHtml(w.description)}</div>` : ''}
         <div class="acts">
           <button class="btn" onclick="event.stopPropagation(); viewHistoryDetail('${act._dbId}')">📊 Review</button>
           <button class="btn ghost" onclick="event.stopPropagation(); askCoachAboutWorkout('${w.id}')">💬 Ask Coach</button>
@@ -22943,7 +22954,7 @@ function openWorkoutPanel(dateStr) {
         ${w.description ? `
           <div class="coach-box" style="margin-top: 0;">
             <div class="coach-title">📋 Session Details</div>
-            <div class="coach-text">${w.description}</div>
+            <div class="coach-text md-body">${typeof formatMarkdown === 'function' ? formatMarkdown(w.description) : escapeHtml(w.description)}</div>
           </div>
         ` : ''}
 
