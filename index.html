@@ -11671,7 +11671,7 @@ function _coachAnalysisBoxHTML(commentary, key) {
   return `
     <div class="coach-box" style="margin-top: 14px;">
       <div class="coach-title">💬 Coach's analysis</div>
-      <div class="coach-text">${formatMarkdown(commentary)}</div>
+      <div class="coach-text md-body">${formatMarkdown(commentary)}</div>
       <div style="margin-top: 12px; display: flex; gap: 18px; align-items: center; flex-wrap: wrap;">
         <a style="color: var(--accent); cursor: pointer; font-size: 13px; font-weight: 600;" onclick="navigate('coach')">Ask Coach a follow-up →</a>
         <a style="color: var(--text-mute); cursor: pointer; font-size: 12px;" onclick="analyzeWorkoutWithCoach('${key}', this, true)">↻ Re-analyze</a>
