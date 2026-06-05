@@ -562,7 +562,7 @@ body.on-landing #landingNav { display: none !important; }
 .plan-bar-btn { background: var(--bg-3); border: 1px solid var(--border-light); color: var(--text); font-size: 12.5px; font-weight: 600; border-radius: 999px; padding: 8px 12px; display: inline-flex; align-items: center; gap: 5px; cursor: pointer; font-family: inherit; white-space: nowrap; -webkit-tap-highlight-color: transparent; transition: background .15s; }
 .plan-bar-btn:active { background: var(--bg-2); }
 .plan-bar-icon { width: 34px; padding: 8px 0; justify-content: center; font-weight: 800; flex-shrink: 0; }
-.plan-bar-top { display: none; color: var(--text-dim); flex-shrink: 0; }
+.plan-bar-top { display: none; margin-left: auto; color: var(--text-dim); flex-shrink: 0; }
 .plan-bar.pinned { position: fixed; left: 0; right: 0; z-index: 90; margin: 0; padding: 10px 16px; background: rgba(10, 14, 26, 0.92); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); animation: planBarSlide .22s ease; }
 .plan-bar.pinned .plan-bar-top { display: inline-flex; }
 @keyframes planBarSlide { from { transform: translateY(-10px); opacity: .35; } to { transform: translateY(0); opacity: 1; } }
@@ -22684,13 +22684,24 @@ function _planNavBottom() {
   const nav = document.querySelector('.nav');
   return nav ? Math.max(0, nav.getBoundingClientRect().bottom) : 56;
 }
+// The page may scroll on window OR on <body> (iOS PWA), so read/scroll robustly.
+function _planCurY() {
+  return window.scrollY || window.pageYOffset || document.scrollingElement?.scrollTop || document.body?.scrollTop || 0;
+}
+function _planDoScroll(y) {
+  const top = Math.max(0, y);
+  try { window.scrollTo({ top, behavior: 'smooth' }); } catch (_) { try { window.scrollTo(0, top); } catch (__) {} }
+  const de = document.scrollingElement || document.documentElement;
+  try { if (de && de.scrollTo) de.scrollTo({ top, behavior: 'smooth' }); } catch (_) {}
+  try { if (document.body && document.body !== de) document.body.scrollTo({ top, behavior: 'smooth' }); } catch (_) {}
+}
 function scrollToTodayWorkout() {
   const t = document.getElementById('pf-today') || document.querySelector('#planFeed .pf-day');
   if (!t) return;
-  const y = t.getBoundingClientRect().top + window.scrollY - _planNavBottom() - 64;
-  window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
+  const y = t.getBoundingClientRect().top + _planCurY() - _planNavBottom() - 64;
+  _planDoScroll(y);
 }
-function planScrollTop() { window.scrollTo({ top: 0, behavior: 'smooth' }); }
+function planScrollTop() { _planDoScroll(0); }
 
 let _planBarPinned = false;
 function _planBarOnScroll() {
@@ -22726,7 +22737,14 @@ function initPlanBar() {
   if (bar) { bar.classList.remove('pinned'); bar.style.top = ''; }
   if (sentinel) sentinel.style.height = '0px';
   if (!_planBarListenerAttached) {
-    window.addEventListener('scroll', _planBarOnScroll, { passive: true });
+    // Capture-phase + multiple targets: on mobile the app scrolls on <body>
+    // (body{overflow-y:auto}), and a plain window 'scroll' listener doesn't fire
+    // for body's scroll on iOS — so the bar never pinned on phone. Capture phase
+    // catches scroll from ANY element (it doesn't bubble but does capture), and
+    // we also bind body/documentElement directly as a belt-and-suspenders.
+    window.addEventListener('scroll', _planBarOnScroll, { capture: true, passive: true });
+    document.addEventListener('scroll', _planBarOnScroll, { capture: true, passive: true });
+    try { document.body.addEventListener('scroll', _planBarOnScroll, { passive: true }); } catch (_) {}
     window.addEventListener('resize', _planBarOnScroll, { passive: true });
     _planBarListenerAttached = true;
   }
