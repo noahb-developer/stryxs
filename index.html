@@ -550,12 +550,15 @@ body.on-landing #landingNav { display: none !important; }
 .pf-exp .desc { font-size: 13px; color: var(--text-dim); line-height: 1.55; }
 /* Generic structured-markdown body (workout details, panels) — clean sections. */
 .md-body { white-space: normal; }
-.md-body p { margin: 0 0 9px; line-height: 1.55; }
+.md-body p { margin: 0 0 10px; line-height: 1.55; color: var(--text-dim); }
 .md-body p:last-child { margin-bottom: 0; }
-.md-body .md-h { font-weight: 700; font-size: 13px; color: var(--text); letter-spacing: -0.1px; margin: 13px 0 5px; }
+/* Clear top-to-bottom SECTION headings (Warm-up / Main set / Cool-down…) with a
+   full line of space above each, so the workout reads section-by-section like
+   the RestOrTrain reference — not a paragraph. */
+.md-body .md-h { font-weight: 800; font-size: 14px; color: var(--text); letter-spacing: -0.2px; margin: 18px 0 7px; }
 .md-body .md-h:first-child { margin-top: 0; }
-.md-body ul, .md-body ol { margin: 4px 0 9px; padding-left: 18px; }
-.md-body li { margin-bottom: 4px; line-height: 1.5; }
+.md-body ul, .md-body ol { margin: 2px 0 10px; padding-left: 18px; }
+.md-body li { margin-bottom: 5px; line-height: 1.5; color: var(--text-dim); }
 .md-body li::marker { color: var(--text-mute); }
 .md-body code { background: rgba(255, 255, 255, 0.07); padding: 1px 5px; border-radius: 4px; font-size: 0.9em; }
 .md-body > *:last-child { margin-bottom: 0; }
@@ -2613,11 +2616,14 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .chat-msg.user .msg-bubble li::marker { color: rgba(10, 14, 26, 0.6); }
 /* Structured-markdown rendering (Claude/ChatGPT-style): spaced paragraphs +
    section headings instead of one cramped chunk. */
-.chat-msg .msg-bubble p { margin: 0 0 11px; line-height: 1.6; }
+.chat-msg .msg-bubble p { margin: 0 0 14px; line-height: 1.62; }
 .chat-msg .msg-bubble p:first-child { margin-top: 0; }
 .chat-msg .msg-bubble p:last-child { margin-bottom: 0; }
-.chat-msg .msg-bubble .md-h { font-weight: 700; font-size: 14.5px; color: var(--text); letter-spacing: -0.2px; margin: 16px 0 7px; }
+/* Bigger, bolder section titles with a full line of breathing room above them
+   so big chunks read as clearly separate sections (Apple-clean). */
+.chat-msg .msg-bubble .md-h { font-weight: 800; font-size: 17px; color: var(--text); letter-spacing: -0.3px; margin: 24px 0 9px; line-height: 1.25; }
 .chat-msg .msg-bubble .md-h:first-child { margin-top: 0; }
+.chat-msg .msg-bubble ul, .chat-msg .msg-bubble ol { margin: 8px 0 14px 20px; }
 .chat-msg .msg-bubble > *:last-child { margin-bottom: 0 !important; }
 .chat-msg .msg-bubble code { background: rgba(255, 255, 255, 0.08); padding: 1px 5px; border-radius: 5px; font-size: 0.88em; font-family: 'JetBrains Mono', monospace; }
 .chat-msg.user .msg-bubble code { background: rgba(10, 14, 26, 0.12); }
@@ -2751,22 +2757,20 @@ body.coach-chat-active .chat-msg:not(.user) .msg-bubble {
 /* Per-turn "Coach" label, marks the start of each AI message so two replies in
    a row (e.g. an intro then a follow-up) read as separate, not one wall of text. */
 .msg-turn-head { display: none; }
+/* Subtle grey "Done" status above each coach response (RestOrTrain-style) — we
+   already know it's the coach, so no icon/label, just a quiet processed marker. */
 body.coach-chat-active .chat-msg:not(.user) .msg-turn-head {
-  display: flex; align-items: center; gap: 7px;
-  font-size: 11px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase;
-  color: var(--text-mute); margin-bottom: 9px;
+  display: block;
+  font-size: 12px; font-weight: 500; letter-spacing: 0.1px;
+  color: var(--text-mute); margin-bottom: 10px;
 }
-body.coach-chat-active .chat-msg:not(.user) .msg-turn-spark {
-  width: 13px; height: 13px; fill: var(--accent); flex-shrink: 0;
-  filter: drop-shadow(0 0 4px rgba(0, 229, 160, 0.35));
-}
-/* No hairline between coach messages — the "Coach" tag + spacing separate them
-   cleanly (RestOrTrain-style), so it reads like a capable assistant, not a list. */
+/* No hairline between coach messages — spacing separates them cleanly. */
 body.coach-chat-active .chat-msg:not(.user) + .chat-msg:not(.user) {
-  margin-top: 6px;
+  margin-top: 8px;
 }
-/* Athlete messages: keep a bubble, right-aligned, neutral surface */
-body.coach-chat-active .chat-msg.user { align-self: flex-end; max-width: 84%; gap: 0; }
+/* Athlete messages: right-aligned bubble. Kept fairly narrow so it stays toward
+   the right and wraps DOWN instead of stretching far across to the left. */
+body.coach-chat-active .chat-msg.user { align-self: flex-end; max-width: 76% !important; gap: 0; }
 body.coach-chat-active .chat-msg.user .msg-bubble {
   background: var(--bg-3); color: var(--text);
   border: 1px solid var(--border);
@@ -2777,7 +2781,7 @@ body.coach-chat-active .chat-msg.user .msg-bubble strong { color: var(--text); }
 @media (max-width: 720px) {
   body.coach-chat-active .chat-messages { padding: calc(var(--coach-nav-h, 56px) + 10px) 14px 22px; gap: 20px; }
   body.coach-chat-active .chat-input-row { padding: 8px 12px max(12px, var(--safe-bottom)); }
-  body.coach-chat-active .chat-msg.user { max-width: 88%; }
+  body.coach-chat-active .chat-msg.user { max-width: 80% !important; }
 }
 
 /* ═══ Coach composer ═══ One rounded "pill" that grows with the text (like
@@ -17456,7 +17460,7 @@ function renderMsg(role, content, contextType = null, msgId = null, imageUrl = n
   // Small turn label above each Coach message so consecutive boxless replies are
   // clearly separated (you can see where one message ends and the next begins).
   const turnHead = role === 'coach'
-    ? `<div class="msg-turn-head"><svg class="msg-turn-spark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5c.5 4.2 1.8 5.5 6 6-4.2.5-5.5 1.8-6 6-.5-4.2-1.8-5.5-6-6 4.2-.5 5.5-1.8 6-6z"/></svg>Coach</div>`
+    ? `<div class="msg-turn-head">Done</div>`
     : '';
   return `
     <div class="chat-msg ${role === 'coach' ? '' : 'user'}"${msgId ? ` data-msg-id="${msgId}"` : ''}>
