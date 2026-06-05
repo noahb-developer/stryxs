@@ -2597,11 +2597,19 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .chat-msg .msg-bubble ul, .chat-msg .msg-bubble ol {
   margin: 8px 0 8px 20px; padding: 0;
 }
-.chat-msg .msg-bubble li { margin-bottom: 4px; line-height: 1.5; }
+.chat-msg .msg-bubble li { margin-bottom: 5px; line-height: 1.55; }
 .chat-msg .msg-bubble li::marker { color: var(--text-dim); }
 .chat-msg.user .msg-bubble li::marker { color: rgba(10, 14, 26, 0.6); }
+/* Structured-markdown rendering (Claude/ChatGPT-style): spaced paragraphs +
+   section headings instead of one cramped chunk. */
+.chat-msg .msg-bubble p { margin: 0 0 11px; line-height: 1.6; }
 .chat-msg .msg-bubble p:first-child { margin-top: 0; }
 .chat-msg .msg-bubble p:last-child { margin-bottom: 0; }
+.chat-msg .msg-bubble .md-h { font-weight: 700; font-size: 14.5px; color: var(--text); letter-spacing: -0.2px; margin: 16px 0 7px; }
+.chat-msg .msg-bubble .md-h:first-child { margin-top: 0; }
+.chat-msg .msg-bubble > *:last-child { margin-bottom: 0 !important; }
+.chat-msg .msg-bubble code { background: rgba(255, 255, 255, 0.08); padding: 1px 5px; border-radius: 5px; font-size: 0.88em; font-family: 'JetBrains Mono', monospace; }
+.chat-msg.user .msg-bubble code { background: rgba(10, 14, 26, 0.12); }
 
 .chat-input-row {
   display: flex; gap: 8px; padding: 14px;
@@ -17586,34 +17594,36 @@ async function regeneratePlanFromReactive(btn) {
   }
 }
 
+// Clean, Claude/ChatGPT-style markdown rendering: headings, spaced paragraphs,
+// grouped bullet/numbered lists, bold/italic/code. Walks line-by-line so blank
+// lines become real paragraph breaks (not cramped <br> chunks) and consecutive
+// list items group into one list.
 function formatMarkdown(text) {
-  let html = escapeHtml(text);
-  // Bold **text**
-  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-  // Italic *text* (but not inside bold)
-  html = html.replace(/(?<!\*)\*(?!\*)([^*]+?)\*(?!\*)/g, '<em>$1</em>');
-  // Numbered list items: lines starting with "1. ", "2. " etc.
-  // Convert sequences of numbered items into <ol>
-  html = html.replace(/(?:^|\n)((?:\d+\.\s+.+(?:\n|$))+)/g, (match, listBlock) => {
-    const items = listBlock.trim().split(/\n/).map(line => {
-      const itemText = line.replace(/^\d+\.\s+/, '');
-      return `<li>${itemText}</li>`;
-    }).join('');
-    return `<ol>${items}</ol>`;
-  });
-  // Bullet list items: lines starting with "- " or "• "
-  html = html.replace(/(?:^|\n)((?:[-•]\s+.+(?:\n|$))+)/g, (match, listBlock) => {
-    const items = listBlock.trim().split(/\n/).map(line => {
-      const itemText = line.replace(/^[-•]\s+/, '');
-      return `<li>${itemText}</li>`;
-    }).join('');
-    return `<ul>${items}</ul>`;
-  });
-  // Line breaks (convert remaining newlines to <br>)
-  html = html.replace(/\n/g, '<br>');
-  // Clean up <br> that end up right before/after block elements
-  html = html.replace(/<br>\s*(<(?:ul|ol|li))/g, '$1');
-  html = html.replace(/(<\/(?:ul|ol|li)>)\s*<br>/g, '$1');
+  if (text === null || text === undefined) return '';
+  const inline = (s) => {
+    let h = escapeHtml(s);
+    h = h.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    h = h.replace(/__(.+?)__/g, '<strong>$1</strong>');
+    h = h.replace(/(?<![*\w])\*(?!\*)([^*\n]+?)\*(?!\*)/g, '<em>$1</em>');
+    h = h.replace(/`([^`]+?)`/g, '<code>$1</code>');
+    return h;
+  };
+  const lines = String(text).replace(/\r\n/g, '\n').split('\n');
+  let html = '', listType = null, listItems = [], para = [];
+  const flushList = () => { if (listItems.length) { html += `<${listType}>${listItems.join('')}</${listType}>`; listItems = []; listType = null; } };
+  const flushPara = () => { if (para.length) { html += `<p>${para.join('<br>')}</p>`; para = []; } };
+  for (const raw of lines) {
+    const line = raw.replace(/\s+$/, '');
+    if (line.trim() === '') { flushList(); flushPara(); continue; }
+    const hm = line.match(/^\s{0,3}(#{1,4})\s+(.+)$/);
+    const bul = line.match(/^\s*[-•*]\s+(.+)$/);
+    const num = line.match(/^\s*\d+[.)]\s+(.+)$/);
+    if (hm) { flushList(); flushPara(); html += `<div class="md-h">${inline(hm[2])}</div>`; }
+    else if (bul) { flushPara(); if (listType !== 'ul') { flushList(); listType = 'ul'; } listItems.push(`<li>${inline(bul[1])}</li>`); }
+    else if (num) { flushPara(); if (listType !== 'ol') { flushList(); listType = 'ol'; } listItems.push(`<li>${inline(num[1])}</li>`); }
+    else { flushList(); para.push(inline(line)); }
+  }
+  flushList(); flushPara();
   return html;
 }
 
