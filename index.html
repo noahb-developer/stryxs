@@ -5760,7 +5760,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v95',
+      app_version: 'v96',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -17882,6 +17882,24 @@ async function sendChatMsg() {
       intake._plan_profile = activePlan.plan_data._plan_profile;
     }
 
+    // ═══ CHAT-TRIGGERED PLAN BUILD ═══
+    // If the user explicitly asks Coach to build/extend their plan ("build my next
+    // 2 weeks", "generate the rest of my plan"), do it on the spot instead of a
+    // chat reply. Short-circuit BEFORE the LLM turn so Coach doesn't say it only
+    // talks. Skip when an attachment is present (that's a photo/PDF analysis turn).
+    if (!photoForApi && !docForApi && intake) {
+      const buildIntent = _detectPlanBuildIntent(text);
+      if (buildIntent) {
+        const thinking = document.getElementById('thinkingMsg');
+        if (thinking) thinking.remove();
+        await handleChatPlanBuild(buildIntent, intake, activePlan, msgs);
+        _chatAbortController = null;
+        if (gate.isFreeTrial) { await refreshCoachInputRow(); return; }
+        input.disabled = false; input.focus();
+        return;
+      }
+    }
+
     // Get this week's planned workouts (and a bit beyond for "what's tomorrow/next" questions)
     const todayDate = new Date();
     const weekStart = new Date(todayDate);
@@ -18403,23 +18421,55 @@ async function confirmAction(type) {
     const { data: intake } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).single();
     if (!intake) { toast('No profile found'); return; }
 
+    // Make the build VISIBLE. This action fires from Settings → Training plan, so
+    // the user is NOT on the Coach page; previously the progress hero was rendered
+    // into #coachContent but page-coach was never activated, so the user saw a
+    // toast and then nothing (the "no confirmation" bug). Activate page-coach
+    // directly (not navigate(), which would call renderCoach() and clobber the
+    // hero), show live progress, then renderCoach() at the very end.
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('page-coach')?.classList.add('active');
+    document.querySelectorAll('.nav-menu-item').forEach(t => t.classList.toggle('active', t.dataset.page === 'coach'));
+    window.scrollTo({ top: 0, behavior: 'instant' });
     const el = document.getElementById('coachContent');
-    el.innerHTML = `
-      <div class="coach-hero">
-        <div class="coach-avatar">🧠</div>
-        <div class="coach-intro">
-          <h2>Building your new plan…</h2>
-          <p>Stryxs is rebuilding your training plan with the latest data. Takes 15-30 seconds.</p>
-          <p style="margin-top: 10px; padding: 10px 14px; background: rgba(255, 209, 102, 0.06); border: 1px solid rgba(255, 209, 102, 0.2); border-radius: 8px; font-size: 13px; color: var(--text-dim);">
-            ⚠️ Don't close this window, it'll interrupt the build.
-          </p>
+    const renderBuildHero = (sub) => {
+      el.innerHTML = `
+        <div class="coach-hero">
+          <div class="coach-avatar">🧠</div>
+          <div class="coach-intro">
+            <h2>Building your new plan…</h2>
+            <p id="regenSub">${sub}</p>
+            <p style="margin-top: 10px; padding: 10px 14px; background: rgba(255, 209, 102, 0.06); border: 1px solid rgba(255, 209, 102, 0.2); border-radius: 8px; font-size: 13px; color: var(--text-dim);">
+              Don't close this window, it'll interrupt the build.
+            </p>
+          </div>
         </div>
-      </div>
-      <div class="loading"><div class="spinner"></div>Working</div>
-    `;
+        <div class="loading"><div class="spinner"></div>Working</div>
+      `;
+    };
+    renderBuildHero('Mapping out your training structure…');
     try {
-      const plan = await callCoach('generate_plan', { intake });
+      // Build week 1 via the SAME path onboarding uses (fresh skeleton +
+      // weekNumber:1) so the regenerated week gets the deployed structured
+      // "### Warm-up / Main set / Cool-down" descriptions, not the old
+      // comma-string format (the bare { intake } call did neither).
+      let skeleton = null;
+      try { skeleton = await callCoach('generate_skeleton', { intake }); } catch (e) { console.warn('skeleton regen failed:', e); }
+
+      renderBuildHero('Building week 1…');
+      const plan = await callCoach('generate_plan', { intake, weekNumber: 1, skeleton });
+      if (skeleton) plan.skeleton = skeleton;
       await savePlanToDb(plan, state.user.id);
+
+      // Fill out the rest of the month NOW. The plan otherwise relies on the
+      // lazy auto-extend, which has a 5-min throttle + only fires on
+      // dashboard/plan render, so after a manual regen the page looked like a
+      // lonely one-week stub until ~5 min later. Reset the throttle and run it
+      // synchronously so the buffer fills up front.
+      renderBuildHero('Filling in the rest of your month…');
+      _lastAutoExtendCheck = 0;
+      _autoExtendInFlight = false;
+      try { await maybeAutoExtendPlan(); } catch (e) { console.warn('post-regen auto-extend failed:', e); }
 
       // Generate Coach's intro message
       try {
@@ -18433,6 +18483,22 @@ async function confirmAction(type) {
           });
         }
       } catch (introErr) { console.error('Intro msg failed:', introErr); }
+
+      // Explicit confirmation (the missing "✓ new plan generated" signal). Tailor
+      // the copy to how much actually got built (Friel personas without zones only
+      // get week 1, since auto-extend is gated on LTHR).
+      let monthCopy = "I've mapped out about a month ahead, head to the Plan tab to see it. It'll keep topping itself up, so you won't need to regenerate again.";
+      try {
+        const todayStr = (typeof getClientToday === 'function') ? getClientToday() : new Date().toISOString().split('T')[0];
+        const { data: fut } = await sb.from('planned_workouts').select('scheduled_date').eq('user_id', state.user.id).gte('scheduled_date', todayStr);
+        let last = null; (fut || []).forEach(p => { if (!last || p.scheduled_date > last) last = p.scheduled_date; });
+        const ahead = last ? Math.round((new Date(last + 'T12:00:00').getTime() - new Date(todayStr + 'T12:00:00').getTime()) / 86400000) : 0;
+        if (ahead < 12) monthCopy = "Your first week is ready, head to the Plan tab to see it. I'll keep building the weeks ahead automatically as you train.";
+      } catch (_) {}
+      const doneMsg = "✓ Your new plan is ready. " + monthCopy;
+      try {
+        await sb.from('coach_messages').insert({ user_id: state.user.id, role: 'coach', content: doneMsg, context_type: 'general_chat' });
+      } catch (_) {}
 
       toast('New plan ready!');
       renderCoach();
@@ -20062,6 +20128,108 @@ async function maybeAutoExtendPlan() {
     console.warn('[Stryxs] auto-extend skipped (non-fatal):', e?.message || e);
   } finally {
     _autoExtendInFlight = false;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// CHAT-TRIGGERED PLAN BUILD
+// The plan builds itself in the background, but users naturally ask Coach in chat
+// to "build my next 2 weeks" / "generate the rest of my plan". Previously the chat
+// coach could only talk (no action), so the request did nothing. _detectPlanBuildIntent
+// recognises an explicit build/extend request; handleChatPlanBuild does the work and
+// posts coach-voiced status messages. Called from sendChatMsg BEFORE the LLM turn so
+// the coach doesn't reply "I can't do that" and then silently do it.
+// ═══════════════════════════════════════════════════════════
+function _detectPlanBuildIntent(text) {
+  if (!text) return null;
+  const t = text.toLowerCase().trim();
+  if (t.length > 160) return null; // long messages are conversation, not a command
+  // Needs an explicit build verb AND a plan/week noun nearby.
+  const genVerb = /\b(generate|build|extend|create|map out|plan out|add on|add another|add a|give me)\b/.test(t);
+  const planNoun = /\b(plan|weeks?|month|training)\b/.test(t);
+  if (!genVerb || !planNoun) return null;
+  // Don't hijack ADJUST requests ("make it easier", "change my plan to…", "swap/move/skip")
+  // or pure questions about how the plan works.
+  if (/\b(easier|harder|lighter|tougher|shorter|longer|swap|move|skip|reschedule|how (does|do)|why|what('s| is)|explain|can you (even )?(make|build|generate))\b/.test(t) && !/\b(next|more|another|rest of)\b/.test(t)) {
+    // allow phrases like "build my next 2 weeks" through; block "can you make my plan easier"
+    if (/\b(easier|harder|lighter|tougher|shorter|longer|swap|move|skip|reschedule)\b/.test(t)) return null;
+  }
+  // Extract a week count if the user named one ("next 2 weeks", "a couple weeks").
+  let weeks = null;
+  const numWords = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, couple: 2, few: 3 };
+  const numMatch = t.match(/\b(\d+)\s+weeks?\b/);
+  if (numMatch) weeks = parseInt(numMatch[1], 10);
+  else { for (const w in numWords) { if (new RegExp(`\\b${w}\\s+weeks?\\b`).test(t)) { weeks = numWords[w]; break; } } }
+  if (weeks && (weeks < 1 || weeks > 8)) weeks = Math.max(1, Math.min(8, weeks));
+  return { weeks: weeks || null };
+}
+
+async function handleChatPlanBuild(intent, intake, activePlan, msgs) {
+  const post = async (content, ctx = 'general_chat') => {
+    if (msgs) { msgs.innerHTML += renderMsg('coach', content); msgs.scrollTop = msgs.scrollHeight; }
+    try { await sb.from('coach_messages').insert({ user_id: state.user.id, role: 'coach', content, context_type: ctx }); } catch (_) {}
+  };
+
+  if (!isUserPro()) {
+    await post("Building out new training weeks is a Stryxs Pro feature. Upgrade and I'll keep your plan a month ahead automatically, plus build extra weeks any time you ask.");
+    return;
+  }
+  if (!activePlan || !activePlan.plan_data) {
+    await post("You don't have an active plan yet. Head to the Plan tab and tap Generate to set one up, then I can extend it from here whenever you want.");
+    return;
+  }
+  const isFriel = ['ironman', '70_3', 'olympic_tri', 'sprint_tri'].includes(intake.goal_event);
+  if (isFriel && (!intake.run_lthr || !intake.bike_lthr)) {
+    await post("I need your heart-rate zones before I can build more triathlon weeks. Add your run and bike LTHR in Settings → Heart Rate Zones and I'll get right on it.");
+    return;
+  }
+
+  const n = intent.weeks || 4;
+  const raceMs = intake.race_date ? new Date(intake.race_date + 'T12:00:00').getTime() : null;
+
+  let buildingEl = null;
+  if (msgs) {
+    msgs.innerHTML += `<div class="chat-msg" id="chatPlanBuildMsg"><div class="msg-avatar">🧠</div><div class="msg-bubble"><span style="opacity:0.7;">On it, building your next ${n} week${n > 1 ? 's' : ''} and adding ${n > 1 ? 'them' : 'it'} to your calendar…</span></div></div>`;
+    msgs.scrollTop = msgs.scrollHeight;
+    buildingEl = document.getElementById('chatPlanBuildMsg');
+  }
+
+  let built = 0, hitRace = false;
+  try {
+    let curActive = activePlan;
+    for (let i = 0; i < n; i++) {
+      // Stop before scheduling past the race.
+      if (raceMs) {
+        const { data: latest } = await sb.from('planned_workouts')
+          .select('scheduled_date').eq('user_id', state.user.id)
+          .order('scheduled_date', { ascending: false }).limit(1);
+        const lastMs = latest && latest[0] ? new Date(latest[0].scheduled_date + 'T12:00:00').getTime() : 0;
+        if (lastMs >= raceMs) { hitRace = true; break; }
+      }
+      await _extendPlanByOneWeek(intake, curActive);
+      built++;
+      const { data: ap } = await sb.from('training_plans')
+        .select('plan_data').eq('user_id', state.user.id).eq('active', true)
+        .order('created_at', { ascending: false }).limit(1).maybeSingle();
+      if (ap) curActive = ap;
+    }
+  } catch (e) {
+    console.error('[Stryxs] chat plan build failed:', e);
+  }
+  if (buildingEl) buildingEl.remove();
+  try { if (typeof loadWorkouts === 'function') await loadWorkouts(); } catch (_) {}
+  // Keep the background auto-extend in step (it just topped up from here).
+  _lastAutoExtendCheck = Date.now();
+
+  if (built > 0) {
+    let msg = `Done. I've added ${built} week${built > 1 ? 's' : ''} to your plan, open the Plan tab to see ${built > 1 ? 'them' : 'it'}.`;
+    if (hitRace) msg += ` That takes you right up to race day, so there's nothing more to build.`;
+    else msg += ` Your plan also tops itself up automatically, so you'll always have about a month mapped out ahead.`;
+    await post(msg);
+  } else if (hitRace) {
+    await post("Your plan already runs all the way to race day, so there are no more weeks to add. We'll keep adjusting the ones you've got as your training goes.");
+  } else {
+    await post("I couldn't build the weeks just now, give it another go in a moment. If it keeps failing, the Plan tab has a manual build button as a backup.");
   }
 }
 
