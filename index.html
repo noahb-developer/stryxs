@@ -5761,7 +5761,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v98',
+      app_version: 'v99',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -11669,10 +11669,10 @@ function renderStravaFooter(a) {
 function renderProUpsell(context) {
   if (isUserPro()) return '';
   const msg = context === 'run'
-    ? 'Coach’s Read narrative, cardiac drift analysis, and race projections are Pro.'
+    ? 'Cardiac drift analysis and race projections are Pro.'
     : context === 'bike'
-      ? 'Coach’s Read narrative, drift analysis, normalized power, and ride projections are Pro.'
-      : 'Coach’s Read narrative and deeper analysis are Pro.';
+      ? 'Cardiac drift analysis, normalized power, and ride projections are Pro.'
+      : 'Deeper workout analysis is Pro.';
   return `
     <div style="margin-top: 18px; padding: 14px; background: linear-gradient(135deg, rgba(255, 209, 102, 0.06), rgba(0, 229, 160, 0.04)); border: 1px solid rgba(255, 209, 102, 0.2); border-radius: 10px; display: flex; align-items: center; gap: 12px;">
       <div style="font-size: 22px;">⭐</div>
@@ -12070,11 +12070,6 @@ function renderRun(a) {
           </div>
           <div class="verdict ${a.dc}"><span class="verdict-icon">${a.dc==='good'?'✓':a.dc==='ok'?'!':'✕'}</span> ${a.dv}</div>
         </div>
-
-        <div class="coach-box">
-          <div class="coach-title">💡 Coach's Read</div>
-          <div class="coach-text">${a.coach}</div>
-        </div>
         ` : (a.cadence ? `
         <div class="chart-section">
           <div class="chart-label">Cadence</div>
@@ -12165,10 +12160,6 @@ function renderBike(a) {
           </div>
           <div class="verdict ${a.dc}"><span class="verdict-icon">${a.dc==='good'?'✓':a.dc==='ok'?'!':'✕'}</span> ${a.dv}</div>
         </div>
-        <div class="coach-box">
-          <div class="coach-title">💡 Coach's Read</div>
-          <div class="coach-text">${a.coach}</div>
-        </div>
         ` : ''}
 
         ${renderAnalyzeBtn(a)}
@@ -12228,10 +12219,6 @@ function renderSwim(a) {
               </div>` : ''}
           </div>
           <div class="verdict ${a.dc}"><span class="verdict-icon">${a.dc==='good'?'✓':a.dc==='ok'?'!':'✕'}</span> ${a.dv}</div>
-        </div>
-        <div class="coach-box">
-          <div class="coach-title">💡 Coach's Read</div>
-          <div class="coach-text">${a.coach}</div>
         </div>
         ${renderAnalyzeBtn(a)}
         ${renderWorkoutFeedbackForm(a._dbId)}
@@ -26084,7 +26071,7 @@ function renderUpgradePage() {
           <li><span style="color: var(--accent);">✓</span> Everything in Free, plus:</li>
           <li><span style="color: var(--accent);">✓</span> Unlimited workout history</li>
           <li><span style="color: var(--accent);">✓</span> Full Strava sync (auto-forever)</li>
-          <li><span style="color: var(--accent);">✓</span> Deep analysis (drift, zones, Coach's Read)</li>
+          <li><span style="color: var(--accent);">✓</span> Deep analysis (drift, zones, projections)</li>
           <li><span style="color: var(--accent);">✓</span> Coach chat (unlimited)</li>
           <li><span style="color: var(--accent);">✓</span> Trend insights (weekly)</li>
           <li><span style="color: var(--accent);">✓</span> Unlimited race plans</li>
