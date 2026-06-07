@@ -504,7 +504,7 @@ body.on-landing #landingNav { display: none !important; }
   margin-bottom: 18px;
 }
 .training-tab {
-  flex: 1; padding: 9px 6px; border: 0; background: transparent;
+  flex: 1; padding: 9px 6px; border: 0; background: transparent; white-space: nowrap;
   color: var(--text-dim); font-size: 13px; font-weight: 600; font-family: inherit;
   border-radius: 9px; cursor: pointer;
   display: flex; align-items: center; justify-content: center; gap: 6px;
@@ -4911,7 +4911,7 @@ body.on-auth .container {
 <!-- UPLOAD -->
 <div class="page" id="page-upload">
   <div class="training-tabs">
-    <button class="training-tab active" onclick="navigate('upload')">➕ Log</button>
+    <button class="training-tab active" onclick="navigate('upload')">➕ Log & Analyze</button>
     <button class="training-tab" onclick="navigate('history')">📂 History</button>
     <button class="training-tab" onclick="navigate('trends')">📈 Trends</button>
   </div>
@@ -4999,7 +4999,7 @@ body.on-auth .container {
 <!-- HISTORY -->
 <div class="page" id="page-history">
   <div class="training-tabs">
-    <button class="training-tab" onclick="navigate('upload')">➕ Log</button>
+    <button class="training-tab" onclick="navigate('upload')">➕ Log & Analyze</button>
     <button class="training-tab active" onclick="navigate('history')">📂 History</button>
     <button class="training-tab" onclick="navigate('trends')">📈 Trends</button>
   </div>
@@ -5011,7 +5011,7 @@ body.on-auth .container {
 <!-- TRENDS -->
 <div class="page" id="page-trends">
   <div class="training-tabs">
-    <button class="training-tab" onclick="navigate('upload')">➕ Log</button>
+    <button class="training-tab" onclick="navigate('upload')">➕ Log & Analyze</button>
     <button class="training-tab" onclick="navigate('history')">📂 History</button>
     <button class="training-tab active" onclick="navigate('trends')">📈 Trends</button>
   </div>
@@ -5760,7 +5760,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v96',
+      app_version: 'v97',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -8173,11 +8173,13 @@ async function buildProactiveNudges(uid) {
         title: 'Your training load just spiked',
         sub: `Your load ratio is ${lm.acwr.toFixed(2)} (above 1.5 is where injury risk climbs). Hold steady this week, no new long sessions. Tap to ask Coach how to back off smartly.` });
     }
-    // 2) Deep fatigue (very negative form).
-    else if (lm && typeof lm.tsb === 'number' && lm.tsb < -25 && recent.length >= 3) {
+    // 2) SUSTAINED deep fatigue only (parked deep for days, not a single hard day).
+    // A one-off big session tanks form briefly, which is normal training, so we
+    // don't nag about it. Only nudge when fatigue has genuinely been sitting deep.
+    else if (lm && lm.sustainedFatigue && recent.length >= 3) {
       out.push({ id: 'nudge_fatigue', type: 'coachtip', time: new Date(newestTime).toISOString(), icon: '🔋', actionKind: 'coach',
-        title: "You're carrying a lot of fatigue",
-        sub: `Your form is ${lm.tsb} right now. A recovery day or two will actually make you faster. Tap to talk it through with Coach.` });
+        title: "Might be a good time for an easy day",
+        sub: `You've been loading hard for a stretch. An easy day or two now lets all that work pay off, you'll come back stronger. Nothing to worry about. Tap to talk it through with Coach.` });
     }
 
     // 3) Aerobic drift on easy efforts (fatigue / base gap signal).
@@ -11688,41 +11690,48 @@ function renderAnalyzeBtn(a) {
   if (!a || !a.sport) return '';
   const key = 'awk_' + (++_stryxsAnalyzeCounter);
   (window._stryxsAnalyzeWorkouts = window._stryxsAnalyzeWorkouts || {})[key] = a;
-  // If this workout was already analyzed (cached on this device), show the saved
-  // analysis instead of the button so returning to it doesn't re-spend tokens.
-  const cached = _getCachedAnalysis(a);
+  // ONE entry point for Coach analysis: the button opens the Coach page and does
+  // the analysis THERE, saved into chat history. That keeps all Coach
+  // conversation in one place and makes the analysis cross-device (it lives in
+  // the DB, so it never "disappears" when you switch phone <-> PC). If it was
+  // already analyzed on this device, offer a direct "open in Coach" shortcut so
+  // we don't re-spend tokens.
+  const analyzed = !!_getCachedAnalysis(a);
   return `
     <div class="analyze-coach-slot" style="margin-top: 14px;">
-      ${cached ? _coachAnalysisBoxHTML(cached, key) : _analyzeButtonHTML(key)}
+      ${analyzed ? _analyzeOpenHTML(key) : _analyzeButtonHTML(key)}
     </div>`;
 }
-async function analyzeWorkoutWithCoach(key, el, force) {
+function _analyzeOpenHTML(key) {
+  return `<button class="btn" style="width: 100%; padding: 12px; font-size: 14px; font-weight: 600; background: linear-gradient(135deg, rgba(0,229,160,0.16), rgba(80,130,255,0.10)); border: 1px solid rgba(0,229,160,0.35); color: var(--accent); display: flex; align-items: center; justify-content: center; gap: 8px;" onclick="navigate('coach')">💬 Coach analyzed this · Open in Coach →</button>`;
+}
+async function analyzeWorkoutWithCoach(key, el) {
   const a = (window._stryxsAnalyzeWorkouts || {})[key];
   if (!a) return;
-  const slot = el ? el.closest('.analyze-coach-slot') : document.querySelector('.analyze-coach-slot');
-  if (!slot) return;
-  // If we already have a saved analysis and this isn't an explicit re-analyze, show it.
-  if (!force) {
-    const cached = _getCachedAnalysis(a);
-    if (cached) { slot.innerHTML = _coachAnalysisBoxHTML(cached, key); return; }
+  const btn = el && el.tagName === 'BUTTON' ? el : (el ? el.closest('button') : null);
+  const orig = btn ? btn.innerHTML : null;
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<span class="spinner" style="width:16px;height:16px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:6px;"></span>Coach is analyzing...`;
   }
-  slot.innerHTML = `<div class="coach-box" style="margin-top: 14px;"><div class="coach-title">💬 Coach's analysis</div><div class="coach-text" style="color: var(--text-dim);"><span class="spinner" style="width:16px;height:16px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:6px;"></span>Coach is analyzing...</div></div>`;
   try {
     const { data: intake } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).single();
     const commentary = await callCoach('workout_commentary', { workout: a, intake, activeInsights: [] });
-    // Persist as a coach message so it also shows in the chat history.
+    // Save as a coach chat message so it persists across devices and lives where
+    // all the other Coach conversation is (not pinned to one device's storage).
     try {
       await sb.from('coach_messages').insert({ user_id: state.user.id, role: 'coach', content: commentary, context_type: 'workout_commentary' });
     } catch (_) {}
-    // Persist on this device so returning to the workout shows the saved analysis
-    // (no re-spend). Keyed by the workout's DB id.
+    // Soft per-device marker so returning to this card shows an "open in Coach"
+    // shortcut instead of re-spending tokens on this device.
     const cacheK = _wkAnalysisKey(a);
     if (cacheK) { try { localStorage.setItem(cacheK, commentary); } catch (_) {} }
-    slot.innerHTML = _coachAnalysisBoxHTML(commentary, key);
+    // Land on the Coach page with the fresh analysis already at the bottom of chat.
+    navigate('coach');
   } catch (e) {
     console.error('[Stryxs] workout analysis failed:', e);
-    slot.innerHTML = _analyzeButtonHTML(key);
     toast('Coach is busy right now, try again in a moment.', 4000);
+    if (btn) { btn.disabled = false; if (orig != null) btn.innerHTML = orig; }
   }
 }
 
@@ -12789,17 +12798,34 @@ function computeLoadModel() {
     }
   }
   // EWMA (TrainingPeaks: today = yesterday + (load - yesterday)/timeConstant)
+  // Capture the day-by-day fitness (ctl) and form (ctl-atl) series so we can tell
+  // SUSTAINED fatigue / declining fitness from a single hard day. A one-off big
+  // brick tanks today's form but that's normal training, not a problem to warn about.
   let ctl = 0, atl = 0, formYesterday = 0;
+  const ctlSeries = [], formSeries = [];
   for (let i = 0; i < DAYS; i++) {
     formYesterday = ctl - atl; // form heading INTO day i (before that day's load)
+    formSeries.push(formYesterday);
     ctl = ctl + (daily[i] - ctl) / 42;
     atl = atl + (daily[i] - atl) / 7;
+    ctlSeries.push(ctl);
   }
   let acute = 0, chronic = 0;
   for (let i = DAYS - 7; i < DAYS; i++) acute += daily[i];
   for (let i = DAYS - 28; i < DAYS; i++) chronic += daily[i];
   chronic = chronic / 4;
   const acwr = chronic > 0 ? acute / chronic : null;
+  // SUSTAINED fatigue = form has sat deeply negative for most of the last week,
+  // not just today. FITNESS DECLINING = chronic fitness (ctl) has dropped vs a
+  // week ago (the "you keep losing fitness" signal worth a gentle word).
+  const last7Form = formSeries.slice(-7);
+  const daysDeepNegative = last7Form.filter(f => f < -20).length;
+  const ctlNow = ctlSeries[ctlSeries.length - 1] || 0;
+  const ctl7Ago = ctlSeries[ctlSeries.length - 8] || ctlNow;
+  const fitnessDeclining = ctl7Ago > 5 && ctlNow < ctl7Ago - 2; // real drop, not noise
+  // Genuine "ease up" case: deep fatigue parked for days, OR an acute load spike
+  // while already fatigued. A single deep-negative day does NOT qualify.
+  const sustainedFatigue = daysDeepNegative >= 4 || (acwr != null && acwr > 1.5 && formYesterday < -10);
   const model = {
     ctl: Math.round(ctl), atl: Math.round(atl), tsb: Math.round(formYesterday),
     acwr: acwr != null ? Math.round(acwr * 100) / 100 : null, counted,
@@ -12808,6 +12834,7 @@ function computeLoadModel() {
     lthrSet,
     ftpSet: bikeFtp > 0,
     methods, // { power, pace, hr, fallback } counts for the data-quality line
+    daysDeepNegative, fitnessDeclining, sustainedFatigue, // tone signals for the load card
   };
   window._stryxsLoadModel = model;
   return model;
@@ -12844,7 +12871,11 @@ function _deriveRunThresholdPace(intake) {
   return fiveKPaceSecPerKm + 15; // Daniels T ≈ 5K pace + 15 s/km
 }
 
-function _formStatus(tsb) {
+function _formStatus(m) {
+  // Accept the whole model so we can tell a single hard day from SUSTAINED fatigue.
+  const tsb = typeof m === 'number' ? m : (m && typeof m.tsb === 'number' ? m.tsb : 0);
+  const sustained = !!(m && typeof m === 'object' && m.sustainedFatigue);
+  const declining = !!(m && typeof m === 'object' && m.fitnessDeclining);
   if (tsb >= 15) return { label: 'Fresh', color: '#4ade80', emoji: '🟢',
     headline: "You're fresh and race-ready",
     plain: "You've rested more than you've trained lately. Perfect for a race, but if you're mid-training it may be time to load up again before you lose fitness." };
@@ -12855,11 +12886,20 @@ function _formStatus(tsb) {
     headline: "You're in a healthy training rhythm",
     plain: "Training and recovery are balanced, this is the sweet spot where fitness actually gets built. Keep going." };
   if (tsb >= -30) return { label: 'Loaded', color: '#fb923c', emoji: '🟠',
-    headline: "You're carrying real fatigue",
-    plain: "You're deep in a hard block. Fine for a few days, but sleep and fuel well and keep an easy day close. Don't stack hard sessions back-to-back right now." };
-  return { label: 'Very tired', color: '#f87171', emoji: '🔴',
-    headline: "You're very fatigued, ease up",
-    plain: "Tiredness has built faster than you're recovering. Take an easy or rest day before you dig a deeper hole, this is where injury and burnout start." };
+    headline: "You're carrying good training fatigue",
+    plain: "You're deep in a solid block, this is exactly where fitness gets built. Totally normal. Just sleep and fuel well and keep an easy day in reach." };
+  // Deep negative form. By itself (one big session/day) this is still normal hard
+  // training, so DON'T sound the alarm. Only nudge toward easing up when the fatigue
+  // has been parked deep for days or fitness is actually slipping.
+  if (!sustained && !declining) return { label: 'Big block', color: '#fb923c', emoji: '🟠',
+    headline: "That was a big load, and that's fine",
+    plain: "A hard day or two pushes this deep into the red, that's normal and how you get stronger. If you feel good, keep training. Just keep an easy day close and prioritise sleep and food." };
+  if (declining && !sustained) return { label: 'Watch it', color: '#fbbf24', emoji: '🟡',
+    headline: "Fatigue's adding up, keep an eye on it",
+    plain: "You've been loading hard for a while. Nothing alarming, but if a session feels flat, swap it for an easy day, you'll come back stronger. No need to change the whole plan." };
+  return { label: 'Ease up soon', color: '#f87171', emoji: '🟠',
+    headline: "You've earned an easy day or two",
+    plain: "Fatigue's been sitting deep for a stretch now. A couple of easy days (or one full rest day) will let all this work actually pay off, then pick right back up. This is normal in a hard block, not a setback." };
 }
 
 function renderLoadFormCard() {
@@ -12867,7 +12907,7 @@ function renderLoadFormCard() {
   if (!card) return;
   const m = computeLoadModel();
   if (!m || m.counted < 6) { card.innerHTML = ''; return; } // not enough data to be meaningful
-  const st = _formStatus(m.tsb);
+  const st = _formStatus(m);
   const acwrColor = m.acwr == null ? 'var(--text-mute)' : m.acwr > 1.5 ? '#f87171' : m.acwr < 0.8 ? '#facc15' : '#4ade80';
   const acwrNote = m.acwr == null ? '' : m.acwr > 1.5 ? 'a big jump, ease off next week to avoid injury' : m.acwr < 0.8 ? 'lighter than usual, you can ramp back up' : 'a safe, steady increase';
   card.innerHTML = `
@@ -15099,7 +15139,7 @@ async function renderInsightsMiniCard() {
     const s = tierStyle[tier];
 
     el.innerHTML = `
-      <div style="background: ${s.bg}; border: 1px solid ${s.border}; border-radius: 14px; padding: 16px; margin-bottom: 16px; cursor: pointer; transition: all 0.15s;" onclick="navigate('trends')">
+      <div style="background: ${s.bg}; border: 1px solid ${s.border}; border-radius: 14px; padding: 16px; margin-bottom: 16px; cursor: pointer; transition: all 0.15s;" onclick="state.trendsTab='insights'; navigate('trends')">
         <div style="display: flex; gap: 12px; align-items: flex-start;">
           <div style="font-size: 22px; flex-shrink: 0;">${s.icon}</div>
           <div style="flex: 1; min-width: 0;">
@@ -21209,7 +21249,7 @@ async function openShareModal() {
         </div>
       ` : ''}
 
-      <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+      <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 18px;">
         <button class="btn" onclick="saveShareSettings()" style="flex: 1; min-width: 140px;">${existingShare ? 'Update share' : 'Generate link →'}</button>
         ${existingShare ? `<button class="btn ghost" onclick="revokeShare('${existingShare.id}')" style="flex: 1; min-width: 100px; color: #f87171;">Revoke link</button>` : ''}
       </div>
