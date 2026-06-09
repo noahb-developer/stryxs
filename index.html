@@ -5761,7 +5761,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v100',
+      app_version: 'v101',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -15781,6 +15781,318 @@ async function renderCoach() {
   renderCoachChat(el, null);
 }
 
+// ═══════════════════════════════════════════════════════════
+// PHASE 1 — CONVERSATIONAL ONBOARDING (scripted coach chat, no AI cost)
+// Replaces the form-style intake with a chat that FEELS like talking to the
+// coach but is fully scripted (tap chips + a little typing, branches by answer).
+// It collects only the essentials, maps them into the SAME `intakeAnswers`
+// shape the old form produced, then calls the EXISTING completeIntake() — so the
+// DB save + skeleton + plan generation + intro message + import branch are all
+// reused unchanged. Everything else (age/sex/weight/height/units/PBs/LTHR/exact
+// days) is deferred to defaults + progressive profiling via the coach later.
+// New sports bridge to the closest existing coaching engine for now: tri→tri
+// personas, run races→run personas, and standalone cycling/swimming/mix→the
+// general (Attia/Seiler) engine with the sport baked in. Phase 2 adds dedicated
+// brains via research.
+// ═══════════════════════════════════════════════════════════
+const OBD_SPARKLE = '<svg viewBox="0 0 24 24" fill="none" stroke="#00e5a0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.5L19 10.4l-5.1 1.9L12 18l-1.9-5.7L5 10.4l5.1-1.9z"/></svg>';
+// goal → { label, dated (ask race date), event (goal_event), fhGoal, fhSports }
+const OBD_GOALS = {
+  Running: [
+    { label: '5K', dated: true, event: '5k' },
+    { label: '10K', dated: true, event: '10k' },
+    { label: 'Half marathon', dated: true, event: 'half_marathon' },
+    { label: 'Marathon', dated: true, event: 'marathon' },
+    { label: 'Ultra', dated: true, event: 'marathon' },              // bridge → marathon engine (P2: real ultra)
+    { label: 'Faster mile / speed', dated: false, event: '5k' },     // bridge → VDOT speed (P2: mile)
+    { label: 'Just getting fitter', dated: false, event: 'general', fhGoal: 'general_health', fhSports: ['run'] },
+  ],
+  Cycling: [
+    { label: 'First 100k / century', dated: true, event: 'general', fhGoal: 'build_aerobic', fhSports: ['bike'] },
+    { label: 'A gran fondo / event', dated: true, event: 'general', fhGoal: 'build_aerobic', fhSports: ['bike'] },
+    { label: 'Build my FTP / power', dated: false, event: 'general', fhGoal: 'sport_performance', fhSports: ['bike'] },
+    { label: 'Climbing strength', dated: false, event: 'general', fhGoal: 'sport_performance', fhSports: ['bike'] },
+    { label: 'Just ride more', dated: false, event: 'general', fhGoal: 'general_health', fhSports: ['bike'] },
+  ],
+  Swimming: [
+    { label: 'Open-water race', dated: true, event: 'general', fhGoal: 'sport_performance', fhSports: ['swim'] },
+    { label: 'A pool event / times', dated: true, event: 'general', fhGoal: 'sport_performance', fhSports: ['swim'] },
+    { label: 'Swim fitness & technique', dated: false, event: 'general', fhGoal: 'build_aerobic', fhSports: ['swim'] },
+  ],
+  Triathlon: [
+    { label: 'Sprint', dated: true, event: 'sprint_tri' },
+    { label: 'Olympic', dated: true, event: 'olympic_tri' },
+    { label: '70.3 / Half', dated: true, event: '70_3' },
+    { label: 'Ironman', dated: true, event: 'ironman' },
+  ],
+  'A mix': [
+    { label: 'Build all three (swim/bike/run)', dated: false, event: 'general', fhGoal: 'build_aerobic', fhSports: ['run', 'bike', 'swim'] },
+    { label: 'Hybrid: strength + endurance', dated: false, event: 'general', fhGoal: 'sport_performance', fhSports: ['mixed', 'gym'] },
+    { label: 'Overall fitness', dated: false, event: 'general', fhGoal: 'general_health', fhSports: ['mixed'] },
+  ],
+  'General fitness': [
+    { label: 'Health & longevity', dated: false, event: 'general', fhGoal: 'vo2_longevity', fhSports: ['mixed'] },
+    { label: 'Energy / feel better', dated: false, event: 'general', fhGoal: 'general_health', fhSports: ['mixed'] },
+    { label: 'Body composition', dated: false, event: 'general', fhGoal: 'lose_weight', fhSports: ['mixed'] },
+  ],
+};
+const OBD_SPORT_ACK = { Running: 'Runner, nice.', Cycling: 'A cyclist, love it.', Swimming: 'Swimming, great.', Triathlon: 'Triathlete, respect.', 'A mix': 'A bit of everything, nice.', 'General fitness': "Let's get you feeling great." };
+const OBD_EQUIP = { Running: ['run_gear', 'gym'], Cycling: ['bike', 'gym'], Swimming: ['pool', 'gym'], Triathlon: ['pool', 'bike', 'run_gear', 'gym'], 'A mix': ['run_gear', 'bike', 'pool', 'gym'], 'General fitness': ['gym', 'run_gear'] };
+const OBD_DAYS = { '2': ['tue', 'sat'], '3': ['tue', 'thu', 'sat'], '4': ['tue', 'thu', 'sat', 'sun'], '5': ['mon', 'tue', 'thu', 'sat', 'sun'], '6': ['mon', 'tue', 'wed', 'thu', 'sat', 'sun'], '7': ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] };
+const OBD_EXP = { 'Just starting out': 'beginner', 'Been at it a while': 'intermediate', "I'm experienced": 'advanced' };
+const OBD_RACEEXP = { beginner: 'first_time', intermediate: '1_to_2', advanced: '3_plus' };
+const OBD_VOL = { 'Just starting (0–2h)': 2, 'A few hours (3–4h)': 4, '5–8 hours': 7, '8+ hours': 10 };
+
+let _obdA = {};
+function _obdInjectStyles() {
+  if (document.getElementById('obdStyles')) return;
+  const s = document.createElement('style'); s.id = 'obdStyles';
+  s.textContent = `
+  .obd-wrap{max-width:520px;margin:0 auto;display:flex;flex-direction:column;min-height:62vh;padding:6px 2px 0;}
+  .obd-prog{display:flex;gap:6px;justify-content:center;margin:4px 0 16px;}
+  .obd-prog i{height:4px;width:24px;border-radius:99px;background:var(--bg-3);transition:background .3s;}
+  .obd-prog i.on{background:var(--accent);}
+  .obd-chat{display:flex;flex-direction:column;gap:13px;}
+  .obd-row{display:flex;gap:10px;align-items:flex-end;animation:obdRise .32s ease;}
+  .obd-row.user{flex-direction:row-reverse;}
+  @keyframes obdRise{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}
+  .obd-av{width:30px;height:30px;border-radius:9px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,rgba(0,229,160,.22),rgba(80,130,255,.16));border:1px solid rgba(0,229,160,.3);}
+  .obd-av svg{width:16px;height:16px;}
+  .obd-bub{max-width:80%;padding:11px 14px;border-radius:16px;font-size:14.5px;line-height:1.5;}
+  .obd-row.coach .obd-bub{background:var(--bg-2);border:1px solid var(--border);border-top-left-radius:5px;color:var(--text);}
+  .obd-row.user .obd-bub{background:linear-gradient(135deg,rgba(0,229,160,.18),rgba(0,229,160,.08));border:1px solid rgba(0,229,160,.3);color:#eafff7;border-bottom-right-radius:5px;font-weight:600;}
+  .obd-typing{display:inline-flex;gap:4px;padding:3px 2px;}
+  .obd-typing span{width:6px;height:6px;border-radius:50%;background:var(--text-mute);animation:obdBlink 1.2s infinite;}
+  .obd-typing span:nth-child(2){animation-delay:.2s;}.obd-typing span:nth-child(3){animation-delay:.4s;}
+  @keyframes obdBlink{0%,60%,100%{opacity:.25;}30%{opacity:1;}}
+  .obd-dock{padding:14px 0 30px;display:flex;flex-direction:column;gap:9px;}
+  .obd-chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;}
+  .obd-chip{background:var(--bg-3);border:1px solid var(--border-light);color:var(--text);font-size:14px;font-weight:600;border-radius:999px;padding:10px 15px;cursor:pointer;font-family:inherit;transition:all .14s;}
+  .obd-chip:hover{border-color:var(--accent);color:var(--accent);background:rgba(0,229,160,.08);}
+  .obd-chip.sel{background:rgba(0,229,160,.16);border-color:var(--accent);color:var(--accent);}
+  .obd-chip.ghost{background:transparent;color:var(--text-dim);border-style:dashed;}
+  .obd-typerow{display:flex;gap:8px;}
+  .obd-typerow input{flex:1;background:var(--bg-2);border:1px solid var(--border-light);color:var(--text);border-radius:12px;padding:12px 14px;font-size:14.5px;font-family:inherit;outline:none;}
+  .obd-typerow input:focus{border-color:var(--accent);}
+  .obd-send{background:var(--accent);color:#00130d;border:none;border-radius:12px;padding:0 16px;font-weight:800;cursor:pointer;font-family:inherit;}
+  .obd-go{background:var(--accent);color:#00130d;border:none;border-radius:12px;padding:13px;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit;width:100%;}
+  .obd-note{font-size:11px;color:var(--text-mute);text-align:center;padding:4px 0 18px;}`;
+  document.head.appendChild(s);
+}
+function _obdScroll() { try { window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' }); } catch (_) {} try { const de = document.scrollingElement; if (de) de.scrollTop = de.scrollHeight; } catch (_) {} }
+function _obdSetProg(step) {
+  const p = document.getElementById('obdProg'); if (!p) return;
+  p.innerHTML = ''; for (let i = 0; i < 6; i++) { const x = document.createElement('i'); if (i < step) x.className = 'on'; p.appendChild(x); }
+}
+function _obdCoachSay(html, cb) {
+  const chat = document.getElementById('obdChat'); if (!chat) return;
+  const t = document.createElement('div'); t.className = 'obd-row coach';
+  t.innerHTML = `<div class="obd-av">${OBD_SPARKLE}</div><div class="obd-bub"><div class="obd-typing"><span></span><span></span><span></span></div></div>`;
+  chat.appendChild(t); _obdScroll();
+  setTimeout(() => { const b = t.querySelector('.obd-bub'); if (b) b.innerHTML = html; _obdScroll(); if (cb) cb(); }, 460);
+}
+function _obdUserSay(text) {
+  const chat = document.getElementById('obdChat'); if (!chat) return;
+  const r = document.createElement('div'); r.className = 'obd-row user';
+  r.innerHTML = `<div class="obd-bub">${escapeHtml(text)}</div>`;
+  chat.appendChild(r); _obdScroll();
+}
+function _obdClearDock() { const d = document.getElementById('obdDock'); if (d) d.innerHTML = ''; }
+function _obdChips(opts) {
+  const dock = document.getElementById('obdDock'); if (!dock) return; dock.innerHTML = '';
+  const wrap = document.createElement('div'); wrap.className = 'obd-chips';
+  opts.forEach(o => { const b = document.createElement('button'); b.className = 'obd-chip' + (o.ghost ? ' ghost' : ''); b.textContent = o.label; b.onclick = o.onPick; wrap.appendChild(b); });
+  dock.appendChild(wrap); _obdScroll();
+}
+function _obdOwnText(ph, onSend) {
+  const dock = document.getElementById('obdDock'); if (!dock) return;
+  const row = document.createElement('div'); row.className = 'obd-typerow';
+  row.innerHTML = `<input placeholder="${ph}"><button class="obd-send">→</button>`;
+  const inp = row.querySelector('input'); const btn = row.querySelector('.obd-send');
+  const fire = () => { const v = inp.value.trim(); if (v) onSend(v); };
+  btn.onclick = fire; inp.addEventListener('keydown', e => { if (e.key === 'Enter') fire(); });
+  dock.appendChild(row); _obdScroll(); try { inp.focus(); } catch (_) {}
+}
+
+function renderChatOnboarding(el, existingIntake) {
+  document.body.classList.remove('coach-chat-active');
+  document.documentElement.classList.remove('coach-html-lock');
+  _obdInjectStyles();
+  _obdA = {};
+  if (existingIntake && existingIntake.unit_preference) _obdA.unit_preference = existingIntake.unit_preference;
+  el.innerHTML = `<div class="obd-wrap"><div class="obd-prog" id="obdProg"></div><div class="obd-chat" id="obdChat"></div><div class="obd-dock" id="obdDock"></div><div class="obd-note">Setting you up · about a minute · scripted, no AI tokens spent until your plan builds</div></div>`;
+  _obdSetProg(0);
+  _obdCoachSay(`Hey 👋 I'm your coach. I'll get you set up in about a minute.<br><br>Are you starting fresh, or do you already follow a plan you'd like to bring in?`, _obdAskStart);
+}
+function _obdAskStart() {
+  _obdChips([
+    { label: 'Build me a plan', onPick: () => { _obdUserSay('Build me a plan'); _obdA.planPath = 'build_new'; _obdClearDock(); _obdCoachSay(`Let's do it. What's your main sport?`, _obdAskSport); } },
+    { label: 'I already have a plan', ghost: true, onPick: () => { _obdUserSay('I already have a plan'); _obdA.planPath = 'import_adapt'; _obdClearDock(); _obdCoachSay(`Love it, I'll load it and adapt it with you. First a few quick things so I can tailor it right — what's your main sport?`, _obdAskSport); } },
+  ]);
+}
+function _obdAskSport() {
+  _obdSetProg(1);
+  _obdChips(Object.keys(OBD_GOALS).map(s => ({ label: s, onPick: () => { _obdUserSay(s); _obdA.sport = s; _obdClearDock(); _obdCoachSay(`${OBD_SPORT_ACK[s]} What are you working toward?`, _obdAskGoal); } })));
+}
+function _obdAskGoal() {
+  _obdSetProg(2);
+  const sport = _obdA.sport;
+  const opts = OBD_GOALS[sport].map(g => ({ label: g.label, onPick: () => _obdPickGoal(g, false) }));
+  opts.push({ label: '✏️ In my own words', ghost: true, onPick: () => { _obdClearDock(); _obdOwnText('e.g. sub-19 5K then a 50-mile ultra in fall…', (v) => _obdPickGoal(_obdFreeGoal(sport, v), true)); } });
+  _obdChips(opts);
+}
+// Map a free-text goal to the closest engine for the chosen sport.
+function _obdFreeGoal(sport, text) {
+  const t = (text || '').toLowerCase();
+  const dated = /race|marathon|5k|10k|half|ultra|century|100k|tri|ironman|fondo|event|sub-|\bmile\b|\bkm\b/i.test(t);
+  if (sport === 'Running') {
+    let event = 'general', fhSports = ['run'], fhGoal = 'general_health';
+    if (/marathon|ultra|50|100/.test(t)) event = 'marathon';
+    else if (/half/.test(t)) event = 'half_marathon';
+    else if (/10k/.test(t)) event = '10k';
+    else if (/5k|mile|park\s?run|speed/.test(t)) event = '5k';
+    if (event !== 'general') return { label: text, dated, event };
+    return { label: text, dated: false, event: 'general', fhGoal, fhSports };
+  }
+  if (sport === 'Triathlon') {
+    let event = 'olympic_tri';
+    if (/sprint/.test(t)) event = 'sprint_tri'; else if (/ironman|\bim\b|140/.test(t)) event = 'ironman'; else if (/70\.?3|half/.test(t)) event = '70_3';
+    return { label: text, dated: true, event };
+  }
+  const sportSports = sport === 'Cycling' ? ['bike'] : sport === 'Swimming' ? ['swim'] : ['mixed'];
+  return { label: text, dated, event: 'general', fhGoal: 'build_aerobic', fhSports: sportSports };
+}
+function _obdPickGoal(g, isFree) {
+  _obdUserSay(g.label);
+  _obdA.goal_event = g.event;
+  if (isFree) _obdA.goalText = g.label;
+  if (g.fhGoal) _obdA.fhGoal = g.fhGoal;
+  if (g.fhSports) _obdA.fhSports = g.fhSports;
+  _obdClearDock();
+  if (g.dated) { _obdCoachSay(isFree ? `Love it, that's a strong goal to chase. When's the race?` : `Great choice. When's the race?`, _obdAskDate); }
+  else { _obdCoachSay(isFree ? `Love it, that's a great focus. How long have you been at it?` : `Perfect. How long have you been at it?`, _obdAskExp); }
+}
+function _obdAskDate() {
+  _obdSetProg(3);
+  const dock = document.getElementById('obdDock'); if (!dock) return; dock.innerHTML = '';
+  const row = document.createElement('div'); row.className = 'obd-typerow';
+  row.innerHTML = `<input type="date"><button class="obd-send">Set</button>`;
+  const inp = row.querySelector('input'); const btn = row.querySelector('.obd-send');
+  try { inp.style.colorScheme = 'dark'; } catch (_) {}
+  btn.onclick = () => { if (!inp.value) return; _obdUserSay('🗓️ ' + inp.value); _obdA.race_date = inp.value; _obdClearDock(); _obdCoachSay(`Locked in, that gives us a real runway. How long have you been at it?`, _obdAskExp); };
+  dock.appendChild(row);
+  const ghostWrap = document.createElement('div'); ghostWrap.className = 'obd-chips';
+  const ng = document.createElement('button'); ng.className = 'obd-chip ghost'; ng.textContent = 'No date yet';
+  ng.onclick = () => { _obdUserSay('No date yet'); _obdA.race_date = null; _obdClearDock(); _obdCoachSay(`No problem, we'll build toward it. How long have you been at it?`, _obdAskExp); };
+  ghostWrap.appendChild(ng); dock.appendChild(ghostWrap); _obdScroll();
+}
+function _obdAskExp() {
+  _obdSetProg(3);
+  _obdChips(Object.keys(OBD_EXP).map(l => ({ label: l, onPick: () => { _obdUserSay(l); _obdA.experience = OBD_EXP[l]; _obdClearDock(); _obdCoachSay(`Good to know. How many days a week can you realistically train?`, _obdAskDays); } })));
+}
+function _obdAskDays() {
+  _obdSetProg(4);
+  _obdChips(['2', '3', '4', '5', '6', '7'].map(n => ({ label: n, onPick: () => { _obdUserSay(n + ' days'); _obdA.days = n; _obdClearDock(); const ack = (+n <= 3) ? `${n} is plenty to make real progress.` : `${n} days, we can do a lot with that.`; _obdCoachSay(`${ack} And roughly how much are you training right now?`, _obdAskVolume); } })));
+}
+function _obdAskVolume() {
+  _obdSetProg(5);
+  _obdChips(Object.keys(OBD_VOL).map(l => ({ label: l, onPick: () => { _obdUserSay(l); _obdA.volHours = OBD_VOL[l]; _obdClearDock(); _obdCoachSay(`Got it. Last thing — anything I should train around? Tap all that apply.`, _obdAskAround); } })));
+}
+function _obdAskAround() {
+  _obdSetProg(6);
+  const dock = document.getElementById('obdDock'); if (!dock) return; dock.innerHTML = '';
+  const picks = new Set();
+  const wrap = document.createElement('div'); wrap.className = 'obd-chips';
+  const allgood = document.createElement('button'); allgood.className = 'obd-chip'; allgood.textContent = 'All good 👍';
+  allgood.onclick = () => _obdFinishAround(['All good']); wrap.appendChild(allgood);
+  ['A niggle / injury', 'No gym', 'No pool', 'No bike right now', 'Tight on time some weeks'].forEach(l => {
+    const b = document.createElement('button'); b.className = 'obd-chip'; b.textContent = l;
+    b.onclick = () => { if (picks.has(l)) { picks.delete(l); b.classList.remove('sel'); } else { picks.add(l); b.classList.add('sel'); } };
+    wrap.appendChild(b);
+  });
+  dock.appendChild(wrap);
+  const drow = document.createElement('div'); drow.className = 'obd-chips';
+  const done = document.createElement('button'); done.className = 'obd-chip'; done.textContent = 'Done →';
+  done.onclick = () => _obdFinishAround([...picks]); drow.appendChild(done); dock.appendChild(drow); _obdScroll();
+}
+function _obdFinishAround(list) {
+  _obdA.around = list.length ? list : ['All good'];
+  _obdUserSay(_obdA.around.join(' · ')); _obdClearDock();
+  if (_obdA.around.some(x => /injury|niggle/i.test(x))) { _obdCoachSay(`Let's keep you safe then. Where's the issue?`, _obdAskInjuryArea); }
+  else { _obdMaybeAskTime(); }
+}
+function _obdAskInjuryArea() {
+  const areas = ['Knee', 'Foot / ankle', 'Hip', 'Back', 'Neck / shoulder', 'Hand / wrist'];
+  const opts = areas.map(a => ({ label: a, onPick: () => { _obdUserSay(a); _obdA.injuryArea = a; _obdClearDock(); _obdCoachSay(`Thanks. How's it feeling right now?`, _obdAskInjurySev); } }));
+  opts.push({ label: '✏️ Describe it', ghost: true, onPick: () => { _obdClearDock(); _obdOwnText('e.g. lower back, sore when I bend or twist…', (v) => { _obdUserSay(v); _obdA.injuryArea = v; _obdClearDock(); _obdCoachSay(`Thanks for the detail. How's it feeling right now?`, _obdAskInjurySev); }); } });
+  _obdChips(opts);
+}
+function _obdAskInjurySev() {
+  _obdChips([
+    ['Just a niggle, I can train', 'a manageable niggle'],
+    ['Flares up, needs care', 'flares up, needs care'],
+    ["Can't load it at all", "can't be loaded right now"],
+  ].map(([l, txt]) => ({ label: l, onPick: () => {
+    _obdUserSay(l); _obdA.injurySevText = txt; _obdClearDock();
+    const msg = /can't/.test(l) ? `Understood — I'll route the plan around it and keep that area unloaded. If it's sharp or not improving, please get it looked at by a physio.`
+      : /Flares/.test(l) ? `Got it. I'll keep that in mind and ease anything that aggravates it.`
+      : `Good — we'll train smart and keep an eye on it.`;
+    _obdCoachSay(msg, _obdMaybeAskTime);
+  } })));
+}
+function _obdMaybeAskTime() {
+  if (_obdA.around.some(x => /tight on time/i.test(x))) { _obdCoachSay(`And on a tight week, how many days can you usually still squeeze in?`, _obdAskTimeFloor); }
+  else { _obdBuild(); }
+}
+function _obdAskTimeFloor() {
+  _obdChips(['1', '2', '3'].map(n => ({ label: n + (n === '1' ? ' day' : ' days'), onPick: () => { _obdUserSay(n + (n === '1' ? ' day' : ' days')); _obdA.timeFloor = n; _obdClearDock(); _obdCoachSay(`Got it — on those weeks I'll trim to the essentials so you keep your rhythm without digging a hole.`, _obdBuild); } })));
+}
+// Map the conversational answers into the SAME intakeAnswers shape the form
+// produced, then hand off to the existing completeIntake() (save + plan-gen).
+function _obdMapToIntakeAnswers() {
+  const a = _obdA;
+  const sport = a.sport || 'Running';
+  let equipment = (OBD_EQUIP[sport] || ['run_gear', 'gym']).slice();
+  (a.around || []).forEach(x => {
+    if (/no gym/i.test(x)) equipment = equipment.filter(e => e !== 'gym');
+    if (/no pool/i.test(x)) equipment = equipment.filter(e => e !== 'pool');
+    if (/no bike/i.test(x)) equipment = equipment.filter(e => e !== 'bike');
+  });
+  const exp = a.experience || 'intermediate';
+  const limitParts = [];
+  if (a.injuryArea) limitParts.push(`${a.injuryArea}${a.injurySevText ? ' — ' + a.injurySevText : ''}`);
+  if (a.timeFloor) limitParts.push(`Some weeks tight on time (can usually manage ${a.timeFloor} day${a.timeFloor === '1' ? '' : 's'})`);
+  const days = OBD_DAYS[a.days] || null;
+  const out = {
+    plan_path: a.planPath || 'build_new',
+    goal_event: a.goal_event || 'general',
+    race_date: a.race_date || null,
+    goal_time: a.goalText || null,
+    experience_level: exp,
+    race_experience: OBD_RACEEXP[exp] || '1_to_2',
+    current_weekly_hours: a.volHours || null,
+    available_days: days,
+    preferred_long_day: 'sat',
+    equipment,
+    injuries: limitParts.length ? limitParts.join('. ') : null,
+    unit_preference: a.unit_preference || 'metric',
+  };
+  if (out.goal_event === 'general') {
+    out.fh_primary_goal = a.fhGoal || 'general_health';
+    out.fh_primary_sports = a.fhSports || ['mixed'];
+    out.fh_fitness_level = exp;
+    out.fh_days_per_week = a.days || null;
+  }
+  return out;
+}
+function _obdBuild() {
+  _obdSetProg(6);
+  // Hand the collected answers to the existing completion path. For "build" it
+  // generates a plan; for "import_adapt" completeIntake routes to the import flow.
+  intakeAnswers = _obdMapToIntakeAnswers();
+  try { completeIntake(); } catch (e) { console.error('[Stryxs] completeIntake from onboarding failed:', e); toast('Something went wrong building your plan. Try again.', 4000); }
+}
+
 function renderIntake(el, existingIntake) {
   // The intake flow scrolls normally, it must not inherit the full-screen chat lock.
   document.body.classList.remove('coach-chat-active');
@@ -17422,7 +17734,10 @@ async function renderCoachChat(el, intakeMaybe) {
     document.body.classList.remove('coach-chat-active');
     document.documentElement.classList.remove('coach-html-lock');
     if (typeof resetCoachViewport === 'function') resetCoachViewport();
-    renderIntake(el, intake);
+    // Phase 1: conversational onboarding (scripted chat). Falls back to the old
+    // form intake if anything in the new flow throws on first render.
+    try { renderChatOnboarding(el, intake); }
+    catch (e) { console.error('[Stryxs] chat onboarding failed, using form fallback:', e); renderIntake(el, intake); }
     return;
   }
 
