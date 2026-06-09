@@ -15808,11 +15808,11 @@ const OBD_GOALS = {
     { label: 'Just getting fitter', dated: false, event: 'general', fhGoal: 'general_health', fhSports: ['run'] },
   ],
   Cycling: [
-    { label: 'First 100k / century', dated: true, event: 'general', fhGoal: 'build_aerobic', fhSports: ['bike'] },
-    { label: 'A gran fondo / event', dated: true, event: 'general', fhGoal: 'build_aerobic', fhSports: ['bike'] },
-    { label: 'Build my FTP / power', dated: false, event: 'general', fhGoal: 'sport_performance', fhSports: ['bike'] },
-    { label: 'Climbing strength', dated: false, event: 'general', fhGoal: 'sport_performance', fhSports: ['bike'] },
-    { label: 'Just ride more', dated: false, event: 'general', fhGoal: 'general_health', fhSports: ['bike'] },
+    { label: 'First 100k / century', dated: true, event: 'cycling' },
+    { label: 'A gran fondo / event', dated: true, event: 'cycling' },
+    { label: 'Build my FTP / power', dated: false, event: 'cycling' },
+    { label: 'Climbing strength', dated: false, event: 'cycling' },
+    { label: 'Just ride more', dated: false, event: 'cycling' },
   ],
   Swimming: [
     { label: 'Open-water race', dated: true, event: 'general', fhGoal: 'sport_performance', fhSports: ['swim'] },
@@ -15959,13 +15959,16 @@ function _obdFreeGoal(sport, text) {
     if (/sprint/.test(t)) event = 'sprint_tri'; else if (/ironman|\bim\b|140/.test(t)) event = 'ironman'; else if (/70\.?3|half/.test(t)) event = '70_3';
     return { label: text, dated: true, event };
   }
-  const sportSports = sport === 'Cycling' ? ['bike'] : sport === 'Swimming' ? ['swim'] : ['mixed'];
+  if (sport === 'Cycling') return { label: text, dated, event: 'cycling' };
+  const sportSports = sport === 'Swimming' ? ['swim'] : ['mixed'];
   return { label: text, dated, event: 'general', fhGoal: 'build_aerobic', fhSports: sportSports };
 }
 function _obdPickGoal(g, isFree) {
   _obdUserSay(g.label);
   _obdA.goal_event = g.event;
-  if (isFree) _obdA.goalText = g.label;
+  // Store the specific goal label (free-text always; cycling sub-goal too) so the
+  // plan knows century vs FTP vs climbing — it rides in goal_time to the plan call.
+  if (isFree || g.event === 'cycling') _obdA.goalText = g.label;
   if (g.fhGoal) _obdA.fhGoal = g.fhGoal;
   if (g.fhSports) _obdA.fhSports = g.fhSports;
   _obdClearDock();
@@ -18663,6 +18666,7 @@ function getMethodologyForGoal(goalEvent) {
     half_marathon:  { name: 'Daniels + Pfitzinger', brain: "Jack Daniels + Pete Pfitzinger (half marathon)" },
     '10k':          { name: 'Daniels VDOT',       brain: "Jack Daniels VDOT (short-distance run)" },
     '5k':           { name: 'Daniels VDOT',       brain: "Jack Daniels VDOT (short-distance run)" },
+    cycling:        { name: 'Coggan + Friel',     brain: "Coggan & Allen power + Joe Friel + Seiler (road cycling)" },
     general:        { name: 'Attia + Seiler',     brain: "Peter Attia + Stephen Seiler (health & fitness)" },
   };
   return map[goalEvent] || { name: 'Stryxs Coach', brain: 'endurance methodology' };
