@@ -5761,7 +5761,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v99',
+      app_version: 'v100',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -9910,6 +9910,49 @@ function buildWorkoutFromStream(parsed) {
   if (sport === 'bike') { w.avgSpeed = +avgSpeedKmh.toFixed(1); if (avgPower) w.avgPower = avgPower; if (maxPower) w.maxPower = maxPower; }
   if (parsed.poolLengthM) w.pool_length = Math.round(parsed.poolLengthM);
   if (swimLaps) w.swim_laps = swimLaps;
+
+  // Downsample per-point streams to ~80 points so uploaded workouts (FIT/TCX/GPX)
+  // get the SAME over-time charts as Strava-synced ones (HR / pace / speed /
+  // cadence / elevation). Previously only Strava's edge emitted these, so uploads
+  // — and swims in particular — were missing the HR and pace charts entirely.
+  const SERIES_N = 80;
+  const _dsAvg = (getter) => {
+    const n = pts.length;
+    if (n < 4) return null;
+    const groups = Math.min(SERIES_N, n);
+    const out = [];
+    for (let g = 0; g < groups; g++) {
+      const lo = Math.floor((g / groups) * n);
+      const hi = Math.max(lo + 1, Math.floor(((g + 1) / groups) * n));
+      let sum = 0, cnt = 0;
+      for (let i = lo; i < hi; i++) { const v = getter(pts[i]); if (typeof v === 'number' && isFinite(v) && v > 0) { sum += v; cnt++; } }
+      out.push(cnt ? Math.round((sum / cnt) * 10) / 10 : 0);
+    }
+    return out.some(v => v > 0) ? out : null;
+  };
+  const _dsSpeedKmh = () => {
+    const n = pts.length;
+    if (n < 4 || !haveDist) return null;
+    const groups = Math.min(SERIES_N, n);
+    const out = [];
+    for (let g = 0; g < groups; g++) {
+      const lo = Math.floor((g / groups) * n);
+      const hi = Math.min(n - 1, Math.max(lo + 1, Math.floor(((g + 1) / groups) * n)));
+      const dd = (pts[hi].dist - pts[lo].dist);
+      const dt = (pts[hi].ts - pts[lo].ts) / 1000;
+      out.push(dt > 0 && dd >= 0 ? Math.round((dd / dt) * 3.6 * 10) / 10 : 0);
+    }
+    return out.some(v => v > 0) ? out : null;
+  };
+  const hrSeries = _dsAvg(p => p.hr);
+  const cadenceSeries = _dsAvg(p => p.cad);
+  const elevationSeries = _dsAvg(p => p.alt);
+  if (hrSeries) w.hrSeries = hrSeries;
+  if (cadenceSeries) w.cadenceSeries = cadenceSeries;
+  if (elevationSeries) w.elevationSeries = elevationSeries;
+  if (sport === 'bike') { const sp = _dsSpeedKmh(); if (sp) w.speedSeries = sp; }
+  else if (sport === 'run') { const sp = _dsSpeedKmh(); if (sp) w.paceSeries = sp.map(k => k > 0 ? Math.round((60 / k) * 100) / 100 : 0); }
+
   if (!avgHr) w._no_hr_data = true;
   return w;
 }
@@ -11761,7 +11804,23 @@ async function analyzeWorkoutWithCoach(key, el) {
   }
   try {
     const { data: intake } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).single();
-    const commentary = await callCoach('workout_commentary', { workout: a, intake, activeInsights: [] });
+    // Pull the planned workout for this day so Coach can check plan adherence —
+    // i.e. honestly say whether they actually did the prescribed session or
+    // something different (for any sport), instead of always "you nailed it".
+    let plannedWorkout = null;
+    try {
+      const wDate = String(a.date || a.created_at || '').split('T')[0];
+      if (wDate) {
+        const { data: pls } = await sb.from('planned_workouts')
+          .select('sport, workout_type, duration_minutes, distance_km, description, intensity_target')
+          .eq('user_id', state.user.id).eq('scheduled_date', wDate);
+        if (pls && pls.length) {
+          const sk = (typeof normalizeSport === 'function') ? normalizeSport(a.sport) : a.sport;
+          plannedWorkout = pls.find(p => normalizeSport(p.sport) === sk) || pls[0];
+        }
+      }
+    } catch (_) {}
+    const commentary = await callCoach('workout_commentary', { workout: a, intake, activeInsights: [], plannedWorkout });
     // Save as a coach chat message so it persists across devices and lives where
     // all the other Coach conversation is (not pinned to one device's storage).
     try {
@@ -11839,9 +11898,20 @@ function renderSummaryWorkout(a) {
         ${renderHrZoneBars(a.zd)}
         ${a.sport === 'bike' ? renderPowerStats(a) : ''}
         ${renderSplitsTable(a.splits, a.sport)}
-        ${(a.sport === 'run' || a.sport === 'bike') ? renderSplitsBarChart(a.splits, a.sport) : ''}
         ${a.sport === 'swim' ? renderSwimLapsTable(a.swim_laps, a.pool_length) : ''}
         ${a.sport === 'swim' ? renderSwimPaceChart(a.swim_laps) : ''}
+        <!-- Over-time stream charts (HR / pace / speed / power / cadence / elevation).
+             Each renders only if its series has data, so swims show HR (and pace if
+             open-water), runs/bikes show the full set, and stream-less Strava summary
+             cards show nothing extra. Shared precise TIME x-axis; the per-km table
+             above covers split-by-split, so no duplicate per-split chart here. -->
+        ${(() => { const xt = _stryxsTimeAxisLabels(_stryxsWorkoutSeconds(a), 5); return `
+        ${renderTimeSeriesChart(a.hrSeries, 'Heart Rate over time', 'bpm', '#ef4444', xt, 'Time')}
+        ${a.sport === 'bike' ? renderTimeSeriesChart(a.speedSeries, 'Speed over time', 'km/h', '#00e5a0', xt, 'Time') : renderTimeSeriesChart(a.paceSeries, 'Pace over time', 'min/km', '#00e5a0', xt, 'Time')}
+        ${renderTimeSeriesChart(a.powerSeries, 'Power over time', 'w', '#fbbf24', xt, 'Time')}
+        ${renderTimeSeriesChart(a.cadenceSeries, 'Cadence over time', a.sport === 'bike' ? 'rpm' : 'spm', '#5082ff', xt, 'Time')}
+        ${renderTimeSeriesChart(a.elevationSeries, 'Elevation profile', 'm', '#a78bfa', xt, 'Time')}
+        `; })()}
         ${renderDataAvailabilityHint(a)}
         ${renderAnalyzeBtn(a)}
         ${renderWorkoutFeedbackForm(a._dbId)}
@@ -16426,8 +16496,11 @@ async function callCoach(action, payload, options = {}) {
         e.limit_type = parsed.limit_type;
         e.usage = parsed.usage;
         // Auto-show the modal, caller doesn't need to handle this case
-        // explicitly unless they want custom behavior.
-        try { showUsageLimitModal(parsed); } catch (_) {}
+        // explicitly unless they want custom behavior. BACKGROUND callers (e.g.
+        // the silent auto-extend) pass suppressUsageModal so a user who's hit
+        // their cap doesn't get the modal popping up at random while just
+        // navigating the app — they only see it when THEY trigger an AI action.
+        if (!options.suppressUsageModal) { try { showUsageLimitModal(parsed); } catch (_) {} }
         try { trackEvent('usage_limit_hit', { limit_type: parsed.limit_type, action }); } catch (_) {}
         throw e;
       }
@@ -20022,7 +20095,7 @@ async function generateNextWeekFromAck(intake, activePlan) {
 // buffer, with guards so it never spams, never builds past the race, and only
 // runs for Pro users with zones set.
 // ═══════════════════════════════════════════════════════════
-async function _extendPlanByOneWeek(intake, activePlan) {
+async function _extendPlanByOneWeek(intake, activePlan, opts = {}) {
   if (!state.user) throw new Error('Not authenticated');
 
   // 1. Next week starts the Monday AFTER the last scheduled day.
@@ -20092,10 +20165,12 @@ async function _extendPlanByOneWeek(intake, activePlan) {
     } catch (_) {}
   }
 
-  // 5. Generate + 6. Save.
+  // 5. Generate + 6. Save. suppressUsageModal forwards from background callers
+  // (auto-extend) so a capped user doesn't get the limit modal popping up while
+  // just navigating; explicit callers (chat build) leave it off.
   const plan = await callCoach('generate_plan', {
     intake, weekNumber: nextWeekNumber, recentWorkouts, skeleton, lastSundaySport,
-  }, { timeoutMs: 90000 });
+  }, { timeoutMs: 90000, suppressUsageModal: !!opts.suppressUsageModal });
   if (!plan || !plan.workouts || plan.workouts.length === 0) throw new Error('Coach returned an empty plan');
 
   if (importedProfile) plan._plan_profile = importedProfile;
@@ -20158,7 +20233,7 @@ async function maybeAutoExtendPlan() {
     while (built < CAP && ahead < AUTO_EXTEND_TARGET_DAYS) {
       // Stop before scheduling weeks that start after the race.
       if (raceMs && last && new Date(last + 'T12:00:00').getTime() >= raceMs) break;
-      await _extendPlanByOneWeek(intake, curActive);
+      await _extendPlanByOneWeek(intake, curActive, { suppressUsageModal: true });
       built++;
       const { data: ap } = await sb.from('training_plans')
         .select('plan_data').eq('user_id', state.user.id).eq('active', true)
@@ -23123,17 +23198,26 @@ function renderCalendarGrid(plannedWorkouts) {
 // the dashboard "today" card so a tap goes straight to the session, not just the
 // calendar). Sets the calendar to that month, then waits for the grid to populate.
 function openPlanWorkout(dateStr) {
-  try { const m = new Date(dateStr + 'T12:00:00'); m.setDate(1); calMonth = m; } catch (_) {}
+  // The Plan page is the day-by-day FEED now (renderPlanDayList), not the old
+  // calendar grid + modal panel. So instead of opening the legacy workout panel,
+  // navigate to the feed, scroll to today's card, and expand its inline dropdown.
   navigate('plan');
   let tries = 0;
   const tryOpen = () => {
-    if (typeof currentPlannedWorkouts !== 'undefined' && currentPlannedWorkouts[dateStr] && currentPlannedWorkouts[dateStr].length) {
-      openWorkoutPanel(dateStr);
-    } else if (tries++ < 25) {
-      setTimeout(tryOpen, 100);
+    const todayDay = document.getElementById('pf-today');
+    if (todayDay) {
+      // Expand the first expandable card in today's group (planned or completed).
+      const crow = todayDay.querySelector('.pf-crow');
+      const exp = todayDay.querySelector('.pf-exp');
+      if (crow && exp && exp.style.display === 'none') {
+        try { togglePlanCard(exp.id, crow); } catch (_) {}
+      }
+      try { scrollToTodayWorkout(); } catch (_) {}
+      return;
     }
+    if (tries++ < 30) setTimeout(tryOpen, 100);
   };
-  setTimeout(tryOpen, 200);
+  setTimeout(tryOpen, 150);
 }
 
 function openWorkoutPanel(dateStr) {
