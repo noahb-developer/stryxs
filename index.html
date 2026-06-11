@@ -15803,7 +15803,7 @@ const OBD_GOALS = {
     { label: '10K', dated: true, event: '10k' },
     { label: 'Half marathon', dated: true, event: 'half_marathon' },
     { label: 'Marathon', dated: true, event: 'marathon' },
-    { label: 'Ultra', dated: true, event: 'marathon' },              // bridge → marathon engine (P2: real ultra)
+    { label: 'Ultra', dated: true, event: 'ultra' },                 // standalone ultra engine (Koop/Roche)
     { label: 'Faster mile / speed', dated: false, event: '5k' },     // bridge → VDOT speed (P2: mile)
     { label: 'Just getting fitter', dated: false, event: 'general', fhGoal: 'general_health', fhSports: ['run'] },
   ],
@@ -15969,7 +15969,7 @@ function _obdPickGoal(g, isFree) {
   // Store the specific goal label (free-text always; cycling + swimming sub-goals
   // too) so the plan/projection knows century vs FTP, or open-water vs pool vs
   // technique — it rides in goal_time to the plan call.
-  if (isFree || g.event === 'cycling' || g.event === 'swimming') _obdA.goalText = g.label;
+  if (isFree || g.event === 'cycling' || g.event === 'swimming' || g.event === 'ultra') _obdA.goalText = g.label;
   if (g.fhGoal) _obdA.fhGoal = g.fhGoal;
   if (g.fhSports) _obdA.fhSports = g.fhSports;
   _obdClearDock();
@@ -18650,7 +18650,7 @@ function stopChatMsg() {
 }
 
 function formatGoal(g) {
-  const map = { marathon: 'Marathon', half_marathon: 'Half Marathon', '10k': '10K', '5k': '5K', olympic_tri: 'Olympic Triathlon', '70_3': '70.3 / Half Ironman', ironman: 'Ironman', cycling: 'Cycling', swimming: 'Swimming', general: 'General Fitness' };
+  const map = { marathon: 'Marathon', half_marathon: 'Half Marathon', '10k': '10K', '5k': '5K', olympic_tri: 'Olympic Triathlon', '70_3': '70.3 / Half Ironman', ironman: 'Ironman', cycling: 'Cycling', swimming: 'Swimming', ultra: 'Ultra', general: 'General Fitness' };
   return map[g] || g;
 }
 
@@ -18669,6 +18669,7 @@ function getMethodologyForGoal(goalEvent) {
     '5k':           { name: 'Daniels VDOT',       brain: "Jack Daniels VDOT (short-distance run)" },
     cycling:        { name: 'Coggan + Friel',     brain: "Coggan & Allen power + Joe Friel + Seiler (road cycling)" },
     swimming:       { name: 'Swim Smooth + CSS',  brain: "Swim Smooth / Critical Swim Speed + Maglischo + Olbrecht (swimming)" },
+    ultra:          { name: 'Koop + Roche',       brain: "Jason Koop + David Roche + House & Johnston (ultrarunning)" },
     general:        { name: 'Attia + Seiler',     brain: "Peter Attia + Stephen Seiler (health & fitness)" },
   };
   return map[goalEvent] || { name: 'Stryxs Coach', brain: 'endurance methodology' };
@@ -20021,6 +20022,33 @@ function renderRaceDayPlan(intake, paces) {
           ${zoneCard('Threshold (CSS)', paces.threshold)}
           ${zoneCard('VO2max', paces.vo2max)}
           ${zoneCard('Sprint', paces.sprint)}
+        </div>
+      </div>
+    `;
+  }
+
+  // Ultra goal, show race-day effort + fueling + run/hike strategy (pace is meaningless on vert).
+  if (paces.ultra || goal === 'ultra') {
+    const card = (lbl, val) => val ? `<div style="padding: 10px 12px; background: var(--bg-3); border-radius: 8px;"><div style="font-size: 11px; color: var(--text-dim);">${lbl}</div><div style="font-weight: 600; margin-top: 2px; font-size: 13px; line-height: 1.4;">${val}</div></div>` : '';
+    return `
+      <div>
+        <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; margin-bottom: 10px;">Race-day plan</div>
+        <div style="display: flex; align-items: center; gap: 12px; padding: 14px 16px; background: linear-gradient(135deg, rgba(0, 255, 163, 0.08), rgba(80, 130, 255, 0.04)); border: 1px solid rgba(0, 255, 163, 0.2); border-radius: 12px; margin-bottom: 14px;">
+          <div style="font-size: 22px; flex-shrink: 0;">${_sportIconHTML ? _sportIconHTML('run', 22) : '🏃'}</div>
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-size: 12px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.5px;">Hold this effort</div>
+            <div style="font-size: 15px; font-weight: 700; color: var(--text); margin-top: 2px;">${paces.race_effort || 'Easy aerobic, by effort not pace'}</div>
+          </div>
+        </div>
+
+        ${_sportProgressBlock('run')}
+
+        <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; margin: 14px 0 10px;">Execution</div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px;">
+          ${card('Fueling', paces.fueling)}
+          ${card('Run / hike', paces.run_hike)}
+          ${card('Descents', paces.descend)}
+          ${card('Long runs', paces.easy_long)}
         </div>
       </div>
     `;
