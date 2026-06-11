@@ -15815,9 +15815,9 @@ const OBD_GOALS = {
     { label: 'Just ride more', dated: false, event: 'cycling' },
   ],
   Swimming: [
-    { label: 'Open-water race', dated: true, event: 'general', fhGoal: 'sport_performance', fhSports: ['swim'] },
-    { label: 'A pool event / times', dated: true, event: 'general', fhGoal: 'sport_performance', fhSports: ['swim'] },
-    { label: 'Swim fitness & technique', dated: false, event: 'general', fhGoal: 'build_aerobic', fhSports: ['swim'] },
+    { label: 'Open-water race', dated: true, event: 'swimming', fhGoal: 'sport_performance', fhSports: ['swim'] },
+    { label: 'A pool event / times', dated: true, event: 'swimming', fhGoal: 'sport_performance', fhSports: ['swim'] },
+    { label: 'Swim fitness & technique', dated: false, event: 'swimming', fhGoal: 'build_aerobic', fhSports: ['swim'] },
   ],
   Triathlon: [
     { label: 'Sprint', dated: true, event: 'sprint_tri' },
@@ -15966,9 +15966,10 @@ function _obdFreeGoal(sport, text) {
 function _obdPickGoal(g, isFree) {
   _obdUserSay(g.label);
   _obdA.goal_event = g.event;
-  // Store the specific goal label (free-text always; cycling sub-goal too) so the
-  // plan knows century vs FTP vs climbing — it rides in goal_time to the plan call.
-  if (isFree || g.event === 'cycling') _obdA.goalText = g.label;
+  // Store the specific goal label (free-text always; cycling + swimming sub-goals
+  // too) so the plan/projection knows century vs FTP, or open-water vs pool vs
+  // technique — it rides in goal_time to the plan call.
+  if (isFree || g.event === 'cycling' || g.event === 'swimming') _obdA.goalText = g.label;
   if (g.fhGoal) _obdA.fhGoal = g.fhGoal;
   if (g.fhSports) _obdA.fhSports = g.fhSports;
   _obdClearDock();
@@ -18649,7 +18650,7 @@ function stopChatMsg() {
 }
 
 function formatGoal(g) {
-  const map = { marathon: 'Marathon', half_marathon: 'Half Marathon', '10k': '10K', '5k': '5K', olympic_tri: 'Olympic Triathlon', '70_3': '70.3 / Half Ironman', ironman: 'Ironman', cycling: 'Cycling', general: 'General Fitness' };
+  const map = { marathon: 'Marathon', half_marathon: 'Half Marathon', '10k': '10K', '5k': '5K', olympic_tri: 'Olympic Triathlon', '70_3': '70.3 / Half Ironman', ironman: 'Ironman', cycling: 'Cycling', swimming: 'Swimming', general: 'General Fitness' };
   return map[g] || g;
 }
 
@@ -18667,6 +18668,7 @@ function getMethodologyForGoal(goalEvent) {
     '10k':          { name: 'Daniels VDOT',       brain: "Jack Daniels VDOT (short-distance run)" },
     '5k':           { name: 'Daniels VDOT',       brain: "Jack Daniels VDOT (short-distance run)" },
     cycling:        { name: 'Coggan + Friel',     brain: "Coggan & Allen power + Joe Friel + Seiler (road cycling)" },
+    swimming:       { name: 'Swim Smooth + CSS',  brain: "Swim Smooth / Critical Swim Speed + Maglischo + Olbrecht (swimming)" },
     general:        { name: 'Attia + Seiler',     brain: "Peter Attia + Stephen Seiler (health & fitness)" },
   };
   return map[goalEvent] || { name: 'Stryxs Coach', brain: 'endurance methodology' };
@@ -19991,6 +19993,34 @@ function renderRaceDayPlan(intake, paces) {
           ${zoneCard('Sweet spot', paces.sweet_spot)}
           ${zoneCard('Threshold', paces.threshold)}
           ${zoneCard('VO2max', paces.vo2max)}
+        </div>
+      </div>
+    `;
+  }
+
+  // Standalone swimming goal, show race-day pace + CSS zone targets.
+  if (paces.swimming || goal === 'swimming') {
+    const zoneCard = (lbl, val) => val ? `<div style="padding: 10px 12px; background: var(--bg-3); border-radius: 8px;"><div style="font-size: 11px; color: var(--text-dim);">${lbl}</div><div style="font-family: 'JetBrains Mono', monospace; font-weight: 600; margin-top: 2px; font-size: 13px;">${val}</div></div>` : '';
+    return `
+      <div>
+        <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; margin-bottom: 10px;">Race-day pace</div>
+        <div style="display: flex; align-items: center; gap: 12px; padding: 14px 16px; background: linear-gradient(135deg, rgba(0, 255, 163, 0.08), rgba(80, 130, 255, 0.04)); border: 1px solid rgba(0, 255, 163, 0.2); border-radius: 12px; margin-bottom: 14px;">
+          <div style="font-size: 22px; flex-shrink: 0;">${_sportIconHTML ? _sportIconHTML('swim', 22) : '🏊'}</div>
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-size: 12px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.5px;">Hold this on the day</div>
+            <div style="font-size: 16px; font-weight: 700; font-family: 'JetBrains Mono', monospace; color: var(--text); margin-top: 2px;">${paces.event_pace}</div>
+            ${paces.css ? `<div style="font-size: 12px; color: var(--text-mute); margin-top: 3px;">CSS ${paces.css}</div>` : ''}
+          </div>
+        </div>
+
+        ${_sportProgressBlock('swim')}
+
+        <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; margin: 14px 0 10px;">Training paces (vs CSS)</div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px;">
+          ${zoneCard('Easy (Z2)', paces.easy)}
+          ${zoneCard('Threshold (CSS)', paces.threshold)}
+          ${zoneCard('VO2max', paces.vo2max)}
+          ${zoneCard('Sprint', paces.sprint)}
         </div>
       </div>
     `;
