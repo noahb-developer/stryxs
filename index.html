@@ -10247,7 +10247,7 @@ function renderDonut(zd) {
   for (const z of order) if (zd[z].pct > max) { max = zd[z].pct; dominant = z; }
   return `
     <div class="donut">
-      <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+      <svg width="100%" height="100%" viewBox="0 0 ${size} ${size}" style="display: block;">
         <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--bg-3)" stroke-width="${stroke}"/>
         ${segments.join('')}
       </svg>
@@ -10665,9 +10665,12 @@ function renderStryxsLineChart(opts) {
 
   // Width of the left Y-axis label gutter, in pixels (declared up here so the
   // data-cache below can reference it without hitting a temporal dead zone).
-  // Wide enough to hold the rotated title column (16px) + the value labels.
-  const yGutter = 52;
-  const yGutterR = validB ? 52 : 0;
+  // Holds only the tick values — the metric name + unit already live in the
+  // chart title and the header stats (avg/min/max include the unit), so the old
+  // rotated axis title (which got clipped on mobile where the chart is short)
+  // is gone. Dual charts color the ticks by series instead.
+  const yGutter = 40;
+  const yGutterR = validB ? 40 : 0;
   // Bare tick formatters (value only, no unit) for the Y-axis labels.
   const tickA = opts.tickFormatterA || _stryxsBareFormatter(opts.unitA);
   const tickB = opts.tickFormatterB || _stryxsBareFormatter(opts.unitB);
@@ -10701,14 +10704,11 @@ function renderStryxsLineChart(opts) {
   const xLabels = (Array.isArray(opts.xAxisLabels) && opts.xAxisLabels.length >= 2)
     ? opts.xAxisLabels
     : ['start', 'middle', 'end'];
-  // Axis title (the metric name + unit). Y-axis title rotates 90°.
-  const yAxisTitle = (opts.yAxisTitle != null)
-    ? opts.yAxisTitle
-    : (opts.labelA + (opts.unitA ? ' (' + opts.unitA + ')' : ''));
-  const yAxisTitleB = validB
-    ? ((opts.yAxisTitleB != null) ? opts.yAxisTitleB : (opts.labelB + (opts.unitB ? ' (' + opts.unitB + ')' : '')))
-    : '';
   const xAxisTitle = opts.xAxisTitle || '';
+  // Dual charts: tint each side's tick values with its series color so you can
+  // tell which axis belongs to which line without a rotated title.
+  const tickColorA = validB ? opts.colorA : 'var(--text-mute)';
+  const tickColorB = opts.colorB || 'var(--text-mute)';
   // Inner-chart percent offsets so axis ticks line up with the SVG plot
   // area inside its padded viewBox. pad.top/H is the top of the plot;
   // (pad.top + innerH)/H is the bottom.
@@ -10722,28 +10722,18 @@ function renderStryxsLineChart(opts) {
         ${headerSub}
       </div>
       <div id="${chartId}_wrap" style="position: relative; padding-left: ${yGutter}px; padding-right: ${yGutterR}px; padding-bottom: 26px;">
-        <!-- Left Y-axis labels (and rotated axis title) -->
-        <div style="position: absolute; left: 0; top: 0; bottom: 26px; width: ${yGutter}px; pointer-events: none; display: flex; align-items: stretch; overflow: hidden;">
-          <div style="flex: 0 0 16px; display: flex; align-items: center; justify-content: center; overflow: hidden;">
-            <div style="transform: rotate(-90deg); white-space: nowrap; font-size: 9px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.3px;">${yAxisTitle}</div>
-          </div>
-          <div style="flex: 1; position: relative; font-size: 10px; color: var(--text-mute); font-variant-numeric: tabular-nums;">
-            <div style="position: absolute; right: 5px; top: ${yTopPct}%; transform: translateY(-50%); text-align: right; white-space: nowrap;">${tickA(hiA)}</div>
-            <div style="position: absolute; right: 5px; top: ${(yTopPct + yBottomPct) / 2}%; transform: translateY(-50%); text-align: right; opacity: 0.7; white-space: nowrap;">${tickA((hiA + loA) / 2)}</div>
-            <div style="position: absolute; right: 5px; top: ${yBottomPct}%; transform: translateY(-50%); text-align: right; white-space: nowrap;">${tickA(loA)}</div>
-          </div>
+        <!-- Left Y-axis tick values -->
+        <div style="position: absolute; left: 0; top: 0; bottom: 26px; width: ${yGutter}px; pointer-events: none; font-size: 10px; color: ${tickColorA}; font-variant-numeric: tabular-nums;">
+          <div style="position: absolute; right: 6px; top: ${yTopPct}%; transform: translateY(-50%); text-align: right; white-space: nowrap;">${tickA(hiA)}</div>
+          <div style="position: absolute; right: 6px; top: ${(yTopPct + yBottomPct) / 2}%; transform: translateY(-50%); text-align: right; opacity: 0.7; white-space: nowrap;">${tickA((hiA + loA) / 2)}</div>
+          <div style="position: absolute; right: 6px; top: ${yBottomPct}%; transform: translateY(-50%); text-align: right; white-space: nowrap;">${tickA(loA)}</div>
         </div>
         ${validB ? `
-        <!-- Right Y-axis labels (for the second series) -->
-        <div style="position: absolute; right: 0; top: 0; bottom: 26px; width: ${yGutterR}px; pointer-events: none; display: flex; align-items: stretch; overflow: hidden;">
-          <div style="flex: 1; position: relative; font-size: 10px; color: var(--text-mute); font-variant-numeric: tabular-nums;">
-            <div style="position: absolute; left: 5px; top: ${yTopPct}%; transform: translateY(-50%); white-space: nowrap;">${tickB(hiB)}</div>
-            <div style="position: absolute; left: 5px; top: ${(yTopPct + yBottomPct) / 2}%; transform: translateY(-50%); opacity: 0.7; white-space: nowrap;">${tickB((hiB + loB) / 2)}</div>
-            <div style="position: absolute; left: 5px; top: ${yBottomPct}%; transform: translateY(-50%); white-space: nowrap;">${tickB(loB)}</div>
-          </div>
-          <div style="flex: 0 0 16px; display: flex; align-items: center; justify-content: center; overflow: hidden;">
-            <div style="transform: rotate(90deg); white-space: nowrap; font-size: 9px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.3px;">${yAxisTitleB}</div>
-          </div>
+        <!-- Right Y-axis tick values (second series, color-matched) -->
+        <div style="position: absolute; right: 0; top: 0; bottom: 26px; width: ${yGutterR}px; pointer-events: none; font-size: 10px; color: ${tickColorB}; font-variant-numeric: tabular-nums;">
+          <div style="position: absolute; left: 6px; top: ${yTopPct}%; transform: translateY(-50%); white-space: nowrap;">${tickB(hiB)}</div>
+          <div style="position: absolute; left: 6px; top: ${(yTopPct + yBottomPct) / 2}%; transform: translateY(-50%); opacity: 0.7; white-space: nowrap;">${tickB((hiB + loB) / 2)}</div>
+          <div style="position: absolute; left: 6px; top: ${yBottomPct}%; transform: translateY(-50%); white-space: nowrap;">${tickB(loB)}</div>
         </div>` : ''}
         <!-- SVG chart -->
         <svg id="${chartId}" width="100%" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="display: block; touch-action: pan-y; user-select: none; -webkit-user-select: none;">
@@ -13114,6 +13104,7 @@ function _aerobicEfficiency(loDays, hiDays) {
   for (const w of (state.workouts || [])) {
     const sp = (typeof normalizeSport === 'function') ? normalizeSport(w.sport) : (w.sport || '');
     if (sp !== 'run') continue;
+    if (w.activity_classification === 'daily_activity') continue; // not training
     const hr = w.avgHr || w.avg_hr;
     if (!hr || hr < 0.65 * runLthr || hr > 0.90 * runLthr) continue; // easy/aerobic only
     if (!(w.distance > 0) || w.duration == null) continue;
@@ -13992,7 +13983,10 @@ function renderTrends() {
     }
     return;
   }
-  const recent = state.workouts.slice(-20);
+  // Daily activities (commute rides, walks to the shop) are NOT training — they
+  // skew the training mix, drift, and intensity stats, so they're excluded here
+  // entirely. They stay visible in the Log with their "Daily" tag.
+  const recent = state.workouts.filter(w => w.activity_classification !== 'daily_activity').slice(-20);
 
   // Initialize trend sport pickers
   if (!state.trendsDriftSport) state.trendsDriftSport = 'overall';
@@ -14145,17 +14139,24 @@ function renderTrends() {
               ${avgDrift < 5 ? 'Strong aerobic base' : avgDrift < 8 ? 'Building aerobic' : 'Needs work'}
             </div>
             ${(() => {
-              // Mini visual scale showing drift on a bar
+              // Drift scale: a FIXED full-width gradient track (0-12% drift) whose
+              // color zones sit at the real verdict thresholds (<5 strong, 5-8 ok,
+              // >8 poor), with a marker showing where THIS athlete sits. The old
+              // version grew the gradient with the value, so the colors moved and
+              // the direction read ambiguously.
               const driftPct = Math.min(100, Math.max(0, (avgDrift / 12) * 100));
               return `
                 <div style="margin-top: 4px;">
-                  <div style="position: relative; height: 6px; border-radius: 3px; overflow: hidden; background: var(--bg); margin-bottom: 6px;">
-                    <div style="position: absolute; inset: 0; width: ${driftPct}%; background: linear-gradient(90deg, #4ade80 0%, #facc15 50%, #ef4444 100%); border-radius: 3px;"></div>
-                    <div style="position: absolute; left: ${driftPct}%; top: -3px; width: 2px; height: 12px; background: var(--text); border-radius: 1px;"></div>
+                  <div style="position: relative; height: 6px; border-radius: 3px; background: linear-gradient(90deg, #4ade80 0%, #4ade80 36%, #facc15 47%, #facc15 61%, #ef4444 72%, #ef4444 100%); opacity: 0.9; margin-bottom: 6px;">
+                    <div style="position: absolute; left: ${driftPct}%; top: -4px; width: 3px; height: 14px; background: var(--text); border-radius: 1.5px; transform: translateX(-50%); box-shadow: 0 0 4px rgba(0,0,0,0.6);"></div>
                   </div>
-                  <div style="display: flex; justify-content: space-between; font-size: 10px; color: var(--text-mute); font-weight: 600;">
-                    <span>Strong</span><span>OK</span><span>Poor</span>
+                  <div style="position: relative; font-size: 10px; color: var(--text-mute); font-weight: 600; height: 14px;">
+                    <span style="position: absolute; left: 0;">Strong</span>
+                    <span style="position: absolute; left: 41.7%; transform: translateX(-50%);">5%</span>
+                    <span style="position: absolute; left: 66.7%; transform: translateX(-50%);">8%</span>
+                    <span style="position: absolute; right: 0;">Poor</span>
                   </div>
+                  <div style="font-size: 10px; color: var(--text-mute); margin-top: 3px;">Lower drift = your heart rate stays steady at the same effort = stronger aerobic base.</div>
                 </div>
               `;
             })()}
@@ -23517,13 +23518,23 @@ function _planDoScroll(y) {
 function scrollToTodayWorkout() {
   const t = document.getElementById('pf-today') || document.querySelector('#planFeed .pf-day');
   if (!t) return;
-  // Land today's card just below whatever's pinned at the top. When scrolled the
-  // fixed clone bar is showing → use its actual bottom; at the top use the nav.
+  // Land today's card just below whatever will be pinned AFTER the scroll lands.
+  // The old version read the bar's CURRENT pinned state — but jumping to today
+  // usually crosses the pin trigger mid-scroll (e.g. scrolled a little, bar not
+  // yet pinned, then it pins on arrival), so the card landed under the bar.
+  // Predict the destination state instead.
+  const bar = document.getElementById('planBar');
   const clone = document.getElementById('planBarFixed');
-  const pinned = clone && getComputedStyle(clone).display !== 'none';
-  const off = pinned ? (clone.getBoundingClientRect().bottom + 14) : (_planNavBottom() + 60);
-  const y = t.getBoundingClientRect().top + _planCurY() - off;
-  _planDoScroll(y);
+  const targetAbs = t.getBoundingClientRect().top + _planCurY();
+  const safeTopPx = clone ? (parseFloat(getComputedStyle(clone).top) || 0) : 0;
+  const barH = (bar && bar.offsetHeight) || 44;
+  const pinnedOff = safeTopPx + barH + 14;
+  // The clone pins once the in-flow bar has scrolled behind it: i.e. whenever the
+  // destination scroll position is below the in-flow bar's own position.
+  const barBottomAbs = bar ? (bar.getBoundingClientRect().bottom + _planCurY()) : 0;
+  const willPin = !!clone && (targetAbs - pinnedOff) > barBottomAbs;
+  const off = willPin ? pinnedOff : (_planNavBottom() + 60);
+  _planDoScroll(targetAbs - off);
 }
 function planScrollTop() { _planDoScroll(0); }
 
