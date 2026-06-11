@@ -8202,9 +8202,34 @@ async function buildProactiveNudges(uid) {
         title: "Might be a good time for an easy day",
         sub: `You've been loading hard for a stretch. An easy day or two now lets all that work pay off, you'll come back stronger. Nothing to worry about. Tap to talk it through with Coach.` });
     }
+    // When BOTH signals fire together (sustained deep fatigue AND a load spike),
+    // that's "really bad" territory — Coach proactively sends a real chat message,
+    // not just a dashboard nudge. Throttled to once per 7 days, cross-device.
+    if (lm && lm.sustainedFatigue && typeof lm.acwr === 'number' && lm.acwr > 1.5 && recent.length >= 3) {
+      maybeSendLoadAlertCoachMsg(lm, uid).catch(() => {});
+    }
 
     // 3) Aerobic drift on easy efforts (fatigue / base gap signal).
     const drifty = recent.filter(w => { const d = parseFloat(w.drift ?? w.cardiac_drift); return !isNaN(d) && d > 8; });
+    // (helper for the proactive load alert above)
+    async function maybeSendLoadAlertCoachMsg(model, userId) {
+      try {
+        if (!model || !userId) return;
+        const k = 'stryxs_load_alert_' + userId;
+        const last = parseInt(localStorage.getItem(k) || '0', 10);
+        if (Date.now() - last < 7 * 86400000) return;
+        // Cross-device throttle: skip if a load_alert already went out this week.
+        const since = new Date(Date.now() - 7 * 86400000).toISOString();
+        const { data: existing } = await sb.from('coach_messages').select('id')
+          .eq('user_id', userId).eq('context_type', 'load_alert')
+          .gte('created_at', since).limit(1);
+        if (existing && existing.length) { localStorage.setItem(k, String(Date.now())); return; }
+        const msg = "I want to flag something I'm seeing in your training load. You've been carrying deep fatigue for several days now, and on top of that your load just spiked well past the range where injury risk climbs. Either signal alone is normal training. Together, they're the combination I don't like.\n\nNothing is broken, but the smart move is to back off for a few days rather than push through. Tell me how you're actually feeling and we'll work out what to change, whether that's swapping the next hard sessions for easy ones or just holding volume flat this week.";
+        await sb.from('coach_messages').insert({ user_id: userId, role: 'coach', content: msg, context_type: 'load_alert' });
+        localStorage.setItem(k, String(Date.now()));
+        if (typeof setCoachUnread === 'function') setCoachUnread(true);
+      } catch (_) { /* never break the dashboard */ }
+    }
     if (drifty.length >= 2) {
       const t = drifty.reduce((m, w) => { const x = new Date((w.date || w.created_at)).getTime(); return x > m ? x : m; }, 0);
       out.push({ id: 'nudge_drift', type: 'coachtip', time: new Date(t).toISOString(), icon: '💓', actionKind: 'coach',
@@ -11870,9 +11895,10 @@ function renderSummaryWorkout(a) {
         <strong style="color: var(--text);">No heart rate was recorded for this activity.</strong> Zone analysis and cardiac drift will appear when HR data is available.
       </div>`;
   } else if (isStrava && a._unsupported) {
-    diagnostic = `
+    const hasHrData = Array.isArray(a.hrSeries) && a.hrSeries.length > 0;
+    diagnostic = hasHrData ? '' : `
       <div style="padding: 12px 14px; background: rgba(80, 130, 255, 0.05); border: 1px solid rgba(80, 130, 255, 0.18); border-radius: 10px; font-size: 12px; color: var(--text-dim); line-height: 1.5; margin-bottom: 14px;">
-        Deep analysis (cardiac drift, zones) is available for runs and rides. Coach still counts this for weekly volume.
+        Pace-based deep analysis (cardiac drift, splits) is for runs and rides. If this activity recorded heart rate, hit ↻ Refresh below to pull the HR chart and zone times. Coach still counts it for your weekly volume.
       </div>`;
   } else if (isStrava && (a._streams_failed || a._too_short || a.summary_only)) {
     // Refresh button is offered by renderDataAvailabilityHint below — no need
@@ -14466,9 +14492,10 @@ function renderInsightCard(p) {
 }
 
 async function regenerateInsights() {
+  // Headless-tolerant: when called from the DASHBOARD (background staleness
+  // refresh) the Trends DOM isn't mounted — do the work, skip the spinner.
   const list = document.getElementById('insightsList');
-  if (!list) return;
-  list.innerHTML = `<div class="loading"><div class="spinner"></div>Coach is analyzing your training data…</div>`;
+  if (list) list.innerHTML = `<div class="loading"><div class="spinner"></div>Coach is analyzing your training data…</div>`;
 
   try {
     // Pull all workouts (last 8 weeks worth, backend will filter further)
@@ -14568,7 +14595,7 @@ async function regenerateInsights() {
     await renderInsightsFromDb();
   } catch (err) {
     console.error('[Stryxs] regenerateInsights failed:', err);
-    list.innerHTML = `
+    if (list) list.innerHTML = `
       <div style="padding: 16px; color: var(--text-dim); font-size: 13px; background: rgba(239, 68, 68, 0.04); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 12px;">
         Couldn't generate insights: ${escapeHtml(err.message || 'unknown error')}
         <button class="btn ghost" style="font-size: 12px; padding: 4px 10px; margin-left: 8px;" onclick="loadInsightsIntoTrends(true)">Retry</button>
@@ -15195,6 +15222,23 @@ async function renderInsightsMiniCard() {
   }
 
   try {
+    // STALENESS SELF-HEAL: the dashboard used to show day-old insights until the
+    // user happened to open Trends (which is what regenerates them) — then the
+    // dashboard card changed "in front of your eyes" on the way back. Now the
+    // dashboard itself kicks the same 48h refresh in the background (once per
+    // session) and repaints this card when it lands.
+    try {
+      if (!window._stryxsDashInsightsRefreshed) {
+        const { data: gen } = await sb.from('athlete_intake')
+          .select('insights_last_generated_at').eq('user_id', state.user.id).maybeSingle();
+        const lastGen = gen?.insights_last_generated_at ? new Date(gen.insights_last_generated_at).getTime() : 0;
+        if (Date.now() - lastGen > INSIGHTS_REFRESH_INTERVAL_MS) {
+          window._stryxsDashInsightsRefreshed = true; // once per session
+          regenerateInsights().then(() => renderInsightsMiniCard()).catch(() => {});
+        }
+      }
+    } catch (_) {}
+
     // Round 4: query active insights, sorted urgency-first.
     // Show up to 2 insights with severity-driven visual hierarchy.
     const { data: insights } = await sb.from('training_insights')
