@@ -18649,7 +18649,7 @@ function stopChatMsg() {
 }
 
 function formatGoal(g) {
-  const map = { marathon: 'Marathon', half_marathon: 'Half Marathon', '10k': '10K', '5k': '5K', olympic_tri: 'Olympic Triathlon', '70_3': '70.3 / Half Ironman', ironman: 'Ironman', general: 'General Fitness' };
+  const map = { marathon: 'Marathon', half_marathon: 'Half Marathon', '10k': '10K', '5k': '5K', olympic_tri: 'Olympic Triathlon', '70_3': '70.3 / Half Ironman', ironman: 'Ironman', cycling: 'Cycling', general: 'General Fitness' };
   return map[g] || g;
 }
 
@@ -19690,6 +19690,12 @@ async function renderProjections(forceRefresh = false) {
       return;
     }
 
+    // bike_ftp lives on the profile, not athlete_intake. Merge it in so the
+    // cycling projection engine can use power (it falls back to estimates if absent).
+    if (intake && intake.bike_ftp == null && state.profile && state.profile.bikeFtp) {
+      intake.bike_ftp = state.profile.bikeFtp;
+    }
+
     // Pull active insights, race projections can lean toward better/worse end of range based on patterns
     const { data: activeInsights } = await sb.from('training_insights')
       .select('*')
@@ -19957,6 +19963,34 @@ function renderRaceDayPlan(intake, paces) {
               </div>
             </div>
           ` : ''}
+        </div>
+      </div>
+    `;
+  }
+
+  // Standalone cycling goal, show race-day power/speed + zone targets.
+  if (paces.cycling || goal === 'cycling') {
+    const zoneCard = (lbl, val) => val ? `<div style="padding: 10px 12px; background: var(--bg-3); border-radius: 8px;"><div style="font-size: 11px; color: var(--text-dim);">${lbl}</div><div style="font-family: 'JetBrains Mono', monospace; font-weight: 600; margin-top: 2px; font-size: 13px;">${val}</div></div>` : '';
+    return `
+      <div>
+        <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; margin-bottom: 10px;">Race-day target</div>
+        <div style="display: flex; align-items: center; gap: 12px; padding: 14px 16px; background: linear-gradient(135deg, rgba(0, 255, 163, 0.08), rgba(80, 130, 255, 0.04)); border: 1px solid rgba(0, 255, 163, 0.2); border-radius: 12px; margin-bottom: 14px;">
+          <div style="font-size: 22px; flex-shrink: 0;">${_sportIconHTML ? _sportIconHTML('bike', 22) : '🚴'}</div>
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-size: 12px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.5px;">Hold this on the day</div>
+            <div style="font-size: 16px; font-weight: 700; font-family: 'JetBrains Mono', monospace; color: var(--text); margin-top: 2px;">${paces.event_power || paces.event_speed}</div>
+            ${paces.event_power && paces.event_speed ? `<div style="font-size: 12px; color: var(--text-mute); margin-top: 3px;">${paces.event_speed}</div>` : ''}
+          </div>
+        </div>
+
+        ${_sportProgressBlock('bike')}
+
+        <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; margin: 14px 0 10px;">Training power zones${paces.ftp ? ` · FTP ${paces.ftp}` : ''}</div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px;">
+          ${zoneCard('Endurance (Z2)', paces.endurance_z2)}
+          ${zoneCard('Sweet spot', paces.sweet_spot)}
+          ${zoneCard('Threshold', paces.threshold)}
+          ${zoneCard('VO2max', paces.vo2max)}
         </div>
       </div>
     `;
