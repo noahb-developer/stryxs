@@ -5443,8 +5443,8 @@ const I18N = {
     'settings.section.personal.sub': 'Units, age, weight, height',
     'settings.section.goals.title': 'Training Goals',
     'settings.section.goals.sub': 'Race, experience, weekly hours, injuries',
-    'settings.section.benchmarks.title': 'Race Benchmarks',
-    'settings.section.benchmarks.sub': 'PBs, goal time, last race result',
+    'settings.section.benchmarks.title': 'Benchmarks & zones',
+    'settings.section.benchmarks.sub': 'PBs, FTP, CSS, LTHR, goal time',
     'settings.section.equipment.title': 'Equipment',
     'settings.section.equipment.sub': 'What you have access to. Coach adapts workouts.',
     'settings.section.subscription.title': 'Subscription',
@@ -19499,7 +19499,7 @@ function buildStarterWeek(today, missingLthr, isFrielPersona, intake) {
           workout_type: 'tempo',
           duration_minutes: 50,
           distance_km: null,
-          description: 'Run LTHR test. 10 min easy warmup → 30 min hard sustained TT (best effort you can hold) → 10 min cool down. Use the AVERAGE HR from minutes 10-30 of the TT as your run LTHR. Enter it in Settings → Heart Rate Zones.',
+          description: 'Run LTHR test. 10 min easy warmup → 30 min hard sustained TT (best effort you can hold) → 10 min cool down. Use the AVERAGE HR from minutes 10-30 of the TT as your run LTHR. Enter it in Settings → Benchmarks & zones.',
           intensity_target: 'Hard sustained, RPE 8-9/10',
         };
       } else if (idx === 2 && daysUntilMonday > 3) {
@@ -19521,7 +19521,7 @@ function buildStarterWeek(today, missingLthr, isFrielPersona, intake) {
           workout_type: 'tempo',
           duration_minutes: 50,
           distance_km: null,
-          description: 'Bike LTHR test. 10 min easy warmup → 30 min hard sustained TT (steady, strong effort) → 10 min cool down. Use the AVERAGE HR from minutes 10-30 as your bike LTHR. Enter it in Settings → Heart Rate Zones.',
+          description: 'Bike LTHR test. 10 min easy warmup → 30 min hard sustained TT (steady, strong effort) → 10 min cool down. Use the AVERAGE HR from minutes 10-30 as your bike LTHR. Enter it in Settings → Benchmarks & zones.',
           intensity_target: 'Hard sustained, RPE 8-9/10',
         };
       } else {
@@ -21221,7 +21221,7 @@ async function handleChatPlanBuild(intent, intake, activePlan, msgs) {
   }
   const isFriel = ['ironman', '70_3', 'olympic_tri', 'sprint_tri'].includes(intake.goal_event);
   if (isFriel && (!intake.run_lthr || !intake.bike_lthr)) {
-    await post("I need your heart-rate zones before I can build more triathlon weeks. Add your run and bike LTHR in Settings → Heart Rate Zones and I'll get right on it.");
+    await post("I need your heart-rate zones before I can build more triathlon weeks. Add your run and bike LTHR in Settings → Benchmarks & zones and I'll get right on it.");
     return;
   }
 
@@ -21296,7 +21296,7 @@ async function generateNextWeek() {
     const isFrielPersona = ['ironman', '70_3', 'olympic_tri', 'sprint_tri'].includes(intake?.goal_event);
     const missingLthr = isFrielPersona && (!intake?.run_lthr || !intake?.bike_lthr);
     if (missingLthr) {
-      toast('Enter your LTHR values in Settings → Heart Rate Zones first');
+      toast('Enter your LTHR values in Settings → Benchmarks & zones first');
       if (btn) { btn.disabled = false; btn.textContent = 'Generate next week →'; btn.style.opacity = '1'; }
       // Show inline message in plan UI
       const planEl = document.getElementById('planContent');
@@ -21311,7 +21311,7 @@ async function generateNextWeek() {
           <div style="flex: 1;">
             <div style="font-weight: 700; font-size: 14px; margin-bottom: 4px;">LTHR required first</div>
             <div style="font-size: 12px; color: var(--text-dim); line-height: 1.5;">
-              Friel methodology zones depend on your LTHR. Complete the Run + Bike LTHR tests scheduled in your starter days, then enter values in Settings → Heart Rate Zones to unlock next-week generation.
+              Friel methodology zones depend on your LTHR. Complete the Run + Bike LTHR tests scheduled in your starter days, then enter values in Settings → Benchmarks & zones to unlock next-week generation.
             </div>
           </div>
           <button class="btn ghost" style="font-size: 12px; padding: 6px 10px;" onclick="navigate('settings')">Go to Settings →</button>
@@ -23623,7 +23623,7 @@ async function renderPlan() {
         </div>
         ${starterMissingLthr ? `
           <div style="font-size: 12px; color: var(--text-dim); padding: 10px 12px; background: rgba(255, 209, 102, 0.06); border-radius: 8px; line-height: 1.6;">
-            <strong style="color: #ffd166;">After each test:</strong> calculate average HR over the last 20 min of the 30 min effort. Enter values in <a style="color: var(--accent); cursor: pointer; text-decoration: underline;" onclick="navigate('settings')">Settings → Heart Rate Zones</a>.
+            <strong style="color: #ffd166;">After each test:</strong> calculate average HR over the last 20 min of the 30 min effort. Enter values in <a style="color: var(--accent); cursor: pointer; text-decoration: underline;" onclick="navigate('settings')">Settings → Benchmarks & zones</a>.
           </div>
         ` : ''}
       </div>
@@ -24890,8 +24890,8 @@ async function renderSettings() {
         <div class="settings-section-header-left">
           <div class="settings-section-icon">🏆</div>
           <div class="settings-section-text">
-            <div class="settings-section-title" data-i18n="settings.section.benchmarks.title">Race Benchmarks</div>
-            <div class="settings-section-sub" data-i18n="settings.section.benchmarks.sub">PBs, goal time, last race result</div>
+            <div class="settings-section-title" data-i18n="settings.section.benchmarks.title">Benchmarks & zones</div>
+            <div class="settings-section-sub" data-i18n="settings.section.benchmarks.sub">PBs, FTP, CSS, LTHR, goal time</div>
           </div>
         </div>
         <div class="settings-section-chevron">›</div>
@@ -24937,6 +24937,18 @@ async function renderSettings() {
         <label>CSS pace <span style="color:var(--text-mute); font-weight:400; font-size:11px;">critical swim speed, per 100m</span></label>
         <input type="text" id="settingsSwimCss" value="${state.profile?.trainingZones?.swim_css_per_100m || ''}" onchange="saveSwimCssQuick(this.value)" placeholder="e.g. 1:45" />
       </div>
+
+      <div style="font-size:12px; font-weight:700; color:var(--text); text-transform:uppercase; letter-spacing:0.6px; margin:18px 0 8px;">❤️ Heart rate (LTHR)</div>
+      <div style="font-size:11px; color:var(--text-mute); line-height:1.5; margin-bottom:10px;">Coach can set these for you, just say "my run LTHR is 178" in chat. Or enter them here.</div>
+      <div class="field">
+        <label>Run LTHR (bpm)</label>
+        <input type="number" id="settingsRunLthr" value="${state.profile.runLthr || ''}" placeholder="e.g. 180" />
+      </div>
+      <div class="field">
+        <label>Bike LTHR (bpm)</label>
+        <input type="number" id="settingsBikeLthr" value="${state.profile.bikeLthr || ''}" placeholder="e.g. 165" />
+      </div>
+      <div id="zonePreview"></div>
 
       <div class="field" style="margin-top:18px;">
         <label>Most recent race</label>
@@ -25089,33 +25101,11 @@ async function renderSettings() {
 
     <!-- Language section removed (round 7) — restore from memory.md if needed -->
 
-    <!-- HR Zones Section -->
-    <div class="settings-section" id="section-hr">
-      <div class="settings-section-header" onclick="toggleSettingsSection('hr')">
-        <div class="settings-section-header-left">
-          <div class="settings-section-icon">❤️</div>
-          <div class="settings-section-text">
-            <div class="settings-section-title" data-i18n="settings.section.hr.title">Heart Rate Zones</div>
-            <div class="settings-section-sub" data-i18n="settings.section.hr.sub">LTHR for run and bike</div>
-          </div>
-        </div>
-        <div class="settings-section-chevron">›</div>
-      </div>
-      <div class="settings-section-body">
-        <div class="settings-section-inner">
-      <p style="color: var(--text-dim); font-size: 13px; margin-bottom: 14px; line-height: 1.55;">Your LTHR is the most important number in training. Test it properly with a 30-min time trial.</p>
-      <div class="field">
-        <label>Run LTHR (bpm)</label>
-        <input type="number" id="settingsRunLthr" value="${state.profile.runLthr || ''}" placeholder="e.g. 180" />
-      </div>
-      <div class="field">
-        <label>Bike LTHR (bpm)</label>
-        <input type="number" id="settingsBikeLthr" value="${state.profile.bikeLthr || ''}" placeholder="e.g. 165" />
-      </div>
-      <div id="zonePreview"></div>
-        </div>
-      </div>
-    </div>
+    <!-- HR Zones merged into the Race Benchmarks card (round 52) so all of an
+         athlete's "numbers" live in one place and Coach can set them from chat.
+         The LTHR inputs (settingsRunLthr / settingsBikeLthr) + zonePreview now
+         render inside #section-benchmarks; ids are unchanged so the save path,
+         the stub→periodized auto-build, and the zone preview all still work. -->
 
     <!-- Help, replay onboarding tour -->
     <div class="settings-section" id="section-help-tour">
