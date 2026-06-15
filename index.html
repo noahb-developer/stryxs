@@ -17863,7 +17863,7 @@ async function renderCoachChat(el, intakeMaybe) {
   const cacheKey = state.user ? 'stryxs_coach_cache_' + state.user.id : null;
   const msgsToHTML = (msgs) => msgs.map(m => renderMsg(m.role, m.content, m.context_type, m.id, m.image_url)).join('');
   const fallbackHTML = (goal) => renderMsg('coach', (() => {
-    const firstName = state.user.name.split(' ')[0];
+    const firstName = (state.user?.name || 'there').split(' ')[0];
     const m = getMethodologyForGoal(goal);
     return `Hey ${firstName}, ${m.name} in spirit. I built your plan based on what you told me, check the Plan tab to see this week's calendar. Upload your workouts as you do them and I'll give you specific feedback. Ask me anything here.`;
   })());
@@ -18462,8 +18462,10 @@ async function submitNextGoal() {
   const btn = document.getElementById('nextGoalBuildBtn');
   if (btn) { btn.disabled = true; btn.textContent = 'Building…'; }
   try {
-    // 1) Set the new goal/date/objective.
-    await sb.from('athlete_intake').update({ goal_event: goal, race_date: date, goal_time: goalTime }).eq('user_id', state.user.id);
+    // 1) Set the new goal/date/objective. Bail if it didn't land, otherwise the
+    //    rebuild below would re-read the OLD goal and build the wrong plan.
+    const { error: goalErr } = await sb.from('athlete_intake').update({ goal_event: goal, race_date: date, goal_time: goalTime }).eq('user_id', state.user.id);
+    if (goalErr) { toast('Could not save your new goal, try again'); if (btn) { btn.disabled = false; btn.textContent = 'Build my new plan'; } return; }
     // 2) Mark any open post-race check-in handled so its button won't reappear.
     try { await sb.from('coach_messages').update({ context_type: 'post_race_checkin_done' }).eq('user_id', state.user.id).eq('context_type', 'post_race_checkin'); } catch (_) {}
     closeNextGoalModal();
@@ -19003,6 +19005,11 @@ async function sendChatMsg() {
             if (ed.profile.bike_lthr != null) state.profile.bikeLthr = ed.profile.bike_lthr;
             if (ed.profile.bike_ftp != null) state.profile.bikeFtp = ed.profile.bike_ftp;
           }
+          // These fields (PBs / FTP / CSS / LTHR) feed projections — drop the
+          // cache so the dashboard + race projections refresh, like the Settings
+          // autosavers do.
+          _projectionsCache = null; _projectionsCacheTime = 0;
+          try { localStorage.removeItem('stryxs_projections_cache'); } catch (_) {}
           const confirmMsg = `✓ ${ed.summary || 'Got it, updated.'}`;
           await sb.from('coach_messages').insert({ user_id: state.user.id, role: 'coach', content: confirmMsg, context_type: 'profile_correction_applied' });
           msgs.innerHTML += renderMsg('coach', confirmMsg);
