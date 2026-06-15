@@ -6574,6 +6574,10 @@ async function loadWorkouts() {
     created_at: w.created_at,
     activity_classification: w.activity_classification || w.workout_data?.activity_classification || 'unclassified',
   }));
+  // Which workouts has Coach already analyzed? Read it from the server (the
+  // analysis rows are tagged 'workout_commentary:<dbId>') so the "Coach's
+  // analysis" state shows on EVERY device, not just the one you analyzed on.
+  try { await loadAnalyzedWorkoutIds(); } catch (_) {}
   // Load unit preference into memory cache so formatDistance/formatPace can read it sync.
   // This runs on every login + after key state changes.
   try {
@@ -6584,6 +6588,57 @@ async function loadWorkouts() {
   try { if (typeof refreshNotifBadge === 'function') refreshNotifBadge(); } catch (_) {}
   // Keep the public-share snapshot of completed stats current (no-op if not sharing).
   try { if (typeof refreshShareSnapshot === 'function') refreshShareSnapshot(); } catch (_) {}
+}
+
+// Build the cross-device set of workout ids Coach has already analyzed. The
+// analysis is saved as a coach_messages row with context_type
+// 'workout_commentary:<dbId>', so one cheap query gives us every analyzed id
+// regardless of which device did the analyzing.
+async function loadAnalyzedWorkoutIds() {
+  if (!state.user) return;
+  try {
+    const { data } = await sb.from('coach_messages')
+      .select('context_type')
+      .eq('user_id', state.user.id)
+      .like('context_type', 'workout_commentary:%');
+    const set = new Set();
+    (data || []).forEach(r => {
+      const id = String(r.context_type || '').split(':')[1];
+      if (id) set.add(id);
+    });
+    state._analyzedWkIds = set;
+  } catch (_) { /* non-fatal: falls back to the per-device marker */ }
+}
+
+// Refresh data when the app comes back to the foreground after being
+// backgrounded (e.g. you switch from your computer to your phone, or return
+// after a while). Without this the app reused stale in-memory data — coach
+// messages and the analyze-button state didn't update until a manual reload.
+// Guarded to only fire after a real backgrounding (>20s) so quick tab flicks
+// don't cause churn, and never yanks the view while you're typing.
+let _stryxsLastHiddenAt = 0;
+function _installResumeRefresh() {
+  if (window._stryxsResumeBound) return;
+  window._stryxsResumeBound = true;
+  document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState === 'hidden') { _stryxsLastHiddenAt = Date.now(); return; }
+    if (!state.user) return;
+    if (!_stryxsLastHiddenAt || Date.now() - _stryxsLastHiddenAt < 20000) return;
+    _stryxsLastHiddenAt = 0;
+    try { await loadWorkouts(); } catch (_) {}
+    try { if (typeof loadProfile === 'function') await loadProfile(); } catch (_) {}
+    try {
+      const typing = document.activeElement && ['chatInput', 'feedbackText'].includes(document.activeElement.id);
+      if (typing) return;
+      const active = document.querySelector('.page.active')?.id?.replace('page-', '');
+      if (active === 'plan') renderPlan();
+      else if (active === 'coach') { window._stryxsCoachLoadedThisSession = false; renderCoach(); }
+      else if (active === 'history') renderHistory();
+      else if (active === 'trends') renderTrends();
+      else if (active === 'dashboard') renderDashboard();
+      else if (active === 'race-planner') renderRacePlanner();
+    } catch (_) {}
+  });
 }
 
 // The `workouts` table stores every metric (avgHr, distance, duration, drift,
@@ -6920,6 +6975,8 @@ function showApp() {
 
   // Check for unread Coach messages on every app show
   checkCoachUnreadOnLoad();
+  // Refresh data when returning from background / switching devices.
+  try { _installResumeRefresh(); } catch (_) {}
   // NOTE: legacy 3-step onboarding modal removed entirely. The new flow is:
   // spotlight tour offer fires from renderDashboard() on first dashboard load,
   // and the activation checklist persists on the dashboard until completed.
@@ -11829,11 +11886,13 @@ function _getCachedAnalysis(a) {
   if (!k) return null;
   try { return localStorage.getItem(k); } catch (_) { return null; }
 }
-// Has this workout already been analyzed by Coach on this device? (Same-device
-// marker; the Review view also re-loads the analysis cross-device by workout id.)
+// Has this workout already been analyzed by Coach? Checks the per-device marker
+// AND the server-loaded set (state._analyzedWkIds) so the state shows on every
+// device, not just the one that ran the analysis.
 function _isWorkoutAnalyzed(dbId) {
   if (!dbId) return false;
-  try { return !!localStorage.getItem('stryxs_wkanalysis_' + dbId); } catch (_) { return false; }
+  try { if (localStorage.getItem('stryxs_wkanalysis_' + dbId)) return true; } catch (_) {}
+  return !!(state._analyzedWkIds && state._analyzedWkIds.has(dbId));
 }
 function _analyzeButtonHTML(key) {
   return `<button class="btn" style="width: 100%; padding: 12px; font-size: 14px; font-weight: 600; background: linear-gradient(135deg, rgba(0,229,160,0.16), rgba(80,130,255,0.10)); border: 1px solid rgba(0,229,160,0.35); color: var(--accent); display: flex; align-items: center; justify-content: center; gap: 8px;" onclick="analyzeWorkoutWithCoach('${key}', this)">🔍 Analyze this workout with Coach</button>`;
@@ -11859,7 +11918,7 @@ function renderAnalyzeBtn(a) {
   // the DB, so it never "disappears" when you switch phone <-> PC). If it was
   // already analyzed on this device, offer a direct "open in Coach" shortcut so
   // we don't re-spend tokens.
-  const analyzed = !!_getCachedAnalysis(a);
+  const analyzed = !!_getCachedAnalysis(a) || _isWorkoutAnalyzed(a._dbId);
   return `
     <div class="analyze-coach-slot" style="margin-top: 14px;">
       ${analyzed ? _analyzeOpenHTML(key) : _analyzeButtonHTML(key)}
@@ -11908,6 +11967,7 @@ async function analyzeWorkoutWithCoach(key, el) {
         // shortcut instead of re-spending tokens on this device.
         const cacheK = _wkAnalysisKey(a);
         if (cacheK) { try { localStorage.setItem(cacheK, commentary); } catch (_) {} }
+        if (a._dbId) { (state._analyzedWkIds = state._analyzedWkIds || new Set()).add(a._dbId); }
         return commentary;
       },
     });
