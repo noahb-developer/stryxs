@@ -19989,7 +19989,9 @@ function renderProjGate(container, intake) {
 
 // Force a projections refresh and re-render whichever surface is on screen.
 async function refreshProjectionsView() {
+  try { if (typeof toast === 'function') toast('Refreshing projections…'); } catch (_) {}
   await forceRefreshProjections();
+  try { if (typeof toast === 'function') toast('Projections updated'); } catch (_) {}
   try {
     if (document.getElementById('page-race-planner')?.classList.contains('active') && typeof renderRacePlannerProjections === 'function') {
       await renderRacePlannerProjections();
@@ -20105,6 +20107,7 @@ function renderRaceDayPlan(intake, paces) {
     return `
       <div>
         <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; margin-bottom: 10px;">Race-day plan</div>
+        <div style="font-size: 11px; color: var(--text-mute); line-height: 1.5; margin: -4px 0 12px;">These are your race-day <strong style="color: var(--text-dim);">target paces</strong>, not your training bests.${isLong ? ' For long course they sit a little under your fresh training speed on purpose: you ride and run conservatively so the day holds together.' : ''} The "see your progress" graphs show your actual training trend.</div>
         <div style="display: flex; flex-direction: column; gap: 8px;">
           ${swimPace ? `
             <div style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px;">
