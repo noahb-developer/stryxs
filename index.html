@@ -13280,12 +13280,14 @@ function _fmtSpeedForSport(kmh, mode) {
   if (mode === 'speed') return kmh.toFixed(1) + ' km/h';
   if (mode === 'pace100') {
     const sec = 360 / kmh; // seconds per 100m
-    const m = Math.floor(sec / 60), s = Math.round(sec % 60);
+    let m = Math.floor(sec / 60), s = Math.round(sec % 60);
+    if (s === 60) { m += 1; s = 0; } // carry: 5:60 -> 6:00
     return `${m}:${String(s).padStart(2, '0')} /100m`;
   }
   // pace per km
   const sec = 3600 / kmh;
-  const m = Math.floor(sec / 60), s = Math.round(sec % 60);
+  let m = Math.floor(sec / 60), s = Math.round(sec % 60);
+  if (s === 60) { m += 1; s = 0; } // carry: 5:60 -> 6:00
   return `${m}:${String(s).padStart(2, '0')} /km`;
 }
 
@@ -13404,7 +13406,13 @@ function _sportProgressBlock(sport) {
   const series = _sportProgressSeries(sport, 8);
   if (series.length < 3) return ''; // not enough history to show a real trend
 
-  const first = series[0], last = series[series.length - 1];
+  // Headline numbers use the SAME windows as the Stats "Pace & speed trend" card
+  // (recent 4 weeks vs prior 4 weeks) so the two views never contradict each
+  // other. The 8-week sparkline below is just the visual shape of the trend.
+  const _recent = _avgSpeedWindow(sport, 0, 28);
+  const _prior = _avgSpeedWindow(sport, 28, 56);
+  const last = (_recent.speed && _recent.n >= 1) ? _recent.speed : series[series.length - 1];
+  const first = (_prior.speed && _prior.n >= 2) ? _prior.speed : series[0];
   const deltaPct = ((last - first) / first) * 100;
   const improving = deltaPct > 1.5, declining = deltaPct < -1.5;
   const color = improving ? 'var(--accent)' : declining ? '#fbbf24' : 'var(--text-dim)';
@@ -13434,7 +13442,7 @@ function _sportProgressBlock(sport) {
       <button class="btn ghost" style="font-size: 11px; padding: 4px 10px;" onclick="_toggleSportProgress('${id}', this)">📈 See your progress</button>
       <div id="${id}" style="display: none; margin-top: 10px;">
         <div style="display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 4px;">
-          <span style="font-size: 11px; color: var(--text-mute);">Last 8 weeks</span>
+          <span style="font-size: 11px; color: var(--text-mute);">Recent vs prior 4 weeks</span>
           <span style="font-size: 12px; font-weight: 700; color: ${color};">${arrow} ${Math.abs(deltaPct).toFixed(0)}% ${word}</span>
         </div>
         <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width: 100%; height: 56px; display: block;">
