@@ -4515,6 +4515,10 @@ body.on-auth .container {
     <span class="avatar-menu-icon">💡</span>
     <span data-i18n="nav.help">Help &amp; FAQ</span>
   </button>
+  <button class="avatar-menu-item" onclick="closeAvatarMenu(); openFeedbackModal();">
+    <span class="avatar-menu-icon">💬</span>
+    <span>Send feedback</span>
+  </button>
   <div class="avatar-menu-divider"></div>
   <button class="avatar-menu-item danger" onclick="closeAvatarMenu(); confirmLogout();">
     <span class="avatar-menu-icon">↪</span>
@@ -5650,52 +5654,12 @@ function toast(msg, durationMs = 2800) {
 // ═══════════════════════════════════════════════════════════
 
 function showFeedbackWidget() {
-  // Don't show twice
-  if (document.getElementById('feedbackFab')) return;
-
-  // Don't crowd the onboarding experience. The floating button overlaps the
-  // welcome tour + getting-started checklist, so we hold it back until:
-  //   1) no tour / tour-offer modal is on screen, AND
-  //   2) the account is at least 2 days old (gives new users room to settle
-  //      in before we ask them to rate the app).
-  // We re-attempt on the next showApp()/navigation once those clear.
-  try {
-    if (typeof _spotlightState !== 'undefined' && _spotlightState && _spotlightState.active) return;
-    if (document.getElementById('tourOfferModal')) return;
-  } catch (_) {}
-  try {
-    const uid = state.user?.id;
-    // Don't show before we know who the user is. Otherwise the snooze check below
-    // is skipped (it was guarded by `if (uid)`), so the widget popped on every
-    // load until auth resolved — which is exactly why it kept "always showing up".
-    if (!uid) return;
-    // Snooze (user dismissed): we store the EXPIRY timestamp and show again once
-    // it passes. This survives reloads and syncs across devices.
-    const snoozed = localStorage.getItem(`stryxs_feedback_snoozed_${uid}`);
-    if (snoozed && Date.now() < parseInt(snoozed, 10)) return;
-    // First-2-days hold. Seed the eligibility timestamp the first time we'd
-    // consider showing it; only reveal once 2 days have elapsed.
-    const FEEDBACK_HOLD_MS = 2 * 24 * 60 * 60 * 1000;
-    const key = `stryxs_feedback_eligible_at_${uid}`;
-    let eligibleAt = parseInt(localStorage.getItem(key) || '', 10);
-    if (!eligibleAt || isNaN(eligibleAt)) {
-      eligibleAt = Date.now() + FEEDBACK_HOLD_MS;
-      localStorage.setItem(key, String(eligibleAt));
-    }
-    if (Date.now() < eligibleAt) return;
-  } catch (_) {}
-
-  const fab = document.createElement('button');
-  fab.id = 'feedbackFab';
-  fab.setAttribute('aria-label', 'Send feedback');
-  fab.title = 'Send feedback';
-  // Bottom-right, above the nav on mobile (sits clear of the bottom safe area)
-  fab.style.cssText = 'position: fixed; bottom: calc(20px + var(--safe-bottom, 0px)); right: 16px; z-index: 9000; width: 48px; height: 48px; border-radius: 50%; background: var(--accent); color: #001b14; border: none; font-size: 22px; cursor: pointer; box-shadow: 0 6px 24px rgba(0, 229, 160, 0.35), 0 2px 8px rgba(0, 0, 0, 0.3); display: flex; align-items: center; justify-content: center; transition: transform 0.15s ease;';
-  fab.innerHTML = '💬';
-  fab.onmouseenter = () => fab.style.transform = 'scale(1.08)';
-  fab.onmouseleave = () => fab.style.transform = 'scale(1)';
-  fab.onclick = openFeedbackModal;
-  document.body.appendChild(fab);
+  // Feedback is no longer an always-on floating button (that was naggy and the
+  // snooze was unreliable). It now lives in the avatar menu as "Send feedback"
+  // (openFeedbackModal), so it's there when the user wants it and invisible
+  // otherwise. This stays a safe no-op that clears any old FAB left in the DOM.
+  const fab = document.getElementById('feedbackFab');
+  if (fab) fab.remove();
 }
 
 function hideFeedbackWidget() {
@@ -18184,8 +18148,28 @@ async function _revealCoachMsg(msgs, text, contextType = null) {
   const wrap = document.getElementById(id);
   if (!wrap) return;
   const bubble = wrap.querySelector('.msg-bubble');
-  // Read-from-the-start scroll: align the message head with the top of the view.
-  try { msgs.scrollTo({ top: Math.max(0, wrap.offsetTop - 16), behavior: 'smooth' }); } catch (_) { msgs.scrollTop = msgs.scrollHeight; }
+  // Bring the new message's head into view to start — but DON'T jam it to the
+  // very top. We want to FOLLOW the text as it forms (like Claude): the view
+  // tracks the growing reply, then once the reply is taller than the screen the
+  // head pins at the top and you scroll the rest yourself.
+  try {
+    if (wrap.offsetTop < msgs.scrollTop || wrap.offsetTop > msgs.scrollTop + msgs.clientHeight - 40) {
+      msgs.scrollTop = Math.max(0, wrap.offsetTop - Math.round(msgs.clientHeight * 0.45));
+    }
+  } catch (_) {}
+  // Auto-follow the streaming text. Clamp so the message START never scrolls
+  // above the top (headMax), and stop following if the user scrolls up to re-read.
+  let follow = true, lastSet = msgs.scrollTop;
+  const keepInView = () => {
+    try {
+      if (!follow) return;
+      if (msgs.scrollTop < lastSet - 40) { follow = false; return; } // user scrolled up
+      const headMax = Math.max(0, wrap.offsetTop - 12);
+      const followBottom = wrap.offsetTop + wrap.offsetHeight + 24 - msgs.clientHeight;
+      const target = Math.min(followBottom, headMax);
+      if (target > msgs.scrollTop) { msgs.scrollTop = target; lastSet = msgs.scrollTop; }
+    } catch (_) {}
+  };
   const full = String(text || '');
   const words = full.split(/(\s+)/); // keep whitespace tokens so spacing is exact
   // Chunk size scales with length: short replies stream word-ish, long replies
@@ -18193,9 +18177,11 @@ async function _revealCoachMsg(msgs, text, contextType = null) {
   const step = Math.max(2, Math.ceil(words.length / 90));
   for (let i = step; i < words.length; i += step) {
     bubble.innerHTML = formatMarkdown(words.slice(0, i).join('')) + '<span class="stryxs-stream-caret"></span>';
+    keepInView();
     await new Promise(r => setTimeout(r, 34));
   }
   bubble.innerHTML = formatMarkdown(full);
+  keepInView();
   const head = wrap.querySelector('.msg-turn-head');
   if (head) { head.classList.remove('thinking'); head.textContent = 'Done'; }
 }
