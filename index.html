@@ -24733,6 +24733,12 @@ async function renderSettings() {
       </div>
       <div class="settings-section-body">
         <div class="settings-section-inner">
+      <div style="display:flex;align-items:flex-start;gap:8px;background:rgba(0,229,160,0.06);border:1px solid rgba(0,229,160,0.22);border-radius:10px;padding:10px 12px;margin-bottom:16px;">
+        <span style="font-size:15px;line-height:1.3;">🎯</span>
+        <div style="flex:1;font-size:12px;color:var(--text-dim);line-height:1.5;">A new race or goal means a different plan. The cleanest way is <strong style="color:var(--text);">Plan a new race</strong> (or just tell Coach in chat) and I'll rebuild your whole plan around it. The fields below are for small tweaks.
+          <div style="margin-top:10px;"><button class="btn" style="font-size:13px;padding:8px 14px;" onclick="openNextGoalModal('${intake?.goal_event || ''}')">🎯 Plan a new race</button></div>
+        </div>
+      </div>
       <div class="field">
         <label>Primary goal</label>
         ${renderCustomSelect('settingsGoal', intake?.goal_event || 'general', [
