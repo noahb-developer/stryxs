@@ -7906,6 +7906,15 @@ function navigate(page) {
   document.body.classList.toggle('on-landing', page === 'landing');
   document.body.classList.toggle('on-auth', page === 'login' || page === 'signup');
 
+  // Clear auth form fields on entry so stale values (and passwords) don't linger
+  // across navigation between signup/login.
+  if (page === 'signup' || page === 'login') {
+    ['signupName', 'signupEmail', 'signupPassword', 'signupPasswordConfirm', 'loginEmail', 'loginPassword'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.value = '';
+    });
+    const _pe = document.getElementById('signupPasswordError'); if (_pe) _pe.style.display = 'none';
+  }
+
   // Leaving Coach drops the full-screen chat lock (renderCoachChat re-adds it).
   if (page !== 'coach') {
     document.body.classList.remove('coach-chat-active');
@@ -16241,6 +16250,18 @@ function _obdMaybeAskTime() {
 function _obdAskTimeFloor() {
   _obdChips(['1', '2', '3'].map(n => ({ label: n + (n === '1' ? ' day' : ' days'), onPick: () => { _obdUserSay(n + (n === '1' ? ' day' : ' days')); _obdA.timeFloor = n; _obdClearDock(); _obdCoachSay(`Got it — on those weeks I'll trim to the essentials so you keep your rhythm without digging a hole.`, _obdBuild); } })));
 }
+// Best-effort unit default for the conversational onboarding (which doesn't ask
+// explicitly, unlike the form path). Imperial for US / Liberia / Myanmar
+// locales, metric otherwise. Only affects display and is overridable in
+// Settings, so a wrong guess is harmless. Beats always defaulting US users to km.
+function _guessUnitPreference() {
+  try {
+    let region = '';
+    try { region = (Intl.DateTimeFormat().resolvedOptions().locale || '').split('-')[1] || ''; } catch (_) {}
+    if (!region) region = ((navigator.language || '').split('-')[1] || '');
+    return ['US', 'LR', 'MM'].includes(String(region).toUpperCase()) ? 'imperial' : 'metric';
+  } catch (_) { return 'metric'; }
+}
 // Map the conversational answers into the SAME intakeAnswers shape the form
 // produced, then hand off to the existing completeIntake() (save + plan-gen).
 function _obdMapToIntakeAnswers() {
@@ -16269,7 +16290,7 @@ function _obdMapToIntakeAnswers() {
     preferred_long_day: 'sat',
     equipment,
     injuries: limitParts.length ? limitParts.join('. ') : null,
-    unit_preference: a.unit_preference || 'metric',
+    unit_preference: a.unit_preference || _guessUnitPreference(),
   };
   if (out.goal_event === 'general') {
     out.fh_primary_goal = a.fhGoal || 'general_health';
@@ -23016,7 +23037,7 @@ async function viewRacePlan(planId) {
       </div>
     ` : ''}
 
-    ${plan.key_warnings?.length > 0 ? `
+    ${Array.isArray(plan.key_warnings) && plan.key_warnings.length > 0 ? `
       <div class="panel" style="margin-top: 16px; border-color: rgba(251, 191, 36, 0.3); background: rgba(251, 191, 36, 0.04);">
         <div style="font-weight: 700; font-size: 14px; color: #fbbf24; margin-bottom: 10px;">⚠️ Key warnings</div>
         <ul style="margin: 0; padding-left: 20px; color: var(--text-dim); font-size: 13px; line-height: 1.65;">
@@ -23095,7 +23116,7 @@ async function viewRacePlan(planId) {
       </div>
     ` : ''}
 
-    ${plan.equipment_checklist?.length > 0 ? `
+    ${Array.isArray(plan.equipment_checklist) && plan.equipment_checklist.length > 0 ? `
       <div class="panel" style="margin-top: 16px;">
         <div class="panel-title" style="margin-bottom: 12px;">🎒 Equipment checklist</div>
         <ul style="margin: 0; padding-left: 20px; color: var(--text-dim); font-size: 13px; line-height: 1.7;">
@@ -23118,7 +23139,7 @@ async function viewRacePlan(planId) {
       </div>
     ` : ''}
 
-    ${plan.race_morning_timeline?.length > 0 ? `
+    ${Array.isArray(plan.race_morning_timeline) && plan.race_morning_timeline.length > 0 ? `
       <div class="panel" style="margin-top: 16px;">
         <div class="panel-title" style="margin-bottom: 12px;">⏰ Race morning timeline</div>
         <div style="display: flex; flex-direction: column; gap: 8px;">
@@ -23136,7 +23157,7 @@ async function viewRacePlan(planId) {
       <div class="panel" style="margin-top: 16px;">
         <div class="panel-title" style="margin-bottom: 12px;">🧠 Mental strategy</div>
         ${plan.mental_strategy.pre_race_mindset ? `<div style="font-size: 13px; color: var(--text-dim); line-height: 1.6; margin-bottom: 10px;"><strong style="color: var(--text);">Pre-race:</strong> ${escapeHtml(plan.mental_strategy.pre_race_mindset)}</div>` : ''}
-        ${plan.mental_strategy.during_race_anchors?.length > 0 ? `
+        ${Array.isArray(plan.mental_strategy.during_race_anchors) && plan.mental_strategy.during_race_anchors.length > 0 ? `
           <div style="margin-bottom: 10px;">
             <div style="font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 6px;">Anchors during race:</div>
             <ul style="margin: 0; padding-left: 20px; color: var(--text-dim); font-size: 13px; line-height: 1.65;">
@@ -25867,16 +25888,23 @@ function renderTimePickerOnly(savedReminderTime) {
   `;
 }
 
-async function saveReminderTime(time) {
+let _reminderTimeSaveTimer = null;
+function saveReminderTime(time) {
   if (!state.user || !time) return;
-  try {
-    await sb.from('profiles').update({ notif_workout_reminder_time: time }).eq('id', state.user.id);
-    trackEvent('notif_time_changed', { time });
-    toast('Reminder time saved');
-  } catch (e) {
-    console.warn('[Stryxs] saveReminderTime failed:', e?.message);
-    toast('Could not save, try again');
-  }
+  // Debounce: the picker fires on every change, so collapse rapid edits into one
+  // write (and one toast) instead of racing several updates of the same field.
+  if (_reminderTimeSaveTimer) clearTimeout(_reminderTimeSaveTimer);
+  _reminderTimeSaveTimer = setTimeout(async () => {
+    _reminderTimeSaveTimer = null;
+    try {
+      await sb.from('profiles').update({ notif_workout_reminder_time: time }).eq('id', state.user.id);
+      trackEvent('notif_time_changed', { time });
+      toast('Reminder time saved');
+    } catch (e) {
+      console.warn('[Stryxs] saveReminderTime failed:', e?.message);
+      toast('Could not save, try again');
+    }
+  }, 500);
 }
 
 // Map legacy equipment values to the simplified set so existing users keep their
