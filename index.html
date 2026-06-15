@@ -5665,21 +5665,24 @@ function showFeedbackWidget() {
   } catch (_) {}
   try {
     const uid = state.user?.id;
-    if (uid) {
-      // Snooze (user dismissed) — 7 days
-      const snoozed = localStorage.getItem(`stryxs_feedback_snoozed_${uid}`);
-      if (snoozed && Date.now() - parseInt(snoozed, 10) < 7 * 24 * 60 * 60 * 1000) return;
-      // First-2-days hold. Seed the eligibility timestamp the first time we'd
-      // consider showing it; only reveal once 2 days have elapsed.
-      const FEEDBACK_HOLD_MS = 2 * 24 * 60 * 60 * 1000;
-      const key = `stryxs_feedback_eligible_at_${uid}`;
-      let eligibleAt = parseInt(localStorage.getItem(key) || '', 10);
-      if (!eligibleAt || isNaN(eligibleAt)) {
-        eligibleAt = Date.now() + FEEDBACK_HOLD_MS;
-        localStorage.setItem(key, String(eligibleAt));
-      }
-      if (Date.now() < eligibleAt) return;
+    // Don't show before we know who the user is. Otherwise the snooze check below
+    // is skipped (it was guarded by `if (uid)`), so the widget popped on every
+    // load until auth resolved — which is exactly why it kept "always showing up".
+    if (!uid) return;
+    // Snooze (user dismissed): we store the EXPIRY timestamp and show again once
+    // it passes. This survives reloads and syncs across devices.
+    const snoozed = localStorage.getItem(`stryxs_feedback_snoozed_${uid}`);
+    if (snoozed && Date.now() < parseInt(snoozed, 10)) return;
+    // First-2-days hold. Seed the eligibility timestamp the first time we'd
+    // consider showing it; only reveal once 2 days have elapsed.
+    const FEEDBACK_HOLD_MS = 2 * 24 * 60 * 60 * 1000;
+    const key = `stryxs_feedback_eligible_at_${uid}`;
+    let eligibleAt = parseInt(localStorage.getItem(key) || '', 10);
+    if (!eligibleAt || isNaN(eligibleAt)) {
+      eligibleAt = Date.now() + FEEDBACK_HOLD_MS;
+      localStorage.setItem(key, String(eligibleAt));
     }
+    if (Date.now() < eligibleAt) return;
   } catch (_) {}
 
   const fab = document.createElement('button');
@@ -5726,13 +5729,13 @@ function openFeedbackModal() {
       <div style="display: flex; gap: 8px; margin-top: 14px;">
         <button onclick="snoozeFeedback()" style="padding: 11px 14px; background: transparent; border: 1px solid var(--border); border-radius: 10px; color: var(--text-mute); font-size: 12px; cursor: pointer;">Don't show for a week</button>
         <div style="flex: 1;"></div>
-        <button onclick="document.getElementById('feedbackModal')?.remove()" style="padding: 11px 16px; background: transparent; border: 1px solid var(--border); border-radius: 10px; color: var(--text-dim); font-size: 14px; cursor: pointer;">Cancel</button>
+        <button onclick="dismissFeedbackModal()" style="padding: 11px 16px; background: transparent; border: 1px solid var(--border); border-radius: 10px; color: var(--text-dim); font-size: 14px; cursor: pointer;">Cancel</button>
         <button onclick="submitFeedback()" class="btn" style="padding: 11px 18px; font-size: 14px;">Send</button>
       </div>
     </div>
   `;
   document.body.appendChild(modal);
-  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+  modal.addEventListener('click', (e) => { if (e.target === modal) dismissFeedbackModal(); });
 }
 
 function selectFeedbackRating(n) {
@@ -5753,18 +5756,29 @@ function selectFeedbackRating(n) {
   }
 }
 
-function snoozeFeedback() {
+// Store the snooze as an EXPIRY timestamp (now + N days). Mirror it to the
+// user's profile so the snooze follows them across devices/platforms (needs
+// migrate_v10's client_state column).
+function _setFeedbackSnooze(days) {
   try {
     const uid = state.user?.id;
-    if (uid) localStorage.setItem(`stryxs_feedback_snoozed_${uid}`, String(Date.now()));
+    if (uid) localStorage.setItem(`stryxs_feedback_snoozed_${uid}`, String(Date.now() + days * 24 * 60 * 60 * 1000));
   } catch (_) {}
-  // Mirror the snooze to the user's profile so "ask me later" follows them
-  // across devices/platforms (needs migrate_v10's client_state column).
   if (typeof _scheduleClientStateSync === 'function') _scheduleClientStateSync(0);
+}
+function snoozeFeedback() {
+  _setFeedbackSnooze(7);
   trackEvent('feedback_widget_snoozed');
   document.getElementById('feedbackModal')?.remove();
   hideFeedbackWidget();
   toast("OK, we'll ask again next week");
+}
+// Cancel / tap-outside: a soft 3-day snooze so it stops nagging now but still
+// returns later. (Closing used to set nothing, so it reappeared immediately.)
+function dismissFeedbackModal() {
+  _setFeedbackSnooze(3);
+  document.getElementById('feedbackModal')?.remove();
+  hideFeedbackWidget();
 }
 
 async function submitFeedback() {
@@ -5788,11 +5802,7 @@ async function submitFeedback() {
     document.getElementById('feedbackModal')?.remove();
     toast('Thank you, we read everything');
     // Snooze for a week so we don't ask again right after they submit
-    try {
-      const uid = state.user?.id;
-      if (uid) localStorage.setItem(`stryxs_feedback_snoozed_${uid}`, String(Date.now()));
-    } catch (_) {}
-    if (typeof _scheduleClientStateSync === 'function') _scheduleClientStateSync(0);
+    _setFeedbackSnooze(7);
     hideFeedbackWidget();
   } catch (err) {
     console.error('[Stryxs] feedback submit failed:', err);
@@ -10664,7 +10674,11 @@ function renderStryxsLineChart(opts) {
     if (v != null && v > 0) {
       ptsA.push({
         x: pad.left + i * step,
-        y: pad.top + innerH - ((v - loA) / (hiA - loA)) * innerH,
+        // invertA: smaller value plots HIGHER (used for pace, where a lower
+        // min/km is faster and should sit at the top of the chart).
+        y: opts.invertA
+          ? pad.top + ((v - loA) / (hiA - loA)) * innerH
+          : pad.top + innerH - ((v - loA) / (hiA - loA)) * innerH,
         v, i
       });
     }
@@ -10769,9 +10783,9 @@ function renderStryxsLineChart(opts) {
       <div id="${chartId}_wrap" style="position: relative; padding-left: ${yGutter}px; padding-right: ${yGutterR}px; padding-bottom: 26px;">
         <!-- Left Y-axis tick values -->
         <div style="position: absolute; left: 0; top: 0; bottom: 26px; width: ${yGutter}px; pointer-events: none; font-size: 10px; color: ${tickColorA}; font-variant-numeric: tabular-nums;">
-          <div style="position: absolute; right: 6px; top: ${yTopPct}%; transform: translateY(-50%); text-align: right; white-space: nowrap;">${tickA(hiA)}</div>
+          <div style="position: absolute; right: 6px; top: ${yTopPct}%; transform: translateY(-50%); text-align: right; white-space: nowrap;">${tickA(opts.invertA ? loA : hiA)}</div>
           <div style="position: absolute; right: 6px; top: ${(yTopPct + yBottomPct) / 2}%; transform: translateY(-50%); text-align: right; opacity: 0.7; white-space: nowrap;">${tickA((hiA + loA) / 2)}</div>
-          <div style="position: absolute; right: 6px; top: ${yBottomPct}%; transform: translateY(-50%); text-align: right; white-space: nowrap;">${tickA(loA)}</div>
+          <div style="position: absolute; right: 6px; top: ${yBottomPct}%; transform: translateY(-50%); text-align: right; white-space: nowrap;">${tickA(opts.invertA ? hiA : loA)}</div>
         </div>
         ${validB ? `
         <!-- Right Y-axis tick values (second series, color-matched) -->
@@ -10949,7 +10963,7 @@ function _stryxsWorkoutSeconds(a) {
 
 // Public: legacy signature. Time-series line/area with interactive hover.
 // Optional xLabels / xTitle let callers pass a precise X-axis (e.g. real time ticks).
-function renderTimeSeriesChart(series, label, unit, color, xLabels, xTitle) {
+function renderTimeSeriesChart(series, label, unit, color, xLabels, xTitle, invertA) {
   return renderStryxsLineChart({
     title: label,
     seriesA: series,
@@ -10958,7 +10972,26 @@ function renderTimeSeriesChart(series, label, unit, color, xLabels, xTitle) {
     colorA: color,
     xAxisLabels: xLabels,
     xAxisTitle: xTitle,
+    invertA: !!invertA,
   });
+}
+
+// Strava reports RUN cadence one-leg (~85 rpm); we show the both-feet spm number
+// (~170) in the summary box because the edge doubles the AVERAGE — but the
+// per-second series stays one-leg, so the graph read half the box. Scale the
+// run/other cadence series up to match the box so the chart and the number
+// agree. Bikes use rpm as-is (no per-leg doubling).
+function _cadDispSeries(a) {
+  const s = a && a.cadenceSeries;
+  if (!Array.isArray(s) || s.length < 4) return s;
+  if (a.sport === 'bike') return s;
+  const valid = s.filter(v => typeof v === 'number' && v > 0);
+  if (!valid.length) return s;
+  const mean = valid.reduce((x, y) => x + y, 0) / valid.length;
+  let f = 1;
+  if (a.cadence && mean > 0) { const r = Math.round(a.cadence / mean); if (r >= 2 && r <= 3) f = r; }
+  else if (mean < 120) f = 2; // no box value: assume one-leg run data
+  return f === 1 ? s : s.map(v => (typeof v === 'number' && v > 0) ? Math.round(v * f) : v);
 }
 
 // Public: legacy signature. Two normalized lines on one canvas, interactive.
@@ -10966,7 +10999,7 @@ function renderTimeSeriesChart(series, label, unit, color, xLabels, xTitle) {
 // otherwise the chart silently collapses to a single line and becomes a confusing
 // duplicate of the matching "X over time" chart (e.g. "Speed vs Cadence" with no
 // cadence just re-drew the speed line).
-function renderDualLineChart(seriesA, seriesB, labelA, labelB, unitA, unitB, colorA, colorB, title, xLabels, xTitle) {
+function renderDualLineChart(seriesA, seriesB, labelA, labelB, unitA, unitB, colorA, colorB, title, xLabels, xTitle, invertA) {
   const realB = (seriesB || []).map(Number).filter(v => Number.isFinite(v) && v > 0);
   if (realB.length < 4) return '';
   return renderStryxsLineChart({
@@ -10975,6 +11008,7 @@ function renderDualLineChart(seriesA, seriesB, labelA, labelB, unitA, unitB, col
     seriesB, labelB, unitB, colorB,
     xAxisLabels: xLabels,
     xAxisTitle: xTitle,
+    invertA: !!invertA,
   });
 }
 
@@ -11795,6 +11829,12 @@ function _getCachedAnalysis(a) {
   if (!k) return null;
   try { return localStorage.getItem(k); } catch (_) { return null; }
 }
+// Has this workout already been analyzed by Coach on this device? (Same-device
+// marker; the Review view also re-loads the analysis cross-device by workout id.)
+function _isWorkoutAnalyzed(dbId) {
+  if (!dbId) return false;
+  try { return !!localStorage.getItem('stryxs_wkanalysis_' + dbId); } catch (_) { return false; }
+}
 function _analyzeButtonHTML(key) {
   return `<button class="btn" style="width: 100%; padding: 12px; font-size: 14px; font-weight: 600; background: linear-gradient(135deg, rgba(0,229,160,0.16), rgba(80,130,255,0.10)); border: 1px solid rgba(0,229,160,0.35); color: var(--accent); display: flex; align-items: center; justify-content: center; gap: 8px;" onclick="analyzeWorkoutWithCoach('${key}', this)">🔍 Analyze this workout with Coach</button>`;
 }
@@ -11858,7 +11898,11 @@ async function analyzeWorkoutWithCoach(key, el) {
         // Save as a coach chat message so it persists across devices and lives where
         // all the other Coach conversation is (not pinned to one device's storage).
         try {
-          await sb.from('coach_messages').insert({ user_id: state.user.id, role: 'coach', content: commentary, context_type: 'workout_commentary' });
+          // Tag the saved analysis with the workout id so it can be reliably
+          // re-loaded later (and on OTHER devices) — the old code matched by
+          // timestamp proximity, which broke whenever you analyzed a workout
+          // more than a few minutes after it synced.
+          await sb.from('coach_messages').insert({ user_id: state.user.id, role: 'coach', content: commentary, context_type: 'workout_commentary' + (a._dbId ? ':' + a._dbId : '') });
         } catch (_) {}
         // Soft per-device marker so returning to this card shows an "open in Coach"
         // shortcut instead of re-spending tokens on this device.
@@ -11941,9 +11985,9 @@ function renderSummaryWorkout(a) {
              above covers split-by-split, so no duplicate per-split chart here. -->
         ${(() => { const xt = _stryxsTimeAxisLabels(_stryxsWorkoutSeconds(a), 5); return `
         ${renderTimeSeriesChart(a.hrSeries, 'Heart Rate over time', 'bpm', '#ef4444', xt, 'Time')}
-        ${a.sport === 'bike' ? renderTimeSeriesChart(a.speedSeries, 'Speed over time', 'km/h', '#00e5a0', xt, 'Time') : renderTimeSeriesChart(a.paceSeries, 'Pace over time', 'min/km', '#00e5a0', xt, 'Time')}
+        ${a.sport === 'bike' ? renderTimeSeriesChart(a.speedSeries, 'Speed over time', 'km/h', '#00e5a0', xt, 'Time') : renderTimeSeriesChart(a.paceSeries, 'Pace over time', 'min/km', '#00e5a0', xt, 'Time', true)}
         ${renderTimeSeriesChart(a.powerSeries, 'Power over time', 'w', '#fbbf24', xt, 'Time')}
-        ${renderTimeSeriesChart(a.cadenceSeries, 'Cadence over time', a.sport === 'bike' ? 'rpm' : 'spm', '#5082ff', xt, 'Time')}
+        ${renderTimeSeriesChart(_cadDispSeries(a), 'Cadence over time', a.sport === 'bike' ? 'rpm' : 'spm', '#5082ff', xt, 'Time')}
         ${renderTimeSeriesChart(a.elevationSeries, 'Elevation profile', 'm', '#a78bfa', xt, 'Time')}
         `; })()}
         ${renderDataAvailabilityHint(a)}
@@ -12149,9 +12193,10 @@ function renderRun(a) {
              Every chart shares one precise TIME x-axis. -->
         ${(() => { const xt = _stryxsTimeAxisLabels(_stryxsWorkoutSeconds(a), 5); return `
         ${renderTimeSeriesChart(a.hrSeries, 'Heart Rate over time', 'bpm', '#ef4444', xt, 'Time')}
-        ${renderTimeSeriesChart(a.paceSeries, 'Pace over time', 'min/km', '#00e5a0', xt, 'Time')}
-        ${renderTimeSeriesChart(a.cadenceSeries, 'Cadence over time', 'spm', '#5082ff', xt, 'Time')}
-        ${renderDualLineChart(a.paceSeries, a.cadenceSeries, 'Pace', 'Cadence', 'min/km', 'spm', '#00e5a0', '#5082ff', 'Pace vs Cadence', xt, 'Time')}
+        ${renderTimeSeriesChart(a.paceSeries, 'Pace over time', 'min/km', '#00e5a0', xt, 'Time', true)}
+        ${renderTimeSeriesChart(a.powerSeries, 'Power over time', 'w', '#fbbf24', xt, 'Time')}
+        ${renderTimeSeriesChart(_cadDispSeries(a), 'Cadence over time', 'spm', '#5082ff', xt, 'Time')}
+        ${renderDualLineChart(a.paceSeries, _cadDispSeries(a), 'Pace', 'Cadence', 'min/km', 'spm', '#00e5a0', '#5082ff', 'Pace vs Cadence', xt, 'Time', true)}
         ${renderTimeSeriesChart(a.elevationSeries, 'Elevation profile', 'm', '#a78bfa', xt, 'Time')}
         `; })()}
         ${renderDataAvailabilityHint(a)}
@@ -13349,7 +13394,7 @@ function _sportProgressBlock(sport) {
       <button class="btn ghost" style="font-size: 11px; padding: 4px 10px;" onclick="_toggleSportProgress('${id}', this)">📈 See your progress</button>
       <div id="${id}" style="display: none; margin-top: 10px;">
         <div style="display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 4px;">
-          <span style="font-size: 11px; color: var(--text-mute);">Last ${series.length} weeks</span>
+          <span style="font-size: 11px; color: var(--text-mute);">Last 8 weeks</span>
           <span style="font-size: 12px; font-weight: 700; color: ${color};">${arrow} ${Math.abs(deltaPct).toFixed(0)}% ${word}</span>
         </div>
         <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width: 100%; height: 56px; display: block;">
@@ -13962,19 +14007,31 @@ async function viewHistoryDetail(ref) {
   // Try to load saved Coach commentary for this workout
   if (state.user && w._dbId) {
     try {
-      // Match commentary saved around the same time as the workout was created
-      const workoutDate = new Date(w.date || w.created_at);
-      const windowStart = new Date(workoutDate.getTime() - 60000); // 1 min before
-      const windowEnd = new Date(workoutDate.getTime() + 5 * 60000); // 5 min after
-
-      const { data: messages } = await sb.from('coach_messages')
+      // Primary: match by workout id (reliable + cross-device — the analysis is
+      // tagged with the workout's _dbId in its context_type when it's saved).
+      let { data: messages } = await sb.from('coach_messages')
         .select('content, created_at')
         .eq('user_id', state.user.id)
-        .eq('context_type', 'workout_commentary')
-        .gte('created_at', windowStart.toISOString())
-        .lte('created_at', windowEnd.toISOString())
+        .eq('context_type', 'workout_commentary:' + w._dbId)
         .order('created_at', { ascending: false })
         .limit(1);
+
+      // Fallback for legacy rows saved before id-tagging: match by timestamp
+      // proximity to when the workout was created.
+      if (!messages || messages.length === 0) {
+        const workoutDate = new Date(w.date || w.created_at);
+        const windowStart = new Date(workoutDate.getTime() - 60000); // 1 min before
+        const windowEnd = new Date(workoutDate.getTime() + 5 * 60000); // 5 min after
+        const legacy = await sb.from('coach_messages')
+          .select('content, created_at')
+          .eq('user_id', state.user.id)
+          .eq('context_type', 'workout_commentary')
+          .gte('created_at', windowStart.toISOString())
+          .lte('created_at', windowEnd.toISOString())
+          .order('created_at', { ascending: false })
+          .limit(1);
+        messages = legacy.data;
+      }
 
       if (messages && messages.length > 0) {
         const commentaryEl = document.createElement('div');
@@ -18053,10 +18110,10 @@ async function askCoachLive({ userText = null, thinkingLabel = 'Thinking…', ru
   // Wait for the chat history to finish loading (the flag flips at the end of
   // the load), so live-appended messages can't be wiped by the history paint.
   const t0 = Date.now();
-  while ((!document.getElementById('chatMsgs') || !window._stryxsCoachLoadedThisSession) && Date.now() - t0 < 6000) {
+  while ((!document.getElementById('chatMessages') || !window._stryxsCoachLoadedThisSession) && Date.now() - t0 < 6000) {
     await new Promise(r => setTimeout(r, 80));
   }
-  const msgs = document.getElementById('chatMsgs');
+  const msgs = document.getElementById('chatMessages');
   if (msgs && userText) {
     msgs.insertAdjacentHTML('beforeend', renderMsg('user', userText));
     msgs.scrollTop = msgs.scrollHeight;
@@ -23526,7 +23583,9 @@ function _pfCardHTML(w) {
         ${w.description ? `<div class="desc md-body">${typeof formatMarkdown === 'function' ? formatMarkdown(w.description) : escapeHtml(w.description)}</div>` : ''}
         <div class="acts">
           <button class="btn" onclick="event.stopPropagation(); viewHistoryDetail('${act._dbId}')">📊 Review</button>
-          <button class="btn ghost" onclick="event.stopPropagation(); askCoachAboutWorkout('${w.id}')">💬 Ask Coach</button>
+          ${_isWorkoutAnalyzed(act._dbId)
+            ? `<button class="btn ghost" onclick="event.stopPropagation(); viewHistoryDetail('${act._dbId}')">💬 Coach's analysis</button>`
+            : `<button class="btn ghost" onclick="event.stopPropagation(); askCoachAboutWorkout('${w.id}')">💬 Ask Coach</button>`}
         </div>
       </div>
     </div>`;
@@ -23652,14 +23711,13 @@ function scrollToTodayWorkout() {
   const bar = document.getElementById('planBar');
   const clone = document.getElementById('planBarFixed');
   const targetAbs = t.getBoundingClientRect().top + _planCurY();
+  // Jumping to today always crosses the pin trigger, so the bar WILL be pinned
+  // at the top once we land. Stop high enough that today's card sits clearly
+  // BELOW the pinned bar (safe-area top + bar height + comfortable margin) — the
+  // old prediction sometimes mis-fired and left the card tucked under the bar.
   const safeTopPx = clone ? (parseFloat(getComputedStyle(clone).top) || 0) : 0;
   const barH = (bar && bar.offsetHeight) || 44;
-  const pinnedOff = safeTopPx + barH + 14;
-  // The clone pins once the in-flow bar has scrolled behind it: i.e. whenever the
-  // destination scroll position is below the in-flow bar's own position.
-  const barBottomAbs = bar ? (bar.getBoundingClientRect().bottom + _planCurY()) : 0;
-  const willPin = !!clone && (targetAbs - pinnedOff) > barBottomAbs;
-  const off = willPin ? pinnedOff : (_planNavBottom() + 60);
+  const off = safeTopPx + barH + 24;
   _planDoScroll(targetAbs - off);
 }
 function planScrollTop() { _planDoScroll(0); }
