@@ -18957,6 +18957,55 @@ async function sendChatMsg() {
       console.warn('[Stryxs] Chat correction handling failed (non-fatal):', corrErr);
     }
 
+    // ═══ CHAT-BASED PROFILE/BENCHMARK EDIT (all users) ═══
+    // "my run LTHR is 178", "set my 5k PB to 19:30", "FTP is 240 now", "I'm at
+    // 10 hours a week", "my knee's sore" → Coach writes it to the real fields so
+    // you don't have to go dig in Settings. Tuning fields only (goal/race rebuild
+    // via "Plan a new race"). Skipped if an imported-plan correction already ran.
+    try {
+      if (!correctionWasApplied && text.length >= 5 && text.length <= 400
+          && /\b(lthr|ftp|css|\bpb\b|personal best|5k|10k|half|marathon|hours?\s*(a|per)?\s*week|hours\b|experience|beginner|intermediate|advanced|injur|knee|hip|ankle|shin|calf|back|shoulder|hamstring|threshold)\b/i.test(text)) {
+        const profForEdit = {
+          run_lthr: state.profile?.runLthr, bike_lthr: state.profile?.bikeLthr,
+          bike_ftp: state.profile?.bikeFtp, training_zones: state.profile?.trainingZones || {},
+        };
+        const ed = await callCoach('parse_profile_edit', { text, intake, profile: profForEdit });
+        const hasIntake = ed?.intake && Object.keys(ed.intake).length > 0;
+        const hasProfile = ed?.profile && Object.keys(ed.profile).length > 0;
+        if (ed?.was_edit && (hasIntake || hasProfile)) {
+          if (hasIntake) { try { await sb.from('athlete_intake').update(ed.intake).eq('user_id', state.user.id); } catch (_) {} }
+          if (hasProfile) {
+            const pUpd = {};
+            if (ed.profile.run_lthr != null) pUpd.run_lthr = ed.profile.run_lthr;
+            if (ed.profile.bike_lthr != null) pUpd.bike_lthr = ed.profile.bike_lthr;
+            if (ed.profile.bike_ftp != null) pUpd.bike_ftp = ed.profile.bike_ftp;
+            if (Object.keys(pUpd).length) { try { await sb.from('profiles').update(pUpd).eq('id', state.user.id); } catch (_) {} }
+            // Swim CSS lives in profiles.training_zones (jsonb) — merge.
+            if (ed.profile.swim_css_per_100m != null) {
+              const tz = { ...(state.profile?.trainingZones || {}), swim_css_per_100m: ed.profile.swim_css_per_100m };
+              try { await sb.from('profiles').update({ training_zones: tz }).eq('id', state.user.id); state.profile.trainingZones = tz; } catch (_) {}
+            }
+            // LTHR also lives on athlete_intake for plan-gen — keep them in sync.
+            const lthrSync = {};
+            if (ed.profile.run_lthr != null) lthrSync.run_lthr = ed.profile.run_lthr;
+            if (ed.profile.bike_lthr != null) lthrSync.bike_lthr = ed.profile.bike_lthr;
+            if (Object.keys(lthrSync).length) { try { await sb.from('athlete_intake').update(lthrSync).eq('user_id', state.user.id); } catch (_) {} }
+            // Refresh local profile so Settings + analysis reflect it immediately.
+            if (ed.profile.run_lthr != null) state.profile.runLthr = ed.profile.run_lthr;
+            if (ed.profile.bike_lthr != null) state.profile.bikeLthr = ed.profile.bike_lthr;
+            if (ed.profile.bike_ftp != null) state.profile.bikeFtp = ed.profile.bike_ftp;
+          }
+          const confirmMsg = `✓ ${ed.summary || 'Got it, updated.'}`;
+          await sb.from('coach_messages').insert({ user_id: state.user.id, role: 'coach', content: confirmMsg, context_type: 'profile_correction_applied' });
+          msgs.innerHTML += renderMsg('coach', confirmMsg);
+          msgs.scrollTop = msgs.scrollHeight;
+          correctionWasApplied = true;
+        }
+      }
+    } catch (editErr) {
+      console.warn('[Stryxs] Chat profile edit failed (non-fatal):', editErr);
+    }
+
     // ═══ ACK DETECTION (FALLBACK SAFETY NET) ═══
     // After import, we auto-build the next week immediately. But if the auto-build failed
     // (network, timeout, etc.) OR the user wants to trigger the next-next week from chat,
