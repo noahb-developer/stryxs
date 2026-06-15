@@ -6940,6 +6940,8 @@ function showApp() {
 
   // Check for unread Coach messages on every app show
   checkCoachUnreadOnLoad();
+  // After race day, proactively invite the user to plan what's next.
+  try { maybePostRaceCheckin(); } catch (_) {}
   // Refresh data when returning from background / switching devices.
   try { _installResumeRefresh(); } catch (_) {}
   // NOTE: legacy 3-step onboarding modal removed entirely. The new flow is:
@@ -18105,6 +18107,13 @@ function renderMsg(role, content, contextType = null, msgId = null, imageUrl = n
         </button>
       </div>
     `;
+  } else if (role === 'coach' && contextType === 'post_race_checkin') {
+    // After race day: offer to set the next goal and rebuild the plan.
+    actionsHtml = `
+      <div style="margin-top: 12px;">
+        <button class="btn" style="font-size: 13px; padding: 8px 14px;" onclick="openNextGoalModal()">🎯 Plan my next race</button>
+      </div>
+    `;
   }
 
   // Small turn label above each Coach message so consecutive boxless replies are
@@ -18366,6 +18375,121 @@ async function regeneratePlanFromReactive(btn) {
     toast('Regeneration failed: ' + err.message);
     btn.disabled = false;
     btn.textContent = '🔄 Regenerate plan now';
+  }
+}
+
+// ─── Post-race check-in → coach-driven new plan ──────────────────────────────
+// When the user's race date has passed, Coach proactively invites them to plan
+// what's next (instead of being stranded on a finished plan). They pick a new
+// goal + date and we rebuild the whole plan around it via the proven build path.
+async function maybePostRaceCheckin() {
+  if (!state.user) return;
+  try {
+    const { data: intake } = await sb.from('athlete_intake')
+      .select('race_date, goal_event, completed').eq('user_id', state.user.id).maybeSingle();
+    if (!intake?.completed || !intake?.race_date) return;
+    if (intake.goal_event === 'general' || intake.goal_event === 'general_fitness') return;
+    const today = (typeof getClientToday === 'function') ? getClientToday() : new Date().toISOString().split('T')[0];
+    if (intake.race_date >= today) return;                                   // race hasn't passed
+    const daysSince = Math.floor((new Date(today + 'T12:00:00') - new Date(intake.race_date + 'T12:00:00')) / 86400000);
+    if (daysSince < 0 || daysSince > 90) return;                             // only the window just after the race
+    const flagKey = `stryxs_postrace_prompted_${intake.race_date}_${state.user.id}`;
+    if (localStorage.getItem(flagKey)) return;
+    // Cross-device idempotency: don't double-post if another device already did.
+    const { data: existing } = await sb.from('coach_messages')
+      .select('id').eq('user_id', state.user.id).in('context_type', ['post_race_checkin', 'post_race_checkin_done'])
+      .gte('created_at', new Date(Date.now() - 150 * 86400000).toISOString()).limit(1);
+    if (existing && existing.length) { try { localStorage.setItem(flagKey, '1'); } catch (_) {} return; }
+    const ev = (typeof formatGoal === 'function') ? formatGoal(intake.goal_event) : intake.goal_event;
+    const msg = `🎉 Your ${ev} has come and gone, nice work getting to that start line. How did it go?\n\nWhen you're ready, let's line up what's next. Tell me your next goal and target date right here in chat, or tap below and I'll build you a fresh plan around it.`;
+    await sb.from('coach_messages').insert({ user_id: state.user.id, role: 'coach', content: msg, context_type: 'post_race_checkin' });
+    try { localStorage.setItem(flagKey, '1'); } catch (_) {}
+    if (typeof setCoachUnread === 'function') setCoachUnread(true);
+  } catch (_) { /* never block load on this */ }
+}
+
+const _NEXT_GOAL_OPTIONS = [
+  ['5k', '5K'], ['10k', '10K'], ['half_marathon', 'Half Marathon'], ['marathon', 'Marathon'],
+  ['mile', 'Mile / speed'], ['ultra', 'Ultra'], ['sprint_tri', 'Sprint Triathlon'],
+  ['olympic_tri', 'Olympic Triathlon'], ['70_3', '70.3 / Half Ironman'], ['ironman', 'Ironman'],
+  ['cycling', 'Cycling'], ['swimming', 'Swimming'], ['general', 'General fitness (no race)'],
+];
+function openNextGoalModal(currentGoal) {
+  if (document.getElementById('nextGoalModal')) return;
+  const todayStr = (typeof getClientToday === 'function') ? getClientToday() : new Date().toISOString().split('T')[0];
+  const modal = document.createElement('div');
+  modal.id = 'nextGoalModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;';
+  modal.innerHTML = `
+    <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:16px;padding:22px 20px;max-width:440px;width:100%;max-height:88vh;overflow-y:auto;">
+      <div style="font-size:18px;font-weight:800;margin-bottom:6px;">What's next?</div>
+      <div style="font-size:13px;color:var(--text-dim);line-height:1.5;margin-bottom:16px;">Pick your next goal and I'll rebuild your whole plan around it. This replaces your current (finished) plan; completed workouts stay in your history.</div>
+      <div class="field"><label>Next goal</label>
+        <select id="nextGoalEvent" style="width:100%;padding:11px;background:var(--bg-3);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;">
+          ${_NEXT_GOAL_OPTIONS.map(([v, l]) => `<option value="${v}"${v === currentGoal ? ' selected' : ''}>${l}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field"><label>Target race date <span style="color:var(--text-mute);font-weight:400;font-size:11px;">leave blank if none yet</span></label>
+        <input type="date" id="nextGoalDate" min="${todayStr}" />
+      </div>
+      <div class="field"><label>Goal time / objective <span style="color:var(--text-mute);font-weight:400;font-size:11px;">optional</span></label>
+        <input type="text" id="nextGoalTime" placeholder="e.g. sub-3:30, finish strong, build base" />
+      </div>
+      <div style="display:flex;gap:8px;margin-top:16px;">
+        <button class="btn ghost" style="flex:1;" onclick="closeNextGoalModal()">Cancel</button>
+        <button class="btn" style="flex:1.4;" id="nextGoalBuildBtn" onclick="submitNextGoal()">Build my new plan</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', e => { if (e.target === modal) closeNextGoalModal(); });
+}
+function closeNextGoalModal() { document.getElementById('nextGoalModal')?.remove(); }
+
+async function submitNextGoal() {
+  if (!state.user) return;
+  const goal = document.getElementById('nextGoalEvent')?.value || null;
+  const date = document.getElementById('nextGoalDate')?.value || null;
+  const goalTime = document.getElementById('nextGoalTime')?.value.trim() || null;
+  if (!goal) { toast('Pick a goal first'); return; }
+  const btn = document.getElementById('nextGoalBuildBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Building…'; }
+  try {
+    // 1) Set the new goal/date/objective.
+    await sb.from('athlete_intake').update({ goal_event: goal, race_date: date, goal_time: goalTime }).eq('user_id', state.user.id);
+    // 2) Mark any open post-race check-in handled so its button won't reappear.
+    try { await sb.from('coach_messages').update({ context_type: 'post_race_checkin_done' }).eq('user_id', state.user.id).eq('context_type', 'post_race_checkin'); } catch (_) {}
+    closeNextGoalModal();
+    // 3) Rebuild from scratch (same proven path as Settings → regenerate).
+    await sb.from('planned_workouts').delete().eq('user_id', state.user.id);
+    await sb.from('training_plans').delete().eq('user_id', state.user.id);
+    const { data: intake } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).single();
+    if (!intake) { toast('No profile found'); if (btn) { btn.disabled = false; btn.textContent = 'Build my new plan'; } return; }
+    // Show the build live on the Coach page.
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('page-coach')?.classList.add('active');
+    document.querySelectorAll('.nav-menu-item').forEach(t => t.classList.toggle('active', t.dataset.page === 'coach'));
+    window.scrollTo({ top: 0, behavior: 'instant' });
+    const el = document.getElementById('coachContent');
+    if (el) el.innerHTML = `<div class="coach-hero"><div class="coach-avatar">🧠</div><div class="coach-intro"><h2>Building your new plan…</h2><p>Mapping out your training around your next goal.</p><p style="margin-top:10px;padding:10px 14px;background:rgba(255,209,102,0.06);border:1px solid rgba(255,209,102,0.2);border-radius:8px;font-size:13px;color:var(--text-dim);">Don't close this window, it'll interrupt the build.</p></div></div><div class="loading"><div class="spinner"></div>Working</div>`;
+    let skeleton = null;
+    try { skeleton = await callCoach('generate_skeleton', { intake }); } catch (e) { console.warn('[Stryxs] skeleton failed:', e); }
+    const plan = await callCoach('generate_plan', { intake, weekNumber: 1, skeleton });
+    if (skeleton) plan.skeleton = skeleton;
+    await savePlanToDb(plan, state.user.id);
+    _lastAutoExtendCheck = 0; _autoExtendInFlight = false;
+    try { await maybeAutoExtendPlan(); } catch (_) {}
+    try {
+      const introMsg = await callCoach('plan_intro_message', { intake });
+      if (introMsg) await sb.from('coach_messages').insert({ user_id: state.user.id, role: 'coach', content: introMsg, context_type: 'plan_intro' });
+    } catch (_) {}
+    try { await sb.from('coach_messages').insert({ user_id: state.user.id, role: 'coach', content: "✓ Your new plan is ready. Head to the Plan tab to see it, it'll keep topping itself up as you train.", context_type: 'general_chat' }); } catch (_) {}
+    toast('New plan ready!');
+    renderCoach();
+  } catch (err) {
+    console.error('[Stryxs] next-goal plan build failed:', err);
+    toast('Plan build failed: ' + (err.message || 'unknown'));
+    if (btn) { btn.disabled = false; btn.textContent = 'Build my new plan'; }
+    try { renderCoach(); } catch (_) {}
   }
 }
 
