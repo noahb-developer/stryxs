@@ -12267,8 +12267,8 @@ function renderRun(a) {
           <div class="metrics">
             <div class="metric">
               <div class="metric-label">Drift</div>
-              <div class="metric-value">${a.drift >= 0 ? '+' : ''}${a.drift.toFixed(1)}%</div>
-              <div class="metric-sub">${Math.round(a.first)} → ${Math.round(a.second)} bpm</div>
+              <div class="metric-value">${a.drift != null ? (a.drift >= 0 ? '+' : '') + a.drift.toFixed(1) + '%' : '—'}</div>
+              <div class="metric-sub">${(a.first != null && a.second != null) ? Math.round(a.first) + ' → ' + Math.round(a.second) + ' bpm' : ''}</div>
             </div>
             ${a.cadence ? `
               <div class="metric">
@@ -12357,8 +12357,8 @@ function renderBike(a) {
           <div class="metrics">
             <div class="metric">
               <div class="metric-label">Drift</div>
-              <div class="metric-value">${a.drift >= 0 ? '+' : ''}${a.drift.toFixed(1)}%</div>
-              <div class="metric-sub">${Math.round(a.first)} → ${Math.round(a.second)} bpm</div>
+              <div class="metric-value">${a.drift != null ? (a.drift >= 0 ? '+' : '') + a.drift.toFixed(1) + '%' : '—'}</div>
+              <div class="metric-sub">${(a.first != null && a.second != null) ? Math.round(a.first) + ' → ' + Math.round(a.second) + ' bpm' : ''}</div>
             </div>
             ${a.projection ? `
               <div class="metric">
@@ -12381,11 +12381,14 @@ function renderBike(a) {
 }
 
 function renderSwim(a) {
-  const setsHtml = a.sets.slice(0, 10).map(s => `
+  // A swim can reach here with HR zones (zd) or laps but no parsed `sets`, so
+  // guard every a.sets access — otherwise the whole analysis view white-screens.
+  const sets = Array.isArray(a.sets) ? a.sets : [];
+  const setsHtml = sets.slice(0, 10).map(s => `
     <div class="legend-row">
       <div class="legend-label">Set ${s.set}</div>
       <div class="legend-value">
-        ${s.hr} bpm
+        ${s.hr != null ? s.hr + ' bpm' : '—'}
         ${s.pace && s.pace !== '--' ? ` · ${s.pace}` : ''}
         ${s.swolf ? ` · SWOLF ${s.swolf}` : ''}
       </div>
@@ -12398,8 +12401,8 @@ function renderSwim(a) {
         <div class="workout-sport">${a.icon} Swimming</div>
         <div class="workout-name">Pool Swim</div>
         <div class="workout-meta">
-          <span>${a.sets.length} sets</span>
-          <span>❤️ ${a.avgHr} bpm avg</span>
+          <span>${sets.length} sets</span>
+          ${a.avgHr ? `<span>❤️ ${a.avgHr} bpm avg</span>` : ''}
         </div>
       </div>
       <div class="analysis-body">
@@ -12415,11 +12418,12 @@ function renderSwim(a) {
         <div class="chart-section">
           <div class="chart-label">Drift & Efficiency</div>
           <div class="metrics">
+            ${a.drift != null ? `
             <div class="metric">
               <div class="metric-label">HR Drift</div>
               <div class="metric-value">${a.drift >= 0 ? '+' : ''}${a.drift.toFixed(1)}%</div>
               <div class="metric-sub">across all sets</div>
-            </div>
+            </div>` : ''}
             ${a.swolfInfo ? `
               <div class="metric">
                 <div class="metric-label">SWOLF</div>
@@ -12427,7 +12431,7 @@ function renderSwim(a) {
                 <div class="metric-sub">${a.swolfInfo.first} → ${a.swolfInfo.last}</div>
               </div>` : ''}
           </div>
-          <div class="verdict ${a.dc}"><span class="verdict-icon">${a.dc==='good'?'✓':a.dc==='ok'?'!':'✕'}</span> ${a.dv}</div>
+          ${a.dv ? `<div class="verdict ${a.dc || ''}"><span class="verdict-icon">${a.dc==='good'?'✓':a.dc==='ok'?'!':'✕'}</span> ${a.dv}</div>` : ''}
         </div>
         ${renderAnalyzeBtn(a)}
         ${renderWorkoutFeedbackForm(a._dbId)}
@@ -15495,6 +15499,10 @@ function formatEventNice(goal) {
     'sprint_tri': 'sprint triathlon',
     '70_3': '70.3',
     'ironman': 'Ironman',
+    'ultra': 'ultra',
+    'mile': 'mile',
+    'cycling': 'cycling event',
+    'swimming': 'swim race',
     'general': 'training',
   };
   return map[goal] || 'race';
@@ -15510,6 +15518,10 @@ function goalTimePlaceholder(goal) {
     '70_3': 'e.g. sub-5:00:00',
     'olympic_tri': 'e.g. sub-2:30:00',
     'sprint_tri': 'e.g. sub-1:15:00',
+    'ultra': 'e.g. sub-24:00 for 100M, or a finish',
+    'mile': 'e.g. sub-5:00',
+    'cycling': 'e.g. sub-5:00 century, or an FTP target',
+    'swimming': 'e.g. sub-1:10 for 100m',
     'general': 'leave blank if no specific time',
   };
   return map[goal] || 'optional';
@@ -15525,6 +15537,10 @@ function lastRacePlaceholder(goal) {
     '70_3': 'e.g. 5:30 at 70.3 Augusta 2025',
     'olympic_tri': 'e.g. 2:35 at Escape Alcatraz 2025',
     'sprint_tri': 'e.g. 1:18 at local sprint 2025',
+    'ultra': 'e.g. 25:30 at a 100M, Sept 2025',
+    'mile': 'e.g. 4:55 on the track, May 2025',
+    'cycling': 'e.g. 4:45 century, June 2025',
+    'swimming': 'e.g. 1:12/100m at a meet, 2025',
     'general': 'leave blank if none',
   };
   return map[goal] || '';
@@ -16263,12 +16279,14 @@ function _obdMapToIntakeAnswers() {
   }
   return out;
 }
-function _obdBuild() {
+async function _obdBuild() {
   _obdSetProg(6);
   // Hand the collected answers to the existing completion path. For "build" it
   // generates a plan; for "import_adapt" completeIntake routes to the import flow.
+  // completeIntake is async — await it so a failure inside the plan build is
+  // actually caught and surfaced, instead of escaping as an unhandled rejection.
   intakeAnswers = _obdMapToIntakeAnswers();
-  try { completeIntake(); } catch (e) { console.error('[Stryxs] completeIntake from onboarding failed:', e); toast('Something went wrong building your plan. Try again.', 4000); }
+  try { await completeIntake(); } catch (e) { console.error('[Stryxs] completeIntake from onboarding failed:', e); toast('Something went wrong building your plan. Try again.', 4000); }
 }
 
 function renderIntake(el, existingIntake) {
