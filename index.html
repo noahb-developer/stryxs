@@ -24807,7 +24807,7 @@ async function renderSettings() {
       </div>
       <div class="field">
         <label>Race date</label>
-        <input type="date" id="settingsRaceDate" value="${intake?.race_date || ''}" style="color-scheme: dark; width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; -webkit-appearance: none; appearance: none;" />
+        <input type="date" id="settingsRaceDate" value="${String(intake?.race_date || '').slice(0, 10)}" onchange="saveRaceDateQuick(this.value)" style="color-scheme: dark; width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; -webkit-appearance: none; appearance: none;" />
       </div>
       <div class="field">
         <label>Experience level</label>
@@ -24819,11 +24819,11 @@ async function renderSettings() {
       </div>
       <div class="field">
         <label>Weekly hours available</label>
-        <input type="number" id="settingsHours" value="${intake?.current_weekly_hours || ''}" placeholder="e.g. 8" min="1" max="30" step="0.5" />
+        <input type="number" id="settingsHours" value="${intake?.current_weekly_hours || ''}" onchange="saveIntakeFieldQuick('current_weekly_hours', this.value)" placeholder="e.g. 8" min="1" max="30" step="0.5" />
       </div>
       <div class="field">
         <label>Injuries / health notes</label>
-        <textarea id="settingsInjuries" placeholder="None, or list any current issues" style="width: 100%; min-height: 60px; padding: 13px 14px; background: var(--bg-3); color: var(--text); border: 1px solid var(--border); border-radius: 10px; font-size: 14px; font-family: inherit; outline: none; resize: vertical;">${intake?.injuries || ''}</textarea>
+        <textarea id="settingsInjuries" onchange="saveIntakeFieldQuick('injuries', this.value)" placeholder="None, or list any current issues" style="width: 100%; min-height: 60px; padding: 13px 14px; background: var(--bg-3); color: var(--text); border: 1px solid var(--border); border-radius: 10px; font-size: 14px; font-family: inherit; outline: none; resize: vertical;">${intake?.injuries || ''}</textarea>
       </div>
         </div>
       </div>
@@ -24905,42 +24905,42 @@ async function renderSettings() {
       </div>
       <div class="field">
         <label>Goal time (for current race)</label>
-        <input type="text" id="settingsGoalTime" value="${intake?.goal_time || ''}" placeholder="e.g. sub-3:30 marathon, sub-10 Ironman, 19:00 5K" />
+        <input type="text" id="settingsGoalTime" value="${intake?.goal_time || ''}" onchange="saveIntakeFieldQuick('goal_time', this.value)" placeholder="e.g. sub-3:30 marathon, sub-10 Ironman, 19:00 5K" />
       </div>
 
       <div style="font-size:12px; font-weight:700; color:var(--text); text-transform:uppercase; letter-spacing:0.6px; margin:18px 0 8px;">🏃 Running</div>
       <div class="field">
         <label>5K PB</label>
-        <input type="text" id="settingsPb5k" value="${intake?.pb_5k || ''}" placeholder="e.g. 19:30" />
+        <input type="text" id="settingsPb5k" value="${intake?.pb_5k || ''}" onchange="saveIntakeFieldQuick('pb_5k', this.value)" placeholder="e.g. 19:30" />
       </div>
       <div class="field">
         <label>10K PB</label>
-        <input type="text" id="settingsPb10k" value="${intake?.pb_10k || ''}" placeholder="e.g. 41:00" />
+        <input type="text" id="settingsPb10k" value="${intake?.pb_10k || ''}" onchange="saveIntakeFieldQuick('pb_10k', this.value)" placeholder="e.g. 41:00" />
       </div>
       <div class="field">
         <label>Half Marathon PB</label>
-        <input type="text" id="settingsPbHalf" value="${intake?.pb_half || ''}" placeholder="e.g. 1:30:00" />
+        <input type="text" id="settingsPbHalf" value="${intake?.pb_half || ''}" onchange="saveIntakeFieldQuick('pb_half', this.value)" placeholder="e.g. 1:30:00" />
       </div>
       <div class="field">
         <label>Marathon PB</label>
-        <input type="text" id="settingsPbMarathon" value="${intake?.pb_marathon || ''}" placeholder="e.g. 3:15:00" />
+        <input type="text" id="settingsPbMarathon" value="${intake?.pb_marathon || ''}" onchange="saveIntakeFieldQuick('pb_marathon', this.value)" placeholder="e.g. 3:15:00" />
       </div>
 
       <div style="font-size:12px; font-weight:700; color:var(--text); text-transform:uppercase; letter-spacing:0.6px; margin:18px 0 8px;">🚴 Cycling</div>
       <div class="field">
         <label>FTP (watts) <span style="color:var(--text-mute); font-weight:400; font-size:11px;">your 1-hour power, anchors cycling pace</span></label>
-        <input type="number" id="settingsBikeFtp" value="${state.profile.bikeFtp || ''}" placeholder="e.g. 230" />
+        <input type="number" id="settingsBikeFtp" value="${state.profile.bikeFtp || ''}" onchange="saveBikeFtpQuick(this.value)" placeholder="e.g. 230" />
       </div>
 
       <div style="font-size:12px; font-weight:700; color:var(--text); text-transform:uppercase; letter-spacing:0.6px; margin:18px 0 8px;">🏊 Swimming</div>
       <div class="field">
         <label>CSS pace <span style="color:var(--text-mute); font-weight:400; font-size:11px;">critical swim speed, per 100m</span></label>
-        <input type="text" id="settingsSwimCss" value="${state.profile?.trainingZones?.swim_css_per_100m || ''}" placeholder="e.g. 1:45" />
+        <input type="text" id="settingsSwimCss" value="${state.profile?.trainingZones?.swim_css_per_100m || ''}" onchange="saveSwimCssQuick(this.value)" placeholder="e.g. 1:45" />
       </div>
 
       <div class="field" style="margin-top:18px;">
         <label>Most recent race</label>
-        <input type="text" id="settingsLastRace" value="${intake?.last_race || ''}" placeholder="e.g. 5K 19:45 in March 2026" />
+        <input type="text" id="settingsLastRace" value="${intake?.last_race || ''}" onchange="saveIntakeFieldQuick('last_race', this.value)" placeholder="e.g. 5K 19:45 in March 2026" />
       </div>
         </div>
       </div>
@@ -26150,6 +26150,82 @@ function updateZonePreview() {
   }
   const preview = document.getElementById('zonePreview');
   if (preview) preview.innerHTML = html;
+}
+
+// Persist the race date the moment it's picked (the goals form otherwise only
+// saved on the "Save changes" button, so picking a date then leaving lost it).
+// Focused write so we skip the heavy full saveAllSettings/showApp re-init.
+let _raceDateSaveTimer = null;
+function saveRaceDateQuick(val) {
+  if (!state.user) return;
+  if (_raceDateSaveTimer) clearTimeout(_raceDateSaveTimer);
+  _raceDateSaveTimer = setTimeout(async () => {
+    _raceDateSaveTimer = null;
+    try {
+      const { error } = await sb.from('athlete_intake').update({ race_date: val || null }).eq('user_id', state.user.id);
+      if (error) throw error;
+      // Race date feeds projections + countdown — drop the cache so they refresh.
+      _projectionsCache = null; _projectionsCacheTime = 0;
+      try { localStorage.removeItem('stryxs_projections_cache'); } catch (_) {}
+      toast(val ? 'Race date saved' : 'Race date cleared');
+    } catch (e) {
+      console.warn('[Stryxs] saveRaceDateQuick failed:', e?.message || e);
+      toast('Could not save race date, try again');
+    }
+  }, 400);
+}
+
+// Focused autosave for benchmark/goal text fields so they persist on edit (not
+// only on the "Save changes" button). Excludes LTHR (its save triggers the stub
+// plan build via saveAllSettings) and the goal select (goal changes rebuild via
+// "Plan a new race"), so those still go through the button.
+const _intakeFieldTimers = {};
+function saveIntakeFieldQuick(field, raw) {
+  if (!state.user) return;
+  if (_intakeFieldTimers[field]) clearTimeout(_intakeFieldTimers[field]);
+  _intakeFieldTimers[field] = setTimeout(async () => {
+    delete _intakeFieldTimers[field];
+    let v = (typeof raw === 'string') ? (raw.trim() || null) : (raw ?? null);
+    if (field === 'current_weekly_hours' && v != null) { const n = parseFloat(v); v = isNaN(n) ? null : n; }
+    try {
+      const { error } = await sb.from('athlete_intake').update({ [field]: v }).eq('user_id', state.user.id);
+      if (error) throw error;
+      _projectionsCache = null; _projectionsCacheTime = 0;
+      try { localStorage.removeItem('stryxs_projections_cache'); } catch (_) {}
+      toast('Saved');
+    } catch (e) { console.warn('[Stryxs] saveIntakeFieldQuick', field, 'failed:', e?.message || e); toast('Could not save, try again'); }
+  }, 500);
+}
+// Bike FTP lives on profiles; swim CSS in profiles.training_zones (jsonb).
+function saveBikeFtpQuick(raw) {
+  if (!state.user) return;
+  if (_intakeFieldTimers.bike_ftp) clearTimeout(_intakeFieldTimers.bike_ftp);
+  _intakeFieldTimers.bike_ftp = setTimeout(async () => {
+    delete _intakeFieldTimers.bike_ftp;
+    const n = parseInt(String(raw).trim()); const v = isNaN(n) ? null : n;
+    try {
+      const { error } = await sb.from('profiles').update({ bike_ftp: v }).eq('id', state.user.id);
+      if (error) throw error;
+      state.profile.bikeFtp = v; _projectionsCache = null; _projectionsCacheTime = 0;
+      toast('Saved');
+    } catch (e) { console.warn('[Stryxs] saveBikeFtpQuick failed:', e?.message || e); }
+  }, 500);
+}
+function saveSwimCssQuick(raw) {
+  if (!state.user) return;
+  if (_intakeFieldTimers.swim_css) clearTimeout(_intakeFieldTimers.swim_css);
+  _intakeFieldTimers.swim_css = setTimeout(async () => {
+    delete _intakeFieldTimers.swim_css;
+    const v = String(raw || '').trim();
+    try {
+      const tz = { ...(state.profile?.trainingZones || {}) };
+      if (v) tz.swim_css_per_100m = v; else delete tz.swim_css_per_100m;
+      const { error } = await sb.from('profiles').update({ training_zones: tz }).eq('id', state.user.id);
+      if (error) throw error;
+      state.profile.trainingZones = tz; _projectionsCache = null; _projectionsCacheTime = 0;
+      toast('Saved');
+    } catch (e) { console.warn('[Stryxs] saveSwimCssQuick failed:', e?.message || e); }
+  }, 500);
 }
 
 async function saveAllSettings(silent = false) {
