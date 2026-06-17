@@ -11304,19 +11304,32 @@ function renderSplitsTable(splits, sport) {
   }).join('');
   const truncated = splits.length > 20 ? `<div style="font-size: 11px; color: var(--text-mute); margin-top: 8px;">+${splits.length - 20} more splits</div>` : '';
   const cols = hasElev ? '40px 1fr 1fr 1fr' : '40px 1fr 1fr';
+  // Collapsed by default: the split table is long on phones and pushes the charts
+  // way down. A "Show splits" toggle keeps them available without the clutter.
+  const id = 'splits-' + Math.random().toString(36).slice(2, 9);
+  const label = `${sport === 'run' ? 'per-km splits' : 'splits'} (${splits.length})`;
   return `
-    <div style="background: rgba(80, 130, 255, 0.04); border: 1px solid rgba(255,255,255,0.05); border-radius: 10px; padding: 14px; margin-top: 14px;">
-      <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px;">${sport === 'run' ? 'Per-km Splits' : 'Splits'}</div>
-      <div style="display: grid; grid-template-columns: ${cols}; gap: 0 12px; font-size: 12px;">
-        <div style="color: var(--text-mute); font-size: 10px; text-transform: uppercase; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.05);">KM</div>
-        <div style="color: var(--text-mute); font-size: 10px; text-transform: uppercase; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.05);">${sport === 'run' ? 'Pace' : 'Time'}</div>
-        <div style="color: var(--text-mute); font-size: 10px; text-transform: uppercase; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.05);">HR</div>
-        ${hasElev ? '<div style="color: var(--text-mute); font-size: 10px; text-transform: uppercase; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.05); text-align: right;">Elev</div>' : ''}
-        ${rows}
+    <div style="margin-top: 14px;">
+      <button class="btn ghost" style="font-size: 12px; padding: 8px 12px; width: 100%; text-align: left;" data-label="${label}" onclick="_toggleSplits('${id}', this)">📊 Show ${label}</button>
+      <div id="${id}" style="display: none; background: rgba(80, 130, 255, 0.04); border: 1px solid rgba(255,255,255,0.05); border-radius: 10px; padding: 14px; margin-top: 8px;">
+        <div style="display: grid; grid-template-columns: ${cols}; gap: 0 12px; font-size: 12px;">
+          <div style="color: var(--text-mute); font-size: 10px; text-transform: uppercase; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.05);">KM</div>
+          <div style="color: var(--text-mute); font-size: 10px; text-transform: uppercase; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.05);">${sport === 'run' ? 'Pace' : 'Time'}</div>
+          <div style="color: var(--text-mute); font-size: 10px; text-transform: uppercase; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.05);">HR</div>
+          ${hasElev ? '<div style="color: var(--text-mute); font-size: 10px; text-transform: uppercase; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.05); text-align: right;">Elev</div>' : ''}
+          ${rows}
+        </div>
+        ${truncated}
       </div>
-      ${truncated}
     </div>
   `;
+}
+function _toggleSplits(id, btn) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const open = el.style.display !== 'none';
+  el.style.display = open ? 'none' : 'block';
+  if (btn) btn.textContent = (open ? '📊 Show ' : '📊 Hide ') + (btn.dataset.label || 'splits');
 }
 
 // Per-lap pool view for swims. Strava reports each set/rep as a lap with
@@ -11362,21 +11375,24 @@ function renderSwimLapsTable(laps, poolLength) {
   const poolNote = (typeof poolLength === 'number' && poolLength > 0)
     ? `<span style="font-size: 11px; color: var(--text-dim);">${poolLength}m pool</span>`
     : '';
+  // Collapsed by default (long lists eat the page on phones); a toggle keeps it.
+  const id = 'laps-' + Math.random().toString(36).slice(2, 9);
+  const label = `pool laps (${trimmed.length})`;
   return `
-    <div style="background: rgba(80, 130, 255, 0.04); border: 1px solid rgba(255,255,255,0.05); border-radius: 10px; padding: 14px; margin-top: 14px;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-        <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px;">Pool laps</div>
-        ${poolNote}
+    <div style="margin-top: 14px;">
+      <button class="btn ghost" style="font-size: 12px; padding: 8px 12px; width: 100%; text-align: left;" data-label="${label}" onclick="_toggleSplits('${id}', this)">📊 Show ${label}</button>
+      <div id="${id}" style="display: none; background: rgba(80, 130, 255, 0.04); border: 1px solid rgba(255,255,255,0.05); border-radius: 10px; padding: 14px; margin-top: 8px;">
+        ${poolNote ? `<div style="display: flex; justify-content: flex-end; margin-bottom: 10px;">${poolNote}</div>` : ''}
+        <div style="display: grid; grid-template-columns: ${cols}; gap: 0 12px; font-size: 12px;">
+          <div style="color: var(--text-mute); font-size: 10px; text-transform: uppercase; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.05);">#</div>
+          <div style="color: var(--text-mute); font-size: 10px; text-transform: uppercase; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.05);">Dist</div>
+          <div style="color: var(--text-mute); font-size: 10px; text-transform: uppercase; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.05);">Time</div>
+          <div style="color: var(--text-mute); font-size: 10px; text-transform: uppercase; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.05);">Pace</div>
+          ${hasHr ? '<div style="color: var(--text-mute); font-size: 10px; text-transform: uppercase; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.05);">HR</div>' : ''}
+          ${rows}
+        </div>
+        ${truncated}
       </div>
-      <div style="display: grid; grid-template-columns: ${cols}; gap: 0 12px; font-size: 12px;">
-        <div style="color: var(--text-mute); font-size: 10px; text-transform: uppercase; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.05);">#</div>
-        <div style="color: var(--text-mute); font-size: 10px; text-transform: uppercase; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.05);">Dist</div>
-        <div style="color: var(--text-mute); font-size: 10px; text-transform: uppercase; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.05);">Time</div>
-        <div style="color: var(--text-mute); font-size: 10px; text-transform: uppercase; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.05);">Pace</div>
-        ${hasHr ? '<div style="color: var(--text-mute); font-size: 10px; text-transform: uppercase; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.05);">HR</div>' : ''}
-        ${rows}
-      </div>
-      ${truncated}
     </div>
   `;
 }
@@ -13402,6 +13418,13 @@ let _sportProgN = 0;
 // Returns an expandable "See your progress" block for one sport, or '' if there
 // aren't enough weekly data points (need 3+) to draw an honest trend.
 function _sportProgressBlock(sport) {
+  // DISABLED (2026-06-16): these mini training-trend graphs sat right under the
+  // race-day TARGET pace and kept reading as "the numbers don't match" (target
+  // vs training trend are different by design). They also duplicated the Stats
+  // "Pace & speed trend" card, which is now the single home for the trend. The
+  // race-day card shows only the target + why. Kept as a no-op so the 8 call
+  // sites need no edits; the function body below is retained for reference.
+  return '';
   const mode = sport === 'bike' ? 'speed' : sport === 'swim' ? 'pace100' : 'pace';
   const series = _sportProgressSeries(sport, 8);
   if (series.length < 3) return ''; // not enough history to show a real trend
@@ -14055,35 +14078,20 @@ async function viewHistoryDetail(ref) {
   // Try to load saved Coach commentary for this workout
   if (state.user && w._dbId) {
     try {
-      // Primary: match by workout id (reliable + cross-device — the analysis is
-      // tagged with the workout's _dbId in its context_type when it's saved).
-      let { data: messages } = await sb.from('coach_messages')
+      // Match ONLY by workout id (the analysis is tagged 'workout_commentary:<dbId>'
+      // when saved). No timestamp fallback: that matched a DIFFERENT workout's
+      // commentary and made un-analyzed activities show coach text they never got.
+      // So this box appears ONLY for workouts Coach has actually analyzed.
+      const { data: messages } = await sb.from('coach_messages')
         .select('content, created_at')
         .eq('user_id', state.user.id)
         .eq('context_type', 'workout_commentary:' + w._dbId)
         .order('created_at', { ascending: false })
         .limit(1);
 
-      // Fallback for legacy rows saved before id-tagging: match by timestamp
-      // proximity to when the workout was created.
-      if (!messages || messages.length === 0) {
-        const workoutDate = new Date(w.date || w.created_at);
-        const windowStart = new Date(workoutDate.getTime() - 60000); // 1 min before
-        const windowEnd = new Date(workoutDate.getTime() + 5 * 60000); // 5 min after
-        const legacy = await sb.from('coach_messages')
-          .select('content, created_at')
-          .eq('user_id', state.user.id)
-          .eq('context_type', 'workout_commentary')
-          .gte('created_at', windowStart.toISOString())
-          .lte('created_at', windowEnd.toISOString())
-          .order('created_at', { ascending: false })
-          .limit(1);
-        messages = legacy.data;
-      }
-
       if (messages && messages.length > 0) {
         const commentaryEl = document.createElement('div');
-        commentaryEl.innerHTML = `<div class="coach-box" style="margin-top: 16px;"><div class="coach-title">💬 Coach's Commentary</div><div class="coach-text">${formatMarkdown(messages[0].content)}</div></div>`;
+        commentaryEl.innerHTML = `<div class="coach-box" style="margin-top: 16px;"><div class="coach-title">💬 Coach's analysis</div><div style="font-size:11px;color:var(--text-mute);margin:-2px 0 8px;line-height:1.5;">What Coach said about this workout, saved here so you don't have to scroll back through the Coach chat.</div><div class="coach-text md-body">${formatMarkdown(messages[0].content)}</div></div>`;
         output.appendChild(commentaryEl);
       }
     } catch (err) {
@@ -20381,7 +20389,7 @@ function renderRaceDayPlan(intake, paces) {
     return `
       <div>
         <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; margin-bottom: 10px;">Race-day plan</div>
-        <div style="font-size: 11px; color: var(--text-mute); line-height: 1.5; margin: -4px 0 12px;">These are your race-day <strong style="color: var(--text-dim);">target paces</strong>, not your training bests.${isLong ? ' For long course they sit a little under your fresh training speed on purpose: you ride and run conservatively so the day holds together.' : ''} The "see your progress" graphs show your actual training trend.</div>
+        <div style="font-size: 11px; color: var(--text-mute); line-height: 1.5; margin: -4px 0 12px;">These are your race-day <strong style="color: var(--text-dim);">target paces</strong>, not your training bests.${isLong ? ' For long course they sit a little under your fresh training speed on purpose: you ride and run conservatively so the day holds together.' : ''} Your actual training trend (recent pace and speed per sport) lives in Trends, Stats.</div>
         <div style="display: flex; flex-direction: column; gap: 8px;">
           ${swimPace ? `
             <div style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px;">
