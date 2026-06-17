@@ -6592,6 +6592,12 @@ function _installResumeRefresh() {
     _stryxsLastHiddenAt = 0;
     try { await loadWorkouts(); } catch (_) {}
     try { if (typeof loadProfile === 'function') await loadProfile(); } catch (_) {}
+    // Projections may have changed on another device (new benchmark/FTP, a logged
+    // workout, or a deployed engine update) — drop the cache so the re-render
+    // below recomputes from current data. This is why switching PC -> phone used
+    // to need a manual refresh.
+    _projectionsCache = null; _projectionsCacheTime = 0;
+    try { if (typeof getProjectionsCacheKey === 'function') localStorage.removeItem(getProjectionsCacheKey()); } catch (_) {}
     try {
       const typing = document.activeElement && ['chatInput', 'feedbackText'].includes(document.activeElement.id);
       if (typing) return;
@@ -13418,13 +13424,10 @@ let _sportProgN = 0;
 // Returns an expandable "See your progress" block for one sport, or '' if there
 // aren't enough weekly data points (need 3+) to draw an honest trend.
 function _sportProgressBlock(sport) {
-  // DISABLED (2026-06-16): these mini training-trend graphs sat right under the
-  // race-day TARGET pace and kept reading as "the numbers don't match" (target
-  // vs training trend are different by design). They also duplicated the Stats
-  // "Pace & speed trend" card, which is now the single home for the trend. The
-  // race-day card shows only the target + why. Kept as a no-op so the 8 call
-  // sites need no edits; the function body below is retained for reference.
-  return '';
+  // These per-sport training-trend graphs are the SINGLE home for the trend now
+  // (the duplicate Stats "Pace & speed trend" card was removed, 2026-06-16) so
+  // there's only one set of numbers to keep coordinated. Headline value + % use
+  // the recent-4wk vs prior-4wk windows so they're a stable read.
   const mode = sport === 'bike' ? 'speed' : sport === 'swim' ? 'pace100' : 'pace';
   const series = _sportProgressSeries(sport, 8);
   if (series.length < 3) return ''; // not enough history to show a real trend
@@ -14337,10 +14340,10 @@ function renderTrends() {
       </div>
     </div>
 
-    <!-- Pace & speed trend — a fitness signal that needs NO heart rate (uses
-         distance ÷ time only), so the Stats page is useful even when Strava
-         doesn't give us HR. -->
-    ${renderPaceSpeedTrendCard()}
+    <!-- Pace & speed trend card REMOVED (2026-06-16): it duplicated the per-sport
+         training-trend graphs in Race projections and the two were hard to keep
+         coordinated. The race-projection "see your progress" graphs are now the
+         single home for that trend. (renderPaceSpeedTrendCard kept for reference.) -->
 
     <div class="panel" style="padding: 18px;">
       <div class="panel-header" style="margin-bottom: 14px;">
@@ -19951,7 +19954,7 @@ let _projGateInfo = null;
 // short TTL is the right tradeoff. The long stale cache was making PC and phone
 // show different projected times until the cache expired. 30 min keeps things
 // responsive without thrashing.
-const PROJECTIONS_CACHE_TTL = 30 * 60 * 1000;
+const PROJECTIONS_CACHE_TTL = 10 * 60 * 1000; // 10 min: short enough that a cold open on another device stays roughly in sync (resume drops it immediately)
 
 // Try to restore cache from localStorage on page load
 // Cache is scoped per-user so signing out / different accounts don't see each other's data
@@ -20389,7 +20392,7 @@ function renderRaceDayPlan(intake, paces) {
     return `
       <div>
         <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; margin-bottom: 10px;">Race-day plan</div>
-        <div style="font-size: 11px; color: var(--text-mute); line-height: 1.5; margin: -4px 0 12px;">These are your race-day <strong style="color: var(--text-dim);">target paces</strong>, not your training bests.${isLong ? ' For long course they sit a little under your fresh training speed on purpose: you ride and run conservatively so the day holds together.' : ''} Your actual training trend (recent pace and speed per sport) lives in Trends, Stats.</div>
+        <div style="font-size: 11px; color: var(--text-mute); line-height: 1.5; margin: -4px 0 12px;">These are your race-day <strong style="color: var(--text-dim);">target paces</strong>, not your training bests.${isLong ? ' For long course they sit a little under your fresh training speed on purpose: you ride and run conservatively so the day holds together.' : ''} The "see your progress" graphs below show your actual training trend (recent vs prior 4 weeks).</div>
         <div style="display: flex; flex-direction: column; gap: 8px;">
           ${swimPace ? `
             <div style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px;">
