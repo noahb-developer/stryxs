@@ -14212,10 +14212,24 @@ function renderTrends() {
   const easyPct = landW.length ? Math.round(easy * 100 / landW.length) : 0;
   const hardPct = landW.length ? Math.round(hard * 100 / landW.length) : 0;
   const medPct = 100 - easyPct - hardPct;
+  // Goal-aware verdict. Short-course / threshold-focused goals (Daniels 5K-10K
+  // T-pace, the mile, short-course tri ~30-35% intensity, cycling sweet-spot)
+  // legitimately run a bigger share of moderate/threshold work, so the strict
+  // 80/20 "gray zone" warning over-fires for them. Long-course + base-building
+  // goals (IM, 70.3, marathon, ultra, general) keep the strict 80/20 read. Goal
+  // is read from the projections cache; unknown -> strict 80/20 (safe default).
+  const _goal = String((typeof _projectionsCache === 'object' && _projectionsCache && _projectionsCache.intake && _projectionsCache.intake.goal_event) || '').toLowerCase();
+  const thresholdTolerant = ['5k', '10k', 'mile', 'sprint_tri', 'olympic_tri', 'cycling'].includes(_goal);
   let rv, rc;
-  if (easyPct >= 75) { rv = '✓ Following 80/20 principle'; rc = 'good'; }
-  else if (easyPct >= 60) { rv = 'Too much moderate intensity (gray zone)'; rc = 'ok'; }
-  else { rv = 'Too much high intensity'; rc = 'bad'; }
+  if (thresholdTolerant) {
+    if (easyPct >= 60) { rv = '✓ Good easy / quality mix for your goal'; rc = 'good'; }
+    else if (easyPct >= 45) { rv = 'Quality-heavy, keep your easy days truly easy'; rc = 'ok'; }
+    else { rv = 'Too much high intensity'; rc = 'bad'; }
+  } else {
+    if (easyPct >= 75) { rv = '✓ Following 80/20 principle'; rc = 'good'; }
+    else if (easyPct >= 60) { rv = 'Too much moderate intensity (gray zone)'; rc = 'ok'; }
+    else { rv = 'Too much high intensity'; rc = 'bad'; }
+  }
 
   const sportDisplayLabels = {
     run: '🏃 Run',
@@ -15630,10 +15644,14 @@ const intakeQuestions = [
       { value: 'half_marathon', emoji: '🏃', label: 'Half Marathon' },
       { value: '10k', emoji: '🏃', label: '10K' },
       { value: '5k', emoji: '🏃', label: '5K' },
+      { value: 'mile', emoji: '🏃', label: 'Mile / speed' },
+      { value: 'ultra', emoji: '🏔️', label: 'Ultra (50K+)' },
       { value: 'sprint_tri', emoji: '🏊', label: 'Sprint Tri' },
       { value: 'olympic_tri', emoji: '🏊', label: 'Olympic Tri' },
       { value: '70_3', emoji: '🚴', label: '70.3 / Half Ironman' },
       { value: 'ironman', emoji: '🏁', label: 'Ironman' },
+      { value: 'cycling', emoji: '🚴', label: 'Cycling' },
+      { value: 'swimming', emoji: '🏊', label: 'Swimming' },
       { value: 'general', emoji: '💪', label: 'Fitness & Health' },
     ],
   },
@@ -24832,6 +24850,7 @@ async function renderSettings() {
           { value: 'marathon', label: 'Marathon' },
           { value: 'ultra', label: 'Ultra (50K+)' },
           { value: 'mile', label: 'Mile / Middle distance' },
+          { value: 'sprint_tri', label: 'Sprint Triathlon' },
           { value: 'olympic_tri', label: 'Olympic Triathlon' },
           { value: '70_3', label: '70.3 / Half Ironman' },
           { value: 'ironman', label: 'Ironman' },
