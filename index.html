@@ -11023,7 +11023,9 @@ function renderTimeSeriesChart(series, label, unit, color, xLabels, xTitle, inve
 function _cadDispSeries(a) {
   const s = a && a.cadenceSeries;
   if (!Array.isArray(s) || s.length < 4) return s;
-  if (a.sport === 'bike') return s;
+  // The one-leg -> both-feet doubling is a RUNNING thing only. Bikes are rpm and
+  // swims are stroke rate; neither should be doubled.
+  if (a.sport !== 'run') return s;
   const valid = s.filter(v => typeof v === 'number' && v > 0);
   if (!valid.length) return s;
   const mean = valid.reduce((x, y) => x + y, 0) / valid.length;
@@ -11859,7 +11861,12 @@ function renderAnalysis(a) {
   }
   if (a.sport === 'run') return renderRun(a);
   if (a.sport === 'bike') return renderBike(a);
-  if (a.sport === 'swim') return renderSwim(a);
+  // Swim: renderSwim is the UPLOAD path (parsed "sets" + SWOLF). Strava pool swims
+  // have no parsed sets — their data is swim_laps / hrSeries / zd — so renderSwim
+  // showed an empty "0 sets" shell. Route those to the full rich view, which
+  // renders the laps table, swim pace chart, HR-over-time chart, HR zones, meta,
+  // and the View-on-Strava footer.
+  if (a.sport === 'swim') return (Array.isArray(a.sets) && a.sets.length > 0) ? renderSwim(a) : renderSummaryWorkout(a);
   return renderSummaryWorkout(a);
 }
 
