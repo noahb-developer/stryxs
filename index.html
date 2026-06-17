@@ -18714,6 +18714,32 @@ function handleChatInputKeydown(event) {
   }
 }
 
+// Cheap pre-filter: does this message plausibly want a plan change? Keeps us from
+// spending an LLM classify call on every chat turn. Broad on purpose (the edge
+// classifier returns 'none' for false hits, which fall through to normal chat).
+function _looksLikePlanCommand(text) {
+  return /\b(plan|regenerate|re-?generate|rebuild|re-?build|re-?do|reset|wipe|start over|start fresh|scratch|import|train (me )?for|training for|switch (to|me)|new goal|change (my )?goal|easier|harder|more (rest|easy|swim|bike|ride|run|strength|days)|fewer|less (bike|run|swim|hard)|add (strength|swim|rest|a )|only (train|do)|days? a week)\b/i.test(String(text || ''));
+}
+// Run a classified plan-management request: post the coach's confirming reply,
+// then open the matching flow (rebuild / new goal / import / reset). Destructive
+// reset keeps its own typed confirm; regenerate/adjust rebuild around the current
+// goal via the same modal the post-race flow uses.
+async function _handleCoachPlanCommand(pc, intake, msgs) {
+  const reply = (pc && pc.reply) || "On it, let's sort your plan.";
+  try { await sb.from('coach_messages').insert({ user_id: state.user.id, role: 'coach', content: reply, context_type: 'general_chat' }); } catch (_) {}
+  if (msgs) { msgs.innerHTML += renderMsg('coach', reply); msgs.scrollTop = msgs.scrollHeight; }
+  const goal = (intake && intake.goal_event) || '';
+  // Small delay so the reply renders before the modal opens.
+  setTimeout(() => {
+    try {
+      if (pc.intent === 'import') { if (typeof openImportModal === 'function') openImportModal(); }
+      else if (pc.intent === 'reset') { if (typeof openResetModal === 'function') openResetModal('full'); }
+      else if (pc.intent === 'new_goal') { if (typeof openNextGoalModal === 'function') openNextGoalModal(); }
+      else { if (typeof openNextGoalModal === 'function') openNextGoalModal(goal); } // regenerate / adjust -> rebuild around current goal
+    } catch (_) {}
+  }, 450);
+}
+
 async function sendChatMsg() {
   // Defense in depth, free users get FREE_COACH_TRIAL_LIMIT messages, then Pro wall.
   const gate = await canSendCoachMsg();
@@ -18820,6 +18846,26 @@ async function sendChatMsg() {
         const thinking = document.getElementById('thinkingMsg');
         if (thinking) thinking.remove();
         await handleChatPlanBuild(buildIntent, intake, activePlan, msgs);
+        _chatAbortController = null;
+        if (gate.isFreeTrial) { await refreshCoachInputRow(); return; }
+        input.disabled = false; input.focus();
+        return;
+      }
+    }
+
+    // ═══ CHAT-TRIGGERED PLAN MANAGEMENT ═══
+    // The coach owns the plan now. Any phrasing of "make me a new plan / I don't
+    // like this one / reset everything / import a plan / train me for a marathon
+    // / give me more rest days" is classified by the edge (plan_command) and runs
+    // the matching flow, instead of a Settings button. Light pre-filter so we
+    // don't spend a classify call on every chat message.
+    if (!photoForApi && !docForApi && intake && _looksLikePlanCommand(text)) {
+      let pc = null;
+      try { pc = await callCoach('plan_command', { text, hasPlan: !!activePlan, intake }); } catch (_) {}
+      if (pc && pc.intent && pc.intent !== 'none') {
+        const thinking = document.getElementById('thinkingMsg');
+        if (thinking) thinking.remove();
+        await _handleCoachPlanCommand(pc, intake, msgs);
         _chatAbortController = null;
         if (gate.isFreeTrial) { await refreshCoachInputRow(); return; }
         input.disabled = false; input.focus();
@@ -24889,50 +24935,24 @@ async function renderSettings() {
           <div class="settings-section-icon">🗓️</div>
           <div class="settings-section-text">
             <div class="settings-section-title">Training plan</div>
-            <div class="settings-section-sub">Import, regenerate, or reset your plan</div>
+            <div class="settings-section-sub">Managed in Coach, just ask</div>
           </div>
         </div>
         <div class="settings-section-chevron">›</div>
       </div>
       <div class="settings-section-body">
         <div class="settings-section-inner">
-          <div id="planMgmtHelp" style="padding: 14px 16px; background: rgba(0, 255, 163, 0.04); border: 1px solid rgba(0, 255, 163, 0.15); border-radius: 10px; margin-bottom: 14px; font-size: 13px; color: var(--text-dim); line-height: 1.55;">
-            <div style="margin-bottom: 10px;"><strong style="color: var(--text);">📥 Import existing plan</strong> — paste in a plan you already have (from a coach, another app, or AI). Coach reads it and loads it into your calendar. Replaces your current plan only.</div>
-            <div style="margin-bottom: 10px;"><strong style="color: var(--text);">🔄 Generate new plan</strong> — keeps everything you've told Coach about yourself (intake, profile, chat) but throws away the current plan and builds a fresh one. Use this when starting a new training block.</div>
-            <div><strong style="color: var(--text);">🗑 Reset everything</strong> — wipes intake, plan, and chat history. Start over from scratch. Only use this if you want to completely re-do your setup.</div>
+          <div style="font-size: 13px; color: var(--text-dim); line-height: 1.6;">
+            Your plan is managed by Coach now, no buttons to hunt for. Open <strong style="color: var(--text);">Coach</strong> and just say what you want, for example:
+            <ul style="margin: 10px 0 0 18px; padding: 0; line-height: 1.75;">
+              <li>"Build me a new plan" / "I don't like this plan, redo it"</li>
+              <li>"Train me for a marathon on May 3" (a new goal or race)</li>
+              <li>"I have a plan I'd like to import"</li>
+              <li>"I want more rest days" / "add more swimming"</li>
+              <li>"Reset everything and start over"</li>
+            </ul>
           </div>
-          <div style="display: flex; flex-direction: column; gap: 10px;">
-            <button class="plan-mgmt-card" onclick="${isUserPro() ? 'openImportModal()' : "navigate('upgrade')"}" ${isUserPro() ? '' : 'style="opacity: 0.65; position: relative;"'}>
-              <div class="plan-mgmt-card-head">
-                <span class="plan-mgmt-card-icon">📥</span>
-                <span class="plan-mgmt-card-title">Import existing plan ${isUserPro() ? '' : '<span style="font-size: 10px; padding: 2px 6px; background: var(--accent-soft); color: var(--accent); border-radius: 4px; margin-left: 6px; vertical-align: middle; font-weight: 700;">PRO</span>'}</span>
-              </div>
-              <div class="plan-mgmt-card-body">
-                <div class="plan-mgmt-line plan-mgmt-line-replaces"><span class="plan-mgmt-tag tag-replaces">Replaces</span><span>your current plan calendar</span></div>
-                <div class="plan-mgmt-line plan-mgmt-line-keeps"><span class="plan-mgmt-tag tag-keeps">Keeps</span><span>intake, profile, chat history</span></div>
-              </div>
-            </button>
-            <button class="plan-mgmt-card" onclick="${isUserPro() ? "openResetModal('regenerate')" : "navigate('upgrade')"}" ${isUserPro() ? '' : 'style="opacity: 0.65; position: relative;"'}>
-              <div class="plan-mgmt-card-head">
-                <span class="plan-mgmt-card-icon">🔄</span>
-                <span class="plan-mgmt-card-title">Generate new plan ${isUserPro() ? '' : '<span style="font-size: 10px; padding: 2px 6px; background: var(--accent-soft); color: var(--accent); border-radius: 4px; margin-left: 6px; vertical-align: middle; font-weight: 700;">PRO</span>'}</span>
-              </div>
-              <div class="plan-mgmt-card-body">
-                <div class="plan-mgmt-line plan-mgmt-line-replaces"><span class="plan-mgmt-tag tag-replaces">Replaces</span><span>your current plan calendar</span></div>
-                <div class="plan-mgmt-line plan-mgmt-line-keeps"><span class="plan-mgmt-tag tag-keeps">Keeps</span><span>intake, profile, chat history</span></div>
-              </div>
-            </button>
-            <button class="plan-mgmt-card plan-mgmt-card-danger" onclick="openResetModal('full')">
-              <div class="plan-mgmt-card-head">
-                <span class="plan-mgmt-card-icon">🗑</span>
-                <span class="plan-mgmt-card-title">Reset everything</span>
-              </div>
-              <div class="plan-mgmt-card-body">
-                <div class="plan-mgmt-line plan-mgmt-line-wipes"><span class="plan-mgmt-tag tag-wipes">Wipes</span><span>intake, plan, chat history</span></div>
-                <div class="plan-mgmt-line plan-mgmt-line-keeps"><span class="plan-mgmt-tag tag-keeps">Keeps</span><span>email, name, completed workouts</span></div>
-              </div>
-            </button>
-          </div>
+          <button class="btn" style="width: 100%; margin-top: 14px;" onclick="navigate('coach')">💬 Open Coach</button>
         </div>
       </div>
     </div>
