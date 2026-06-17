@@ -18507,37 +18507,51 @@ async function submitNextGoal() {
     try { await sb.from('coach_messages').update({ context_type: 'post_race_checkin_done' }).eq('user_id', state.user.id).eq('context_type', 'post_race_checkin'); } catch (_) {}
     closeNextGoalModal();
     // 3) Rebuild from scratch (same proven path as Settings → regenerate).
-    await sb.from('planned_workouts').delete().eq('user_id', state.user.id);
-    await sb.from('training_plans').delete().eq('user_id', state.user.id);
     const { data: intake } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).single();
     if (!intake) { toast('No profile found'); if (btn) { btn.disabled = false; btn.textContent = 'Build my new plan'; } return; }
-    // Show the build live on the Coach page.
-    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-    document.getElementById('page-coach')?.classList.add('active');
-    document.querySelectorAll('.nav-menu-item').forEach(t => t.classList.toggle('active', t.dataset.page === 'coach'));
-    window.scrollTo({ top: 0, behavior: 'instant' });
-    const el = document.getElementById('coachContent');
-    if (el) el.innerHTML = `<div class="coach-hero"><div class="coach-avatar">🧠</div><div class="coach-intro"><h2>Building your new plan…</h2><p>Mapping out your training around your next goal.</p><p style="margin-top:10px;padding:10px 14px;background:rgba(255,209,102,0.06);border:1px solid rgba(255,209,102,0.2);border-radius:8px;font-size:13px;color:var(--text-dim);">Don't close this window, it'll interrupt the build.</p></div></div><div class="loading"><div class="spinner"></div>Working</div>`;
-    let skeleton = null;
-    try { skeleton = await callCoach('generate_skeleton', { intake }); } catch (e) { console.warn('[Stryxs] skeleton failed:', e); }
-    const plan = await callCoach('generate_plan', { intake, weekNumber: 1, skeleton });
-    if (skeleton) plan.skeleton = skeleton;
-    await savePlanToDb(plan, state.user.id);
-    _lastAutoExtendCheck = 0; _autoExtendInFlight = false;
-    try { await maybeAutoExtendPlan(); } catch (_) {}
-    try {
-      const introMsg = await callCoach('plan_intro_message', { intake });
-      if (introMsg) await sb.from('coach_messages').insert({ user_id: state.user.id, role: 'coach', content: introMsg, context_type: 'plan_intro' });
-    } catch (_) {}
-    try { await sb.from('coach_messages').insert({ user_id: state.user.id, role: 'coach', content: "✓ Your new plan is ready. Head to the Plan tab to see it, it'll keep topping itself up as you train.", context_type: 'general_chat' }); } catch (_) {}
-    toast('New plan ready!');
-    renderCoach();
+    await _rebuildPlanInPlace(intake, {});
   } catch (err) {
     console.error('[Stryxs] next-goal plan build failed:', err);
     toast('Plan build failed: ' + (err.message || 'unknown'));
     if (btn) { btn.disabled = false; btn.textContent = 'Build my new plan'; }
     try { renderCoach(); } catch (_) {}
   }
+}
+
+// Shared plan rebuild: wipes the current plan (completed workouts stay in history),
+// builds a fresh week 1 around the given intake, fills the month, posts a confirmation.
+// Used by the new-goal flow (submitNextGoal) and the chat "adjust" flow
+// (_applyAdjustAndRebuild). opts lets each caller tailor the hero/done copy and skip
+// the standard plan-intro message when it would be redundant.
+async function _rebuildPlanInPlace(intake, opts = {}) {
+  if (!state.user || !intake) { toast('No profile found'); return false; }
+  await sb.from('planned_workouts').delete().eq('user_id', state.user.id);
+  await sb.from('training_plans').delete().eq('user_id', state.user.id);
+  // Show the build live on the Coach page.
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-coach')?.classList.add('active');
+  document.querySelectorAll('.nav-menu-item').forEach(t => t.classList.toggle('active', t.dataset.page === 'coach'));
+  window.scrollTo({ top: 0, behavior: 'instant' });
+  const el = document.getElementById('coachContent');
+  if (el) el.innerHTML = `<div class="coach-hero"><div class="coach-avatar">🧠</div><div class="coach-intro"><h2>${opts.heroTitle || 'Building your new plan…'}</h2><p>${opts.heroSub || 'Mapping out your training around your next goal.'}</p><p style="margin-top:10px;padding:10px 14px;background:rgba(255,209,102,0.06);border:1px solid rgba(255,209,102,0.2);border-radius:8px;font-size:13px;color:var(--text-dim);">Don't close this window, it'll interrupt the build.</p></div></div><div class="loading"><div class="spinner"></div>Working</div>`;
+  let skeleton = null;
+  try { skeleton = await callCoach('generate_skeleton', { intake }); } catch (e) { console.warn('[Stryxs] skeleton failed:', e); }
+  const plan = await callCoach('generate_plan', { intake, weekNumber: 1, skeleton });
+  if (skeleton) plan.skeleton = skeleton;
+  await savePlanToDb(plan, state.user.id);
+  _lastAutoExtendCheck = 0; _autoExtendInFlight = false;
+  try { await maybeAutoExtendPlan(); } catch (_) {}
+  if (!opts.skipIntro) {
+    try {
+      const introMsg = await callCoach('plan_intro_message', { intake });
+      if (introMsg) await sb.from('coach_messages').insert({ user_id: state.user.id, role: 'coach', content: introMsg, context_type: 'plan_intro' });
+    } catch (_) {}
+  }
+  const doneMsg = opts.doneMsg || "✓ Your new plan is ready. Head to the Plan tab to see it, it'll keep topping itself up as you train.";
+  try { await sb.from('coach_messages').insert({ user_id: state.user.id, role: 'coach', content: doneMsg, context_type: 'general_chat' }); } catch (_) {}
+  toast(opts.toast || 'New plan ready!');
+  renderCoach();
+  return true;
 }
 
 // Clean, Claude/ChatGPT-style markdown rendering: headings, spaced paragraphs,
@@ -18728,6 +18742,17 @@ async function _handleCoachPlanCommand(pc, intake, msgs) {
   const reply = (pc && pc.reply) || "On it, let's sort your plan.";
   try { await sb.from('coach_messages').insert({ user_id: state.user.id, role: 'coach', content: reply, context_type: 'general_chat' }); } catch (_) {}
   if (msgs) { msgs.innerHTML += renderMsg('coach', reply); msgs.scrollTop = msgs.scrollHeight; }
+
+  // ADJUST = keep the SAME goal but bake a specific free-form preference
+  // ("more swimming", "more rest days", "fewer bike sessions") into the plan.
+  // We PERSIST the preference on the intake and rebuild in place, so the new plan
+  // actually reflects the ask (and so does every future auto-extended week). No
+  // modal — the goal isn't changing, just the shape of the training.
+  if (pc.intent === 'adjust') {
+    await _applyAdjustAndRebuild(pc.preferences || '', intake, msgs);
+    return;
+  }
+
   const goal = (intake && intake.goal_event) || '';
   // Small delay so the reply renders before the modal opens.
   setTimeout(() => {
@@ -18735,9 +18760,57 @@ async function _handleCoachPlanCommand(pc, intake, msgs) {
       if (pc.intent === 'import') { if (typeof openImportModal === 'function') openImportModal(); }
       else if (pc.intent === 'reset') { if (typeof openResetModal === 'function') openResetModal('full'); }
       else if (pc.intent === 'new_goal') { if (typeof openNextGoalModal === 'function') openNextGoalModal(); }
-      else { if (typeof openNextGoalModal === 'function') openNextGoalModal(goal); } // regenerate / adjust -> rebuild around current goal
+      else { if (typeof openNextGoalModal === 'function') openNextGoalModal(goal); } // regenerate -> rebuild around current goal
     } catch (_) {}
   }, 450);
+}
+
+// Merge a new free-form training preference into the stored newest-first list.
+// Keeps a short bulleted history (cap 8) so contradictions resolve to "most recent
+// wins" (the generator is told the first line is newest). Dedupes exact repeats.
+function _mergeTrainingPreference(existing, addition) {
+  const clean = String(addition || '').trim().replace(/^[-•*]\s*/, '').trim();
+  if (!clean) return existing || '';
+  const prior = String(existing || '')
+    .split('\n')
+    .map(l => l.replace(/^[-•*]\s*/, '').trim())
+    .filter(Boolean)
+    .filter(l => l.toLowerCase() !== clean.toLowerCase());
+  return [clean, ...prior].slice(0, 8).map(l => `- ${l}`).join('\n');
+}
+
+// Persist a free-form "adjust" preference onto the intake, then rebuild the plan in
+// place around the SAME goal so it actually reflects the ask. The persisted
+// preference also rides along on every future auto-extended week.
+async function _applyAdjustAndRebuild(preferenceText, intake, msgs) {
+  const post = async (content) => {
+    if (msgs) { msgs.innerHTML += renderMsg('coach', content); msgs.scrollTop = msgs.scrollHeight; }
+    try { await sb.from('coach_messages').insert({ user_id: state.user.id, role: 'coach', content, context_type: 'general_chat' }); } catch (_) {}
+  };
+  const pref = String(preferenceText || '').trim();
+  let mergedPrefs = intake?.training_preferences || '';
+  if (pref) {
+    mergedPrefs = _mergeTrainingPreference(intake?.training_preferences, pref);
+    try {
+      const { error: prefErr } = await sb.from('athlete_intake').update({ training_preferences: mergedPrefs }).eq('user_id', state.user.id);
+      if (prefErr) throw prefErr;
+    } catch (e) { console.warn('[Stryxs] could not save training preference:', e); }
+  }
+  // Re-read so the rebuild picks up the just-saved preference (and anything else).
+  const { data: fresh } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).single();
+  const intakeForBuild = fresh || { ...(intake || {}), training_preferences: mergedPrefs };
+  try {
+    await _rebuildPlanInPlace(intakeForBuild, {
+      heroSub: pref ? `Working your request in: ${pref}.` : 'Reshaping your training around your request.',
+      skipIntro: true,
+      doneMsg: "✓ Done. I've rebuilt your plan with that baked in, head to the Plan tab to see it. It'll keep topping itself up, and I'll keep this in mind for every week going forward.",
+      toast: 'Plan updated!',
+    });
+  } catch (err) {
+    console.error('[Stryxs] adjust rebuild failed:', err);
+    await post("I couldn't rebuild the plan just now, give it another go in a moment.");
+    try { renderCoach(); } catch (_) {}
+  }
 }
 
 async function sendChatMsg() {
