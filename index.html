@@ -11248,14 +11248,18 @@ function renderDataAvailabilityHint(a) {
   if (missing.length === 0) return ''; // full data, no hint
   const isStrava = a.source === 'strava';
   const refreshBtn = (isStrava && a._dbId)
-    ? `<button id="refreshDataBtn-${a._dbId}" class="btn" style="margin-top: 10px; font-size: 12px; padding: 6px 12px;" onclick="refreshStravaWorkout('${a._dbId}')">↻ Refresh this workout's data</button>`
+    ? `<button id="refreshDataBtn-${a._dbId}" class="btn" style="font-size: 12px; padding: 8px 14px; flex-shrink: 0;" onclick="refreshStravaWorkout('${a._dbId}')">↻ Refresh this workout's data</button>`
     : '';
   const intro = isStrava
     ? `No ${missing.join(' / ')} stored for this workout yet. If it was synced before the latest update, refreshing will pull splits and per-second charts from Strava when available.`
     : `No ${missing.join(' / ')} for this workout. Some sessions just don't capture everything.`;
+  // Stack as a flex column so the button always drops cleanly BELOW the text and
+  // stays left-aligned (it used to render inline after the paragraph, so on a phone
+  // it wrapped beside the last words at an odd vertical offset). On wider screens
+  // the button keeps its natural width; align-items:flex-start prevents it stretching.
   return `
-    <div style="padding: 12px 14px; background: rgba(80, 130, 255, 0.04); border: 1px dashed rgba(255,255,255,0.08); border-radius: 8px; font-size: 12px; color: var(--text-mute); line-height: 1.5; margin-top: 14px;">
-      ${intro} Coach still counts it for your weekly volume.
+    <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 14px; background: rgba(80, 130, 255, 0.04); border: 1px dashed rgba(255,255,255,0.08); border-radius: 8px; font-size: 12px; color: var(--text-mute); line-height: 1.6; margin-top: 14px;">
+      <div>${intro} Coach still counts it for your weekly volume.</div>
       ${refreshBtn}
     </div>
   `;
