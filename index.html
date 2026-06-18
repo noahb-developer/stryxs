@@ -632,44 +632,67 @@ body.has-tabbar #page-plan.active,
 body.has-tabbar #page-trends.active,
 body.has-tabbar #page-upload.active,
 body.has-tabbar #page-history.active,
-body.has-tabbar #page-race-planner.active {
+body.has-tabbar #page-race-planner.active,
+body.has-tabbar #page-profile.active {
   padding-bottom: calc(98px + var(--safe-bottom));
 }
 
-/* ─── Profile page (round 58, Strava-style athlete profile) ─── */
-.prof-head { display: flex; align-items: center; gap: 16px; padding: 6px 16px 0; }
+/* ─── Profile page (round 58, athlete profile — our take on a Strava layout) ─── */
+#page-profile { position: relative; }
+.prof-glow { position: absolute; top: -60px; left: 50%; transform: translateX(-50%); width: 460px; max-width: 120%; height: 320px; pointer-events: none; z-index: 0;
+  background: radial-gradient(50% 60% at 50% 0%, rgba(0,229,160,0.16), rgba(0,196,255,0.05) 45%, transparent 72%); filter: blur(8px); }
+#page-profile > #profileContent > * { position: relative; z-index: 1; }
+.prof-edit-mini { position: absolute; top: 2px; right: 14px; z-index: 2; padding: 7px 16px; font-size: 13px; font-weight: 700; color: var(--accent);
+  background: var(--accent-soft); border: 1px solid var(--accent-border); border-radius: 999px; cursor: pointer; font-family: inherit; -webkit-tap-highlight-color: transparent; transition: background 0.15s; }
+.prof-edit-mini:active { background: rgba(0,229,160,0.18); }
+.prof-head { display: flex; align-items: center; gap: 16px; padding: 14px 16px 0; }
 .prof-avatar-wrap { position: relative; flex-shrink: 0; cursor: pointer; }
-.prof-avatar { width: 84px; height: 84px; border-radius: 50%; background: var(--bg-3); display: flex; align-items: center; justify-content: center; font-size: 34px; font-weight: 700; color: var(--accent); border: 1px solid var(--border); }
-.prof-avatar-edit { position: absolute; bottom: -2px; right: -2px; width: 28px; height: 28px; border-radius: 50%; background: var(--accent); color: var(--bg); display: flex; align-items: center; justify-content: center; font-size: 13px; border: 2px solid var(--bg); }
+.prof-avatar { width: 88px; height: 88px; border-radius: 50%; background: var(--bg-3); display: flex; align-items: center; justify-content: center; font-size: 36px; font-weight: 700; color: var(--accent); border: 2px solid rgba(0,229,160,0.25); box-shadow: 0 0 28px rgba(0,229,160,0.12); }
+.prof-avatar-edit { position: absolute; bottom: 0; right: 0; width: 28px; height: 28px; border-radius: 50%; background: var(--accent); color: var(--bg); display: flex; align-items: center; justify-content: center; font-size: 13px; border: 2px solid var(--bg); }
 .prof-id { min-width: 0; }
-.prof-name { font-size: 22px; font-weight: 800; line-height: 1.15; }
-.prof-sub { font-size: 13px; color: var(--text-dim); margin-top: 3px; }
+.prof-name { font-size: 23px; font-weight: 800; line-height: 1.12; }
+.prof-sub { font-size: 13px; color: var(--text-dim); margin-top: 4px; }
 .prof-joined { font-size: 12px; color: var(--text-mute); margin-top: 4px; }
 .prof-bio { padding: 14px 16px 0; font-size: 14px; color: var(--text-dim); line-height: 1.55; }
-.prof-edit-btn { margin: 16px 16px 0; width: calc(100% - 32px); }
-.prof-lifetime { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 18px 16px 4px; }
-.prof-life-item { background: var(--bg-2); border: 1px solid var(--border); border-radius: 14px; padding: 14px 6px; text-align: center; }
-.prof-life-n { font-size: 17px; font-weight: 800; font-family: 'JetBrains Mono', monospace; white-space: nowrap; }
-.prof-life-l { font-size: 10px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.4px; margin-top: 4px; }
-.prof-section-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-dim); padding: 24px 16px 10px; }
-.prof-sport-tabs { display: flex; gap: 6px; padding: 0 16px 14px; }
-.prof-sport-tab { flex: 1; padding: 10px 6px; border: 1px solid var(--border); background: var(--bg-2); color: var(--text-dim); border-radius: 12px; font-size: 13px; font-weight: 600; font-family: inherit; cursor: pointer; transition: background 0.15s, color 0.15s, border-color 0.15s; -webkit-tap-highlight-color: transparent; }
-.prof-sport-tab.active { background: var(--accent-soft); border-color: var(--accent-border); color: var(--accent); }
+/* Floating totals — no boxes, just numbers separated by hairlines. */
+.prof-totals { display: flex; align-items: stretch; padding: 22px 8px 6px; }
+.prof-total { flex: 1; text-align: center; padding: 0 4px; }
+.prof-total + .prof-total { border-left: 1px solid rgba(255,255,255,0.07); }
+.prof-total-n { font-size: 19px; font-weight: 800; letter-spacing: -0.3px; white-space: nowrap; }
+.prof-total-l { font-size: 10px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 5px; }
+/* Segmented sport switch */
+.prof-sport-tabs { display: flex; gap: 4px; margin: 22px 16px 16px; padding: 4px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 14px; }
+.prof-sport-tab { flex: 1; display: flex; align-items: center; justify-content: center; gap: 7px; padding: 9px 6px; border: none; background: transparent; color: var(--text-dim); border-radius: 10px; font-size: 13px; font-weight: 700; font-family: inherit; cursor: pointer; transition: background 0.15s, color 0.15s; -webkit-tap-highlight-color: transparent; }
+.prof-sport-tab .prof-sport-emoji { font-size: 15px; }
+.prof-sport-tab.active { background: var(--accent-soft); color: var(--accent); }
 .prof-sport-pane { padding: 0 16px; }
-.prof-pb-wrap { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
-.prof-pb { flex: 1; min-width: 90px; background: linear-gradient(135deg, rgba(0,229,160,0.06), transparent); border: 1px solid var(--accent-border); border-radius: 12px; padding: 11px 13px; }
-.prof-pb span { display: block; font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 3px; }
-.prof-pb b { font-size: 18px; font-weight: 800; font-family: 'JetBrains Mono', monospace; }
-.prof-empty { font-size: 13px; color: var(--text-mute); padding: 10px 0; line-height: 1.5; }
-.prof-stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.prof-stat { background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px; padding: 12px 6px; text-align: center; }
-.prof-stat-n { font-size: 16px; font-weight: 800; font-family: 'JetBrains Mono', monospace; white-space: nowrap; }
-.prof-stat-l { font-size: 10px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.4px; margin-top: 3px; }
-.prof-edit-sheet { background: var(--bg-2); border: 1px solid var(--border); border-radius: 20px 20px 0 0; padding: 10px 18px calc(22px + var(--safe-bottom)); max-width: 480px; width: 100%; max-height: 88vh; overflow-y: auto; }
-.prof-edit-handle { width: 40px; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.18); margin: 6px auto 14px; }
-.prof-edit-title { font-size: 18px; font-weight: 800; margin-bottom: 14px; }
-.prof-edit-divider { font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.5px; margin: 16px 0 10px; padding-top: 14px; border-top: 1px solid var(--border); }
-@media (min-width: 560px) { .prof-edit-sheet { border-radius: 18px; margin-bottom: 5vh; } }
+/* Best efforts (PBs) as soft chips */
+.prof-best { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+.prof-best-chip { flex: 1; min-width: 88px; background: linear-gradient(135deg, rgba(0,229,160,0.07), transparent); border: 1px solid var(--accent-border); border-radius: 12px; padding: 10px 13px; }
+.prof-best-chip span { display: block; font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 3px; }
+.prof-best-chip b { font-size: 18px; font-weight: 800; letter-spacing: -0.3px; }
+/* Strava-style stat sections: section header + label/value rows */
+.prof-rowsec { margin-bottom: 18px; }
+.prof-rowsec-h { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.9px; color: var(--text-mute); margin-bottom: 2px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+.prof-row { display: flex; align-items: center; justify-content: space-between; padding: 13px 2px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+.prof-row:last-child { border-bottom: none; }
+.prof-row-l { font-size: 14px; color: var(--text-dim); }
+.prof-row-v { font-size: 16px; font-weight: 700; color: var(--text); letter-spacing: -0.2px; }
+.prof-empty { font-size: 13px; color: var(--text-mute); padding: 10px 0 18px; line-height: 1.5; }
+/* Edit sheet — fixed, internal scroll, sticky footer so Save is always reachable */
+.prof-edit-sheet { background: var(--bg-2); border-top: 1px solid var(--border); border-radius: 20px 20px 0 0; width: 100%; max-width: 480px; margin: 0 auto; display: flex; flex-direction: column; max-height: 92dvh; max-height: 92vh; }
+.prof-edit-handle { width: 40px; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.2); margin: 8px auto 4px; flex-shrink: 0; }
+.prof-edit-scroll { overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 8px 18px 8px; }
+.prof-edit-title { font-size: 18px; font-weight: 800; margin: 6px 0 14px; }
+.prof-edit-divider { font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.5px; margin: 18px 0 12px; padding-top: 16px; border-top: 1px solid var(--border); }
+.prof-edit-footer { flex-shrink: 0; display: flex; gap: 8px; padding: 12px 18px calc(14px + var(--safe-bottom)); border-top: 1px solid var(--border); background: var(--bg-2); }
+@media (min-width: 560px) { .prof-edit-sheet { border-radius: 18px; margin: auto auto 4vh; border: 1px solid var(--border); } }
+/* Circular avatar cropper */
+.crop-stage { position: relative; width: min(78vw, 300px); height: min(78vw, 300px); border-radius: 50%; overflow: hidden; background: #000; touch-action: none; cursor: grab; }
+.crop-stage:active { cursor: grabbing; }
+.crop-stage #cropImg { position: absolute; left: 50%; top: 50%; transform-origin: center; user-select: none; -webkit-user-drag: none; }
+.crop-ring { position: absolute; inset: 0; border-radius: 50%; box-shadow: 0 0 0 100vmax rgba(0,0,0,0.45) inset, 0 0 0 2px rgba(255,255,255,0.5) inset; pointer-events: none; }
+.crop-zoom { width: min(78vw, 300px); margin-top: 20px; accent-color: var(--accent); }
 
 /* ═══ PLAN FEED (day-by-day card stack, replaces the cramped month grid) ═══ */
 .pf-feed { margin-top: 4px; }
@@ -8073,7 +8096,7 @@ const _TAB_OF_PAGE = {
 };
 // Pages that show the bottom tab bar (main tabs + their siblings). Coach,
 // settings, help, upgrade and the auth/landing pages do NOT.
-const _TABBAR_PAGES = new Set(['dashboard', 'plan', 'trends', 'upload', 'history', 'race-planner']);
+const _TABBAR_PAGES = new Set(['dashboard', 'plan', 'trends', 'upload', 'history', 'race-planner', 'profile']);
 // "Pushed" detail pages get a back arrow + centered title, no tab bar.
 const _PUSHED_TITLES = { settings: 'Settings', help: 'Help & FAQ', upgrade: 'Stryxs Pro', profile: 'Profile' };
 let _navPrev = 'dashboard';
@@ -17914,7 +17937,7 @@ function renderCoachInputRow(gate) {
       <div style="display: flex; flex-direction: column; gap: 4px; flex: 1;">
         ${trialHint}
         <div id="coachAttachPreview"></div>
-        <div class="coach-composer">
+        <div class="coach-composer" onclick="if(event.target===this){var _ci=document.getElementById('chatInput'); if(_ci) _ci.focus();}">
           <button type="button" id="coachAttachBtn" class="composer-plus" onclick="coachPickAttachment()" aria-label="Add a photo or file">+</button>
           <textarea id="chatInput" class="composer-input" placeholder="${t('coach.input.placeholder')}" rows="1" oninput="onChatInputChange(this)" onkeydown="handleChatInputKeydown(event)" onfocus="onChatInputFocus()"></textarea>
           <button type="button" id="coachSendBtn" class="composer-send" onclick="sendChatMsg()" aria-label="Send" disabled>↑</button>
@@ -25187,11 +25210,18 @@ function _profDistanceKm(sport, wd) {
   }
   return d;
 }
-function _profHrs(min) {
-  const h = min / 60;
-  if (h < 1) return Math.round(min) + ' min';
-  return (h >= 10 ? Math.round(h) : h.toFixed(1)) + ' h';
+function _profElev(wd) {
+  if (!wd) return 0;
+  return parseFloat(wd.total_elevation_gain || wd.elevation_gain || wd.elev_gain || wd.elevation || 0) || 0;
 }
+// Strava-style time: "1h 23m" / "26h 13m" / "45m".
+function _profHM(min) {
+  min = Math.round(min || 0);
+  if (min < 60) return min + 'm';
+  const h = Math.floor(min / 60), m = min % 60;
+  return m ? `${h}h ${m}m` : `${h}h`;
+}
+function _profAvgN(n) { const v = n / 4; return v >= 9.95 ? Math.round(v) : (Math.round(v * 10) / 10).toString().replace(/\.0$/, ''); }
 
 async function renderProfile() {
   const el = document.getElementById('profileContent');
@@ -25214,8 +25244,6 @@ async function renderProfile() {
     totalMin += _profMinutes(w.workout_data);
     dayset.add(toLocalYMD(new Date(w.created_at)));
   });
-  // Current streak: consecutive days (ending today, or yesterday if nothing yet
-  // today) with at least one logged activity. Strava-style "keep it going daily".
   let streak = 0; const cur = new Date();
   if (!dayset.has(toLocalYMD(cur))) cur.setDate(cur.getDate() - 1);
   while (dayset.has(toLocalYMD(cur))) { streak++; cur.setDate(cur.getDate() - 1); }
@@ -25228,50 +25256,62 @@ async function renderProfile() {
     ? `<div class="prof-avatar" style="background-image:url('${p.avatarUrl}');background-size:cover;background-position:center;"></div>`
     : `<div class="prof-avatar">${initial}</div>`;
 
-  // ── per-sport aggregates (all-time / this year / this week) ──
+  // ── per-sport aggregates: all-time / year-to-date / last-4-week averages ──
   const sports = ['run', 'bike', 'swim'];
   const sportMeta = { run: { label: 'Run', emoji: '🏃' }, bike: { label: 'Bike', emoji: '🚴' }, swim: { label: 'Swim', emoji: '🏊' } };
   const now = new Date(); const yStart = new Date(now.getFullYear(), 0, 1);
-  const weekAgo = new Date(now.getTime() - 7 * 86400000);
-  const stat = {}; sports.forEach(s => stat[s] = { n: 0, dist: 0, min: 0, yN: 0, yDist: 0, wN: 0, wDist: 0 });
+  const day28 = new Date(now.getTime() - 28 * 86400000);
+  const stat = {}; sports.forEach(s => stat[s] = { n: 0, dist: 0, min: 0, elev: 0, yN: 0, yMin: 0, yDist: 0, yElev: 0, rN: 0, rMin: 0, rDist: 0 });
   workouts.forEach(w => {
     const s = normalizeSport(w.sport); if (!stat[s]) return;
-    const d = _profDistanceKm(w.sport, w.workout_data), mn = _profMinutes(w.workout_data), t = new Date(w.created_at);
-    stat[s].n++; stat[s].dist += d; stat[s].min += mn;
-    if (t >= yStart) { stat[s].yN++; stat[s].yDist += d; }
-    if (t >= weekAgo) { stat[s].wN++; stat[s].wDist += d; }
+    const wd = w.workout_data || {};
+    const d = _profDistanceKm(w.sport, wd), mn = _profMinutes(wd), ev = _profElev(wd), t = new Date(w.created_at);
+    const S = stat[s]; S.n++; S.dist += d; S.min += mn; S.elev += ev;
+    if (t >= yStart) { S.yN++; S.yMin += mn; S.yDist += d; S.yElev += ev; }
+    if (t >= day28) { S.rN++; S.rMin += mn; S.rDist += d; }
   });
 
   const runPBs = [['5K', intake.pb_5k], ['10K', intake.pb_10k], ['Half', intake.pb_half], ['Marathon', intake.pb_marathon]].filter(x => x[1]);
   const css = p.trainingZones && p.trainingZones.swim_css_per_100m;
   const ftp = p.bikeFtp;
 
-  const sportBlock = (s) => {
-    const st = stat[s];
-    const pbRows = s === 'run'
-      ? (runPBs.length ? runPBs.map(([d, t]) => `<div class="prof-pb"><span>${d}</span><b>${escapeHtml(t)}</b></div>`).join('') : `<div class="prof-empty">No run PBs yet. Set them in Settings &rsaquo; Benchmarks, or just tell Coach.</div>`)
+  const row = (l, v) => `<div class="prof-row"><span class="prof-row-l">${l}</span><span class="prof-row-v">${v}</span></div>`;
+  const sec = (title, rows) => `<div class="prof-rowsec"><div class="prof-rowsec-h">${title}</div>${rows}</div>`;
+  const sportPane = (s) => {
+    const S = stat[s]; const lab = sportMeta[s].label;
+    const best = s === 'run'
+      ? (runPBs.length ? `<div class="prof-best">${runPBs.map(([d, t]) => `<div class="prof-best-chip"><span>${d}</span><b>${escapeHtml(t)}</b></div>`).join('')}</div>` : '')
       : s === 'bike'
-        ? (ftp ? `<div class="prof-pb"><span>FTP</span><b>${ftp} W</b></div>` : `<div class="prof-empty">No FTP set yet. Set it in Settings &rsaquo; Benchmarks, or tell Coach.</div>`)
-        : (css ? `<div class="prof-pb"><span>CSS</span><b>${escapeHtml(String(css))}<span style="font-size:11px;"> /100m</span></b></div>` : `<div class="prof-empty">No CSS set yet. Set it in Settings &rsaquo; Benchmarks, or tell Coach.</div>`);
-    return `
-      <div class="prof-sport-pane" data-sport="${s}" style="${s === 'run' ? '' : 'display:none;'}">
-        <div class="prof-pb-wrap">${pbRows}</div>
-        <div class="prof-stat-grid">
-          <div class="prof-stat"><div class="prof-stat-n">${st.n}</div><div class="prof-stat-l">activities</div></div>
-          <div class="prof-stat"><div class="prof-stat-n">${formatDistance(st.dist, 0)}</div><div class="prof-stat-l">all-time</div></div>
-          <div class="prof-stat"><div class="prof-stat-n">${_profHrs(st.min)}</div><div class="prof-stat-l">total time</div></div>
-          <div class="prof-stat"><div class="prof-stat-n">${st.yN}</div><div class="prof-stat-l">${now.getFullYear()}</div></div>
-          <div class="prof-stat"><div class="prof-stat-n">${formatDistance(st.yDist, 0)}</div><div class="prof-stat-l">this year</div></div>
-          <div class="prof-stat"><div class="prof-stat-n">${formatDistance(st.wDist, 0)}</div><div class="prof-stat-l">this week</div></div>
-        </div>
-      </div>`;
+        ? (ftp ? `<div class="prof-best"><div class="prof-best-chip"><span>FTP</span><b>${ftp} W</b></div></div>` : '')
+        : (css ? `<div class="prof-best"><div class="prof-best-chip"><span>CSS</span><b>${escapeHtml(String(css))} /100m</b></div></div>` : '');
+    if (S.n === 0) {
+      return `<div class="prof-sport-pane" data-sport="${s}" style="${s === 'run' ? '' : 'display:none;'}">${best}<div class="prof-empty">No ${lab.toLowerCase()} activities logged yet.</div></div>`;
+    }
+    const body =
+      sec('Activity &middot; last 4 weeks',
+        row('Avg per week', _profAvgN(S.rN)) +
+        row('Avg time / week', _profHM(S.rMin / 4)) +
+        row('Avg distance / week', formatDistance(S.rDist / 4, 0))) +
+      sec('This year',
+        row(`${lab}s`, S.yN) +
+        row('Time', _profHM(S.yMin)) +
+        row('Distance', formatDistance(S.yDist, 0)) +
+        (S.yElev > 0 ? row('Elevation', formatElevation(S.yElev)) : '')) +
+      sec('All time',
+        row(`${lab}s`, S.n) +
+        row('Time', _profHM(S.min)) +
+        row('Distance', formatDistance(S.dist, 0)) +
+        (S.elev > 0 ? row('Elevation', formatElevation(S.elev)) : ''));
+    return `<div class="prof-sport-pane" data-sport="${s}" style="${s === 'run' ? '' : 'display:none;'}">${best}${body}</div>`;
   };
 
   const primaryLabel = p.primarySport ? (sportMeta[normalizeSport(p.primarySport)] ? sportMeta[normalizeSport(p.primarySport)].label : (p.primarySport.charAt(0).toUpperCase() + p.primarySport.slice(1))) : null;
-  const subLine = [primaryLabel, p.location].filter(Boolean).map(escapeHtml).join('  ·  ');
+  const subLine = [primaryLabel, p.location].filter(Boolean).map(escapeHtml).join('  &middot;  ');
 
   el.innerHTML = `
-    <input type="file" id="profileAvatarInput" accept="image/*" style="display:none;" onchange="handleAvatarUpload(event); setTimeout(function(){ if(document.getElementById('page-profile').classList.contains('active')) renderProfile(); }, 1800);" />
+    <div class="prof-glow"></div>
+    <input type="file" id="profileAvatarInput" accept="image/*" style="display:none;" onchange="onProfileAvatarPicked(this)" />
+    <button class="prof-edit-mini" onclick="openProfileEditModal()">Edit</button>
     <div class="prof-head">
       <div class="prof-avatar-wrap" onclick="document.getElementById('profileAvatarInput').click()">
         ${avatar}
@@ -25284,20 +25324,18 @@ async function renderProfile() {
       </div>
     </div>
     ${p.bio ? `<div class="prof-bio">${escapeHtml(p.bio)}</div>` : ''}
-    <button class="btn ghost prof-edit-btn" onclick="openProfileEditModal()">Edit profile</button>
 
-    <div class="prof-lifetime">
-      <div class="prof-life-item"><div class="prof-life-n">${workouts.length}</div><div class="prof-life-l">activities</div></div>
-      <div class="prof-life-item"><div class="prof-life-n">${formatDistance(totalDist, 0)}</div><div class="prof-life-l">distance</div></div>
-      <div class="prof-life-item"><div class="prof-life-n">${_profHrs(totalMin)}</div><div class="prof-life-l">time</div></div>
-      <div class="prof-life-item"><div class="prof-life-n">🔥 ${streak}</div><div class="prof-life-l">day streak</div></div>
+    <div class="prof-totals">
+      <div class="prof-total"><div class="prof-total-n">${workouts.length}</div><div class="prof-total-l">Activities</div></div>
+      <div class="prof-total"><div class="prof-total-n">${formatDistance(totalDist, 0)}</div><div class="prof-total-l">Distance</div></div>
+      <div class="prof-total"><div class="prof-total-n">${_profHM(totalMin)}</div><div class="prof-total-l">Time</div></div>
+      <div class="prof-total"><div class="prof-total-n">🔥 ${streak}</div><div class="prof-total-l">Day streak</div></div>
     </div>
 
-    <div class="prof-section-title">Benchmarks</div>
     <div class="prof-sport-tabs">
-      ${sports.map(s => `<button class="prof-sport-tab${s === 'run' ? ' active' : ''}" data-sport="${s}" onclick="_profSelectSport('${s}')">${sportMeta[s].emoji} ${sportMeta[s].label}</button>`).join('')}
+      ${sports.map(s => `<button class="prof-sport-tab${s === 'run' ? ' active' : ''}" data-sport="${s}" onclick="_profSelectSport('${s}')"><span class="prof-sport-emoji">${sportMeta[s].emoji}</span><span>${sportMeta[s].label}</span></button>`).join('')}
     </div>
-    ${sports.map(sportBlock).join('')}
+    ${sports.map(sportPane).join('')}
     <div style="height: 8px;"></div>
   `;
 }
@@ -25309,29 +25347,53 @@ function _profSelectSport(s) {
 
 async function openProfileEditModal() {
   if (document.getElementById('profEditModal')) return;
-  const { data: intake } = await sb.from('athlete_intake').select('sex, weight_kg, height_cm, birth_date').eq('user_id', state.user.id).maybeSingle();
+  const { data: intake } = await sb.from('athlete_intake').select('sex, weight_kg, height_cm, birth_date, pb_5k, pb_10k, pb_half, pb_marathon').eq('user_id', state.user.id).maybeSingle();
+  const ik = intake || {};
   const p = state.profile || {};
   const name = state.user.name || p.displayName || '';
+  const css = (p.trainingZones && p.trainingZones.swim_css_per_100m) || '';
   const sportOpts = [['', '—'], ['run', 'Running'], ['bike', 'Cycling'], ['swim', 'Swimming'], ['triathlon', 'Triathlon'], ['other', 'Other']];
+  const taStyle = 'width:100%; padding:13px 14px; background:var(--bg-3); color:var(--text); border:1px solid var(--border); border-radius:10px; font-size:14px; font-family:inherit; outline:none; resize:vertical; min-height:64px; line-height:1.5;';
   const m = document.createElement('div');
   m.id = 'profEditModal';
-  m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:99999;display:flex;align-items:flex-end;justify-content:center;';
+  m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:99999;display:flex;flex-direction:column;justify-content:flex-end;';
   m.innerHTML = `
     <div class="prof-edit-sheet">
       <div class="prof-edit-handle"></div>
-      <div class="prof-edit-title">Edit profile</div>
-      <div class="field"><label>Name</label><input id="pe_name" value="${escapeHtml(name)}" placeholder="Your name" /></div>
-      <div class="field"><label>Description</label><textarea id="pe_bio" maxlength="280" placeholder="A short bio, your goals, your story" style="min-height:64px;">${escapeHtml(p.bio || '')}</textarea></div>
-      <div class="field"><label>Location</label><input id="pe_loc" value="${escapeHtml(p.location || '')}" placeholder="e.g. Lyon, France" /></div>
-      <div class="field"><label>Primary sport</label>${renderCustomSelect ? renderCustomSelect('pe_sport', p.primarySport || '', sportOpts.map(([v, l]) => ({ value: v, label: l }))) : `<select id="pe_sport">${sportOpts.map(([v, l]) => `<option value="${v}"${(p.primarySport || '') === v ? ' selected' : ''}>${l}</option>`).join('')}</select>`}</div>
-      <div class="prof-edit-divider">Private — used by Coach, not shown on your profile</div>
-      <div class="field"><label>Birth date</label><input type="date" id="pe_dob" value="${(intake && intake.birth_date) || ''}" style="color-scheme:dark;" /></div>
-      <div class="field"><label>Gender</label>${renderCustomSelect ? renderCustomSelect('pe_sex', (intake && intake.sex) || '', [{ value: '', label: 'Prefer not to say' }, { value: 'male', label: 'Male' }, { value: 'female', label: 'Female' }]) : ''}</div>
-      <div style="display:flex;gap:10px;">
-        <div class="field" style="flex:1;"><label>Weight (kg)</label><input type="number" id="pe_wt" value="${(intake && intake.weight_kg) || ''}" step="0.1" placeholder="kg" /></div>
-        <div class="field" style="flex:1;"><label>Height (cm)</label><input type="number" id="pe_ht" value="${(intake && intake.height_cm) || ''}" placeholder="cm" /></div>
+      <div class="prof-edit-scroll">
+        <div class="prof-edit-title">Edit profile</div>
+        <div class="field"><label>Name</label><input id="pe_name" value="${escapeHtml(name)}" placeholder="Your name" /></div>
+        <div class="field"><label>Description</label><textarea id="pe_bio" maxlength="280" placeholder="A short bio, your goals, your story" style="${taStyle}">${escapeHtml(p.bio || '')}</textarea></div>
+        <div class="field"><label>Location</label><input id="pe_loc" value="${escapeHtml(p.location || '')}" placeholder="e.g. Lyon, France" /></div>
+        <div class="field"><label>Primary sport</label>${renderCustomSelect('pe_sport', p.primarySport || '', sportOpts.map(([v, l]) => ({ value: v, label: l })))}</div>
+
+        <div class="prof-edit-divider">Benchmarks &middot; power your pace projections</div>
+        <div style="display:flex;gap:10px;">
+          <div class="field" style="flex:1;"><label>5K PB</label><input id="pe_pb5k" value="${escapeHtml(ik.pb_5k || '')}" placeholder="19:30" /></div>
+          <div class="field" style="flex:1;"><label>10K PB</label><input id="pe_pb10k" value="${escapeHtml(ik.pb_10k || '')}" placeholder="41:00" /></div>
+        </div>
+        <div style="display:flex;gap:10px;">
+          <div class="field" style="flex:1;"><label>Half PB</label><input id="pe_pbhalf" value="${escapeHtml(ik.pb_half || '')}" placeholder="1:30:00" /></div>
+          <div class="field" style="flex:1;"><label>Marathon PB</label><input id="pe_pbmar" value="${escapeHtml(ik.pb_marathon || '')}" placeholder="3:15:00" /></div>
+        </div>
+        <div style="display:flex;gap:10px;">
+          <div class="field" style="flex:1;"><label>Bike FTP (W)</label><input type="number" id="pe_ftp" value="${p.bikeFtp || ''}" placeholder="240" /></div>
+          <div class="field" style="flex:1;"><label>Swim CSS /100m</label><input id="pe_css" value="${escapeHtml(String(css))}" placeholder="1:45" /></div>
+        </div>
+        <div style="display:flex;gap:10px;">
+          <div class="field" style="flex:1;"><label>Run LTHR</label><input type="number" id="pe_runlthr" value="${p.runLthr || ''}" placeholder="178" /></div>
+          <div class="field" style="flex:1;"><label>Bike LTHR</label><input type="number" id="pe_bikelthr" value="${p.bikeLthr || ''}" placeholder="165" /></div>
+        </div>
+
+        <div class="prof-edit-divider">Private &middot; used by Coach, not shown on your profile</div>
+        <div class="field"><label>Birth date</label><input type="date" id="pe_dob" value="${ik.birth_date || ''}" style="color-scheme:dark;" /></div>
+        <div class="field"><label>Gender</label>${renderCustomSelect('pe_sex', ik.sex || '', [{ value: '', label: 'Prefer not to say' }, { value: 'male', label: 'Male' }, { value: 'female', label: 'Female' }])}</div>
+        <div style="display:flex;gap:10px;">
+          <div class="field" style="flex:1;"><label>Weight (kg)</label><input type="number" id="pe_wt" value="${ik.weight_kg || ''}" step="0.1" placeholder="kg" /></div>
+          <div class="field" style="flex:1;"><label>Height (cm)</label><input type="number" id="pe_ht" value="${ik.height_cm || ''}" placeholder="cm" /></div>
+        </div>
       </div>
-      <div style="display:flex;gap:8px;margin-top:8px;">
+      <div class="prof-edit-footer">
         <button class="btn ghost" style="flex:1;" onclick="closeProfileEditModal()">Cancel</button>
         <button class="btn" style="flex:1.4;" id="peSaveBtn" onclick="saveProfileEdits()">Save</button>
       </div>
@@ -25344,29 +25406,42 @@ function closeProfileEditModal() { document.getElementById('profEditModal')?.rem
 async function saveProfileEdits() {
   const btn = document.getElementById('peSaveBtn');
   if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
-  const val = id => { const e = document.getElementById(id); return e ? (e.value || '') : ''; };
-  const name = val('pe_name').trim();
-  const bio = val('pe_bio').trim();
-  const loc = val('pe_loc').trim();
-  const sport = val('pe_sport');
-  const dob = val('pe_dob') || null;
-  const sex = val('pe_sex') || null;
-  const wt = parseFloat(val('pe_wt')) || null;
-  const ht = parseFloat(val('pe_ht')) || null;
+  const val = id => { const e = document.getElementById(id); return e ? String(e.value || '').trim() : ''; };
+  const num = id => { const n = parseFloat(val(id)); return isNaN(n) ? null : n; };
+  const name = val('pe_name'), bio = val('pe_bio'), loc = val('pe_loc'), sport = val('pe_sport');
+  const dob = val('pe_dob') || null, sex = val('pe_sex') || null;
+  const wt = num('pe_wt'), ht = num('pe_ht');
+  const css = val('pe_css'), ftp = val('pe_ftp') ? parseInt(val('pe_ftp')) : null;
+  const runLthr = val('pe_runlthr') ? parseInt(val('pe_runlthr')) : null;
+  const bikeLthr = val('pe_bikelthr') ? parseInt(val('pe_bikelthr')) : null;
   try {
-    await sb.from('profiles').update({ display_name: name || null, bio, location: loc || null, primary_sport: sport || null }).eq('id', state.user.id);
-    // Derive age from DOB so the coaching maths (which read intake.age) stay correct.
+    // profiles: identity + FTP + LTHR + swim CSS (merged into training_zones)
+    const tz = { ...(state.profile?.trainingZones || {}) };
+    if (css) tz.swim_css_per_100m = css; else delete tz.swim_css_per_100m;
+    await sb.from('profiles').update({
+      display_name: name || null, bio, location: loc || null, primary_sport: sport || null,
+      bike_ftp: ftp, run_lthr: runLthr, bike_lthr: bikeLthr, training_zones: tz,
+    }).eq('id', state.user.id);
+
+    // athlete_intake: PBs + LTHR mirror + private body fields + derived age
     let age = null;
     if (dob) {
       const b = new Date(dob + 'T12:00:00'); const t = new Date();
       age = t.getFullYear() - b.getFullYear() - ((t.getMonth() < b.getMonth() || (t.getMonth() === b.getMonth() && t.getDate() < b.getDate())) ? 1 : 0);
       if (age < 0 || age > 120) age = null;
     }
-    const intakeUpd = { birth_date: dob, sex, weight_kg: wt, height_cm: ht };
+    const intakeUpd = {
+      birth_date: dob, sex, weight_kg: wt, height_cm: ht,
+      pb_5k: val('pe_pb5k') || null, pb_10k: val('pe_pb10k') || null,
+      pb_half: val('pe_pbhalf') || null, pb_marathon: val('pe_pbmar') || null,
+      run_lthr: runLthr, bike_lthr: bikeLthr,
+    };
     if (age) intakeUpd.age = age;
     await sb.from('athlete_intake').update(intakeUpd).eq('user_id', state.user.id);
+
     if (name) state.user.name = name;
-    state.profile = { ...state.profile, bio, location: loc || null, primarySport: sport || null, displayName: name || null };
+    state.profile = { ...state.profile, bio, location: loc || null, primarySport: sport || null, displayName: name || null, bikeFtp: ftp, runLthr, bikeLthr, trainingZones: tz };
+    _projectionsCache = null; _projectionsCacheTime = 0;
     closeProfileEditModal();
     toast('Profile updated');
     renderProfile();
@@ -25375,6 +25450,120 @@ async function saveProfileEdits() {
     console.error('[Stryxs] profile save failed:', e);
     toast('Could not save, try again');
     if (btn) { btn.disabled = false; btn.textContent = 'Save'; }
+  }
+}
+
+// ── Avatar picker → circular cropper (pan + zoom) → upload ──
+function onProfileAvatarPicked(input) {
+  const file = input.files && input.files[0];
+  input.value = '';
+  if (!file) return;
+  if (!file.type.startsWith('image/')) { toast('Please choose an image'); return; }
+  if (file.size > 12 * 1024 * 1024) { toast('Image too large. Max 12 MB.'); return; }
+  openAvatarCropper(file);
+}
+
+let _crop = null;
+function openAvatarCropper(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    const img = new Image();
+    img.onload = () => {
+      const m = document.createElement('div');
+      m.id = 'avatarCropModal';
+      m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:100000;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;';
+      m.innerHTML = `
+        <div style="color:var(--text);font-size:16px;font-weight:700;margin-bottom:6px;">Adjust your photo</div>
+        <div style="color:var(--text-dim);font-size:12px;margin-bottom:18px;">Drag to move, slide to zoom</div>
+        <div class="crop-stage" id="cropStage">
+          <img id="cropImg" alt="" draggable="false" />
+          <div class="crop-ring"></div>
+        </div>
+        <input type="range" id="cropZoom" min="1" max="4" step="0.01" value="1" class="crop-zoom" />
+        <div style="display:flex;gap:10px;margin-top:20px;width:100%;max-width:340px;">
+          <button class="btn ghost" style="flex:1;" onclick="closeAvatarCropper()">Cancel</button>
+          <button class="btn" style="flex:1.4;" id="cropUseBtn" onclick="confirmAvatarCrop()">Use photo</button>
+        </div>`;
+      document.body.appendChild(m);
+      const stage = document.getElementById('cropStage');
+      const D = stage.clientWidth;
+      const cimg = document.getElementById('cropImg');
+      const baseScale = D / Math.min(img.naturalWidth, img.naturalHeight); // cover
+      cimg.src = img.src;
+      cimg.style.width = (img.naturalWidth * baseScale) + 'px';
+      cimg.style.height = (img.naturalHeight * baseScale) + 'px';
+      _crop = { img, iw: img.naturalWidth, ih: img.naturalHeight, D, baseScale, scale: 1, tx: 0, ty: 0, dragging: false, sx: 0, sy: 0 };
+      _cropApply();
+      // drag
+      const onDown = e => { _crop.dragging = true; const pt = _cropPt(e); _crop.sx = pt.x - _crop.tx; _crop.sy = pt.y - _crop.ty; };
+      const onMove = e => { if (!_crop.dragging) return; const pt = _cropPt(e); _crop.tx = pt.x - _crop.sx; _crop.ty = pt.y - _crop.sy; _cropClamp(); _cropApply(); e.preventDefault(); };
+      const onUp = () => { _crop.dragging = false; };
+      stage.addEventListener('pointerdown', onDown);
+      window.addEventListener('pointermove', onMove, { passive: false });
+      window.addEventListener('pointerup', onUp);
+      _crop._cleanup = () => { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); };
+      document.getElementById('cropZoom').addEventListener('input', e => { _crop.scale = parseFloat(e.target.value); _cropClamp(); _cropApply(); });
+    };
+    img.src = reader.result;
+  };
+  reader.readAsDataURL(file);
+}
+function _cropPt(e) { return { x: e.clientX, y: e.clientY }; }
+function _cropClamp() {
+  if (!_crop) return;
+  const half = (_crop.iw * _crop.baseScale * _crop.scale - _crop.D) / 2;
+  const halfV = (_crop.ih * _crop.baseScale * _crop.scale - _crop.D) / 2;
+  _crop.tx = Math.max(-half, Math.min(half, _crop.tx));
+  _crop.ty = Math.max(-halfV, Math.min(halfV, _crop.ty));
+}
+function _cropApply() {
+  const cimg = document.getElementById('cropImg');
+  if (!cimg || !_crop) return;
+  cimg.style.transform = `translate(-50%,-50%) translate(${_crop.tx}px, ${_crop.ty}px) scale(${_crop.scale})`;
+}
+function closeAvatarCropper() {
+  if (_crop && _crop._cleanup) _crop._cleanup();
+  _crop = null;
+  document.getElementById('avatarCropModal')?.remove();
+}
+async function confirmAvatarCrop() {
+  if (!_crop) return;
+  const btn = document.getElementById('cropUseBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  const O = 512;
+  const k = _crop.baseScale * _crop.scale; // display px per source px
+  const sw = _crop.D / k, sh = _crop.D / k;
+  const sx0 = _crop.iw / 2 + (-_crop.D / 2 - _crop.tx) / k;
+  const sy0 = _crop.ih / 2 + (-_crop.D / 2 - _crop.ty) / k;
+  const canvas = document.createElement('canvas');
+  canvas.width = O; canvas.height = O;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#0a0e1a'; ctx.fillRect(0, 0, O, O);
+  ctx.drawImage(_crop.img, sx0, sy0, sw, sh, 0, 0, O, O);
+  const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.9));
+  closeAvatarCropper();
+  if (blob) await _uploadAvatarBlob(blob);
+  else toast('Could not process the image');
+}
+async function _uploadAvatarBlob(blob) {
+  if (!state.user) return;
+  toast('Uploading…');
+  try {
+    const path = `${state.user.id}/avatar.jpg`;
+    const { data: existing } = await sb.storage.from('avatars').list(state.user.id);
+    if (existing && existing.length) await sb.storage.from('avatars').remove(existing.map(f => `${state.user.id}/${f.name}`));
+    const { error } = await sb.storage.from('avatars').upload(path, blob, { upsert: true, contentType: 'image/jpeg' });
+    if (error) throw error;
+    const { data: urlData } = sb.storage.from('avatars').getPublicUrl(path);
+    const avatarUrl = urlData.publicUrl + '?t=' + Date.now();
+    await sb.from('profiles').update({ avatar_url: avatarUrl }).eq('id', state.user.id);
+    state.profile.avatarUrl = avatarUrl;
+    if (typeof updateNavAvatar === 'function') updateNavAvatar();
+    toast('Profile photo updated');
+    if (document.getElementById('page-profile')?.classList.contains('active')) renderProfile();
+  } catch (e) {
+    console.error('[Stryxs] avatar upload failed:', e);
+    toast('Upload failed: ' + (e.message || 'try again'));
   }
 }
 
@@ -25406,104 +25595,34 @@ async function renderSettings() {
 
   el.innerHTML = `
     <!-- Profile Section -->
-    <div class="settings-section" id="section-profile">
-      <div class="settings-section-header" onclick="toggleSettingsSection('profile')">
-        <div class="settings-section-header-left">
-          <div class="settings-section-icon" style="${state.profile?.avatarUrl ? `background-image: url('${state.profile.avatarUrl}'); background-size: cover; background-position: center; border-radius: 50%;` : ''}">${state.profile?.avatarUrl ? '' : (state.user?.name?.[0]?.toUpperCase() || '👤')}</div>
-          <div class="settings-section-text">
-            <div class="settings-section-title" data-i18n="settings.section.profile.title">Profile</div>
-            <div class="settings-section-sub" data-i18n="settings.section.profile.sub">Name, photo, bio, email</div>
-          </div>
-        </div>
-        <div class="settings-section-chevron">›</div>
-      </div>
-      <div class="settings-section-body">
-        <div class="settings-section-inner">
-      <div style="display: flex; gap: 18px; align-items: flex-start; margin-bottom: 18px; flex-wrap: wrap;">
-        <div style="position: relative; flex-shrink: 0;">
-          <div class="user-avatar" id="settingsAvatar" style="width: 80px; height: 80px; font-size: 32px; ${state.profile?.avatarUrl ? `background-image: url('${state.profile.avatarUrl}'); background-size: cover; background-position: center;` : ''}">
-            ${state.profile?.avatarUrl ? '' : (state.user?.name?.[0]?.toUpperCase() || 'A')}
-          </div>
-          <button onclick="document.getElementById('avatarFileInput').click()" style="position: absolute; bottom: -4px; right: -4px; width: 28px; height: 28px; border-radius: 50%; background: var(--accent); color: var(--bg); border: 2px solid var(--bg); cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center; padding: 0;" title="Upload avatar">📷</button>
-          <input type="file" id="avatarFileInput" accept="image/*" style="display: none;" onchange="handleAvatarUpload(event)" />
-        </div>
-        <div style="flex: 1; min-width: 200px;">
-          <div style="font-weight: 700; font-size: 16px; margin-bottom: 2px;">${state.user?.name || 'Athlete'}</div>
-          <div style="color: var(--text-dim); font-size: 13px; margin-bottom: 10px;">${state.user?.email || ''}</div>
-          ${state.profile?.avatarUrl ? `<button class="btn ghost" style="padding: 6px 12px; font-size: 12px;" onclick="removeAvatar()">Remove photo</button>` : ''}
-        </div>
-      </div>
-      <div class="field">
-        <label>Display name</label>
-        <input type="text" id="settingsName" value="${state.user?.name || ''}" placeholder="How others will see you" />
-      </div>
-      <div class="field">
-        <label>Bio (optional)</label>
-        <textarea id="settingsBio" placeholder="A short description about yourself, your goals, your training style..." style="width: 100%; min-height: 70px; padding: 13px 14px; background: var(--bg-3); color: var(--text); border: 1px solid var(--border); border-radius: 10px; font-size: 14px; font-family: inherit; outline: none; resize: vertical; line-height: 1.5;" maxlength="280">${state.profile?.bio || ''}</textarea>
-        <div style="font-size: 11px; color: var(--text-mute); margin-top: 4px; text-align: right;" id="bioCharCount">${(state.profile?.bio || '').length}/280</div>
-      </div>
-      <div class="field">
-        <label>Email</label>
-        <input type="email" id="settingsEmail" value="${state.user?.email || ''}" readonly style="opacity: 0.5;" />
-      </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Personal Info Section -->
-    <div class="settings-section" id="section-personal">
-      <div class="settings-section-header" onclick="toggleSettingsSection('personal')">
+    <!-- Identity / body stats / benchmarks moved to the Profile page (round 58).
+         Only the Units preference stays here, plus a pointer to the Profile. -->
+    <div class="settings-section" id="section-preferences">
+      <div class="settings-section-header" onclick="toggleSettingsSection('preferences')">
         <div class="settings-section-header-left">
           <div class="settings-section-icon">📐</div>
           <div class="settings-section-text">
-            <div class="settings-section-title" data-i18n="settings.section.personal.title">Personal Info</div>
-            <div class="settings-section-sub" data-i18n="settings.section.personal.sub">Units, age, weight, height</div>
+            <div class="settings-section-title">Units</div>
+            <div class="settings-section-sub">Metric or imperial</div>
           </div>
         </div>
         <div class="settings-section-chevron">›</div>
       </div>
       <div class="settings-section-body">
         <div class="settings-section-inner">
-      <div class="field">
-        <label>Units</label>
-        ${renderCustomSelect('settingsUnits', isImperial ? 'imperial' : 'metric', [
-          { value: 'metric', label: 'Metric (kg, cm, km)' },
-          { value: 'imperial', label: 'Imperial (lbs, ft/in, mi)' },
-        ])}
-      </div>
-      <div class="field">
-        <label>Sex</label>
-        ${renderCustomSelect('settingsSex', intake?.sex || '', [
-          { value: '', label: 'Prefer not to say' },
-          { value: 'male', label: 'Male' },
-          { value: 'female', label: 'Female' },
-        ])}
-      </div>
-      <div class="field">
-        <label>Age</label>
-        <input type="number" id="settingsAge" value="${intake?.age || ''}" placeholder="e.g. 28" min="13" max="100" />
-      </div>
-      <div class="field">
-        <label>Weight (${isImperial ? 'lbs' : 'kg'})</label>
-        <input type="number" id="settingsWeight" value="${weightDisplay}" placeholder="${isImperial ? 'e.g. 165' : 'e.g. 75'}" step="0.1" />
-      </div>
-      <div class="field">
-        <label>Height</label>
-        ${isImperial ? `
-          <div style="display: flex; gap: 8px;">
-            <div style="flex: 1; display: flex; gap: 4px; align-items: center;">
-              <input type="number" id="settingsHeightFt" value="${heightFt}" placeholder="5" min="3" max="8" style="flex: 1;" />
-              <span style="color: var(--text-dim); font-size: 13px;">ft</span>
-            </div>
-            <div style="flex: 1; display: flex; gap: 4px; align-items: center;">
-              <input type="number" id="settingsHeightIn" value="${heightIn}" placeholder="10" min="0" max="11" style="flex: 1;" />
-              <span style="color: var(--text-dim); font-size: 13px;">in</span>
+          <div style="display:flex;align-items:flex-start;gap:8px;background:rgba(0,229,160,0.06);border:1px solid rgba(0,229,160,0.22);border-radius:10px;padding:10px 12px;margin-bottom:14px;">
+            <span style="font-size:15px;line-height:1.3;">👤</span>
+            <div style="flex:1;font-size:12px;color:var(--text-dim);line-height:1.5;">Your name, photo, bio, benchmarks and body stats now live on your <strong style="color:var(--text);">Profile</strong> (tap your avatar, top right). Coach can still read and update all of it.
+              <div style="margin-top:10px;"><button class="btn" style="font-size:13px;padding:8px 14px;" onclick="navigate('profile')">Open profile</button></div>
             </div>
           </div>
-        ` : `
-          <input type="number" id="settingsHeightCm" value="${heightCm}" placeholder="e.g. 178" min="100" max="250" />
-        `}
-      </div>
+          <div class="field">
+            <label>Units</label>
+            ${renderCustomSelect('settingsUnits', isImperial ? 'imperial' : 'metric', [
+              { value: 'metric', label: 'Metric (kg, cm, km)' },
+              { value: 'imperial', label: 'Imperial (lbs, ft/in, mi)' },
+            ])}
+          </div>
         </div>
       </div>
     </div>
@@ -25599,79 +25718,7 @@ async function renderSettings() {
       </div>
     </div>
 
-    <!-- Race Benchmarks Section -->
-    <div class="settings-section" id="section-benchmarks">
-      <div class="settings-section-header" onclick="toggleSettingsSection('benchmarks')">
-        <div class="settings-section-header-left">
-          <div class="settings-section-icon">🏆</div>
-          <div class="settings-section-text">
-            <div class="settings-section-title" data-i18n="settings.section.benchmarks.title">Benchmarks & zones</div>
-            <div class="settings-section-sub" data-i18n="settings.section.benchmarks.sub">PBs, FTP, CSS, LTHR, goal time</div>
-          </div>
-        </div>
-        <div class="settings-section-chevron">›</div>
-      </div>
-      <div class="settings-section-body">
-        <div class="settings-section-inner">
-      <p style="color: var(--text-dim); font-size: 13px; margin-bottom: 6px; line-height: 1.55;">Benchmarks unlock accurate pace projections. Fill in only the sports you train, leave the rest blank.</p>
-      <div style="display:flex; align-items:flex-start; gap:8px; background:rgba(0,229,160,0.06); border:1px solid rgba(0,229,160,0.22); border-radius:10px; padding:10px 12px; margin-bottom:16px;">
-        <span style="font-size:15px; line-height:1.3;">✨</span>
-        <span style="font-size:12px; color:var(--text-dim); line-height:1.5;">Coach updates these automatically when you set a new PB in a workout, and tells you in the analysis. You can also just tell Coach in chat, or edit them here.</span>
-      </div>
-      <div class="field">
-        <label>Goal time (for current race)</label>
-        <input type="text" id="settingsGoalTime" value="${intake?.goal_time || ''}" onchange="saveIntakeFieldQuick('goal_time', this.value)" placeholder="e.g. sub-3:30 marathon, sub-10 Ironman, 19:00 5K" />
-      </div>
-
-      <div style="font-size:12px; font-weight:700; color:var(--text); text-transform:uppercase; letter-spacing:0.6px; margin:18px 0 8px;">🏃 Running</div>
-      <div class="field">
-        <label>5K PB</label>
-        <input type="text" id="settingsPb5k" value="${intake?.pb_5k || ''}" onchange="saveIntakeFieldQuick('pb_5k', this.value)" placeholder="e.g. 19:30" />
-      </div>
-      <div class="field">
-        <label>10K PB</label>
-        <input type="text" id="settingsPb10k" value="${intake?.pb_10k || ''}" onchange="saveIntakeFieldQuick('pb_10k', this.value)" placeholder="e.g. 41:00" />
-      </div>
-      <div class="field">
-        <label>Half Marathon PB</label>
-        <input type="text" id="settingsPbHalf" value="${intake?.pb_half || ''}" onchange="saveIntakeFieldQuick('pb_half', this.value)" placeholder="e.g. 1:30:00" />
-      </div>
-      <div class="field">
-        <label>Marathon PB</label>
-        <input type="text" id="settingsPbMarathon" value="${intake?.pb_marathon || ''}" onchange="saveIntakeFieldQuick('pb_marathon', this.value)" placeholder="e.g. 3:15:00" />
-      </div>
-
-      <div style="font-size:12px; font-weight:700; color:var(--text); text-transform:uppercase; letter-spacing:0.6px; margin:18px 0 8px;">🚴 Cycling</div>
-      <div class="field">
-        <label>FTP (watts) <span style="color:var(--text-mute); font-weight:400; font-size:11px;">your 1-hour power, anchors cycling pace</span></label>
-        <input type="number" id="settingsBikeFtp" value="${state.profile.bikeFtp || ''}" onchange="saveBikeFtpQuick(this.value)" placeholder="e.g. 230" />
-      </div>
-
-      <div style="font-size:12px; font-weight:700; color:var(--text); text-transform:uppercase; letter-spacing:0.6px; margin:18px 0 8px;">🏊 Swimming</div>
-      <div class="field">
-        <label>CSS pace <span style="color:var(--text-mute); font-weight:400; font-size:11px;">critical swim speed, per 100m</span></label>
-        <input type="text" id="settingsSwimCss" value="${state.profile?.trainingZones?.swim_css_per_100m || ''}" onchange="saveSwimCssQuick(this.value)" placeholder="e.g. 1:45" />
-      </div>
-
-      <div style="font-size:12px; font-weight:700; color:var(--text); text-transform:uppercase; letter-spacing:0.6px; margin:18px 0 8px;">❤️ Heart rate (LTHR)</div>
-      <div style="font-size:11px; color:var(--text-mute); line-height:1.5; margin-bottom:10px;">Coach can set these for you, just say "my run LTHR is 178" in chat. Or enter them here.</div>
-      <div class="field">
-        <label>Run LTHR (bpm)</label>
-        <input type="number" id="settingsRunLthr" value="${state.profile.runLthr || ''}" placeholder="e.g. 180" />
-      </div>
-      <div class="field">
-        <label>Bike LTHR (bpm)</label>
-        <input type="number" id="settingsBikeLthr" value="${state.profile.bikeLthr || ''}" placeholder="e.g. 165" />
-      </div>
-      <div id="zonePreview"></div>
-
-      <div class="field" style="margin-top:18px;">
-        <label>Most recent race</label>
-        <input type="text" id="settingsLastRace" value="${intake?.last_race || ''}" onchange="saveIntakeFieldQuick('last_race', this.value)" placeholder="e.g. 5K 19:45 in March 2026" />
-      </div>
-        </div>
-      </div>
-    </div>
+    <!-- Race Benchmarks (PBs / FTP / CSS / LTHR) moved to the Profile page (round 58). -->
 
     <!-- Equipment Section (NEW) -->
     <!-- Equipment card removed (2026-06-11): equipment is collected in onboarding
@@ -27010,56 +27057,59 @@ async function saveAllSettings(silent = false) {
   state.profile = { ...state.profile, runLthr, bikeLthr, bikeFtp, bio };
   if (name && state.user) state.user.name = name;
 
-  // Save profile. bike_ftp uses conditional spread so the UPDATE still works
-  // pre-migrate_v11 (unknown column would otherwise reject the row).
-  const profileUpdate = {
-    run_lthr: runLthr,
-    bike_lthr: bikeLthr,
-    name: name,
-    display_name: name,
-    bio: bio,
-  };
-  if (bikeFtp != null) profileUpdate.bike_ftp = bikeFtp;
-  await sb.from('profiles').update(profileUpdate).eq('id', state.user.id);
+  // Save profile. Identity + benchmarks now live on the Profile page, so ONLY
+  // write a field whose settings input is still present — otherwise pruning those
+  // sections from Settings would wipe values the Profile page owns. (has() guards.)
+  const has = id => !!document.getElementById(id);
+  const profileUpdate = {};
+  if (has('settingsName')) { profileUpdate.name = name; profileUpdate.display_name = name; }
+  if (has('settingsBio')) profileUpdate.bio = bio;
+  if (has('settingsRunLthr')) profileUpdate.run_lthr = runLthr;
+  if (has('settingsBikeLthr')) profileUpdate.bike_lthr = bikeLthr;
+  if (has('settingsBikeFtp') && bikeFtp != null) profileUpdate.bike_ftp = bikeFtp;
+  if (Object.keys(profileUpdate).length) await sb.from('profiles').update(profileUpdate).eq('id', state.user.id);
 
   // Swim CSS lives in profiles.training_zones (jsonb) — merge so any other zone
-  // keys survive. Isolated update so a failure can't break the rest of the save.
-  try {
-    const tz = { ...(state.profile?.trainingZones || {}) };
-    if (swimCss) tz.swim_css_per_100m = swimCss; else delete tz.swim_css_per_100m;
-    const { error: tzErr } = await sb.from('profiles').update({ training_zones: tz }).eq('id', state.user.id);
-    if (!tzErr) state.profile.trainingZones = tz;
-  } catch (_) {}
+  // keys survive. Only touch it if its input is present.
+  if (has('settingsSwimCss')) {
+    try {
+      const tz = { ...(state.profile?.trainingZones || {}) };
+      if (swimCss) tz.swim_css_per_100m = swimCss; else delete tz.swim_css_per_100m;
+      const { error: tzErr } = await sb.from('profiles').update({ training_zones: tz }).eq('id', state.user.id);
+      if (!tzErr) state.profile.trainingZones = tz;
+    } catch (_) {}
+  }
 
-  // Also sync LTHR to athlete_intake so plan generation has access
-  await sb.from('athlete_intake').update({
-    run_lthr: runLthr,
-    bike_lthr: bikeLthr,
-  }).eq('user_id', state.user.id);
+  // Mirror LTHR to athlete_intake (plan gen reads it) — only if the inputs exist.
+  if (has('settingsRunLthr') || has('settingsBikeLthr')) {
+    await sb.from('athlete_intake').update({ run_lthr: runLthr, bike_lthr: bikeLthr }).eq('user_id', state.user.id);
+  }
 
-  // Save intake fields
-  await sb.from('athlete_intake').update({
-    unit_preference: units,
-    sex: sex,
-    age: age,
-    weight_kg: weight_kg,
-    height_cm: height_cm,
+  // Save intake fields. Goals + equipment stay in Settings; identity/benchmark
+  // fields are guarded so a missing input never overwrites them with null.
+  const intakeUpdate = {
     goal_event: goal,
     race_date: raceDate,
     experience_level: experience,
     current_weekly_hours: hours,
     injuries: injuries,
-    goal_time: goalTime,
-    pb_5k: pb5k,
-    pb_10k: pb10k,
-    pb_half: pbHalf,
-    pb_marathon: pbMarathon,
-    last_race: lastRace,
     equipment: Array.from(settingsEquipmentSelected),
     has_pool_access: settingsEquipmentSelected.has('pool'),
     has_bike_trainer: settingsEquipmentSelected.has('trainer'),
     updated_at: new Date().toISOString(),
-  }).eq('user_id', state.user.id);
+  };
+  if (has('settingsUnits')) intakeUpdate.unit_preference = units;
+  if (has('settingsSex')) intakeUpdate.sex = sex;
+  if (has('settingsAge')) intakeUpdate.age = age;
+  if (has('settingsWeight')) intakeUpdate.weight_kg = weight_kg;
+  if (has('settingsHeightCm') || has('settingsHeightFt')) intakeUpdate.height_cm = height_cm;
+  if (has('settingsGoalTime')) intakeUpdate.goal_time = goalTime;
+  if (has('settingsPb5k')) intakeUpdate.pb_5k = pb5k;
+  if (has('settingsPb10k')) intakeUpdate.pb_10k = pb10k;
+  if (has('settingsPbHalf')) intakeUpdate.pb_half = pbHalf;
+  if (has('settingsPbMarathon')) intakeUpdate.pb_marathon = pbMarathon;
+  if (has('settingsLastRace')) intakeUpdate.last_race = lastRace;
+  await sb.from('athlete_intake').update(intakeUpdate).eq('user_id', state.user.id);
 
   // ═══ DETECT IMPORTANT CHANGES (silent mode skips this) ═══
   if (!silent) {
@@ -27070,9 +27120,11 @@ async function saveAllSettings(silent = false) {
       current_weekly_hours: hours,
       injuries: injuries,
       equipment: Array.from(settingsEquipmentSelected),
-      run_lthr: runLthr,
-      bike_lthr: bikeLthr,
-      weight_kg: weight_kg,
+      // These inputs moved to the Profile page; when absent, report the EXISTING
+      // value so the change-detector doesn't see a false "changed to null".
+      run_lthr: has('settingsRunLthr') ? runLthr : (oldProfile?.run_lthr ?? null),
+      bike_lthr: has('settingsBikeLthr') ? bikeLthr : (oldProfile?.bike_lthr ?? null),
+      weight_kg: has('settingsWeight') ? weight_kg : (oldIntake?.weight_kg ?? null),
     });
 
     // ═══ DETECT: is this the "first LTHR + stub plan" flow? ═══
