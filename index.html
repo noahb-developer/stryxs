@@ -523,11 +523,15 @@ body.on-landing #landingNav { display: none !important; }
    keep the original .nav look. */
 #mainNav {
   border-bottom: none;
-  background: rgba(10, 14, 26, 0.62);
-  backdrop-filter: blur(22px) saturate(180%);
-  -webkit-backdrop-filter: blur(22px) saturate(180%);
-  padding-top: calc(10px + var(--safe-top));
-  padding-bottom: 10px;
+  /* More transparent + heavier blur for the floating-glass feel. The notch
+     clearance comes from body{padding-top:safe-top} already, so DON'T add
+     safe-top here (that double-counted it and pushed the whole page down on
+     phones — PC was unaffected since safe-top is 0 there). */
+  background: rgba(10, 14, 26, 0.45);
+  backdrop-filter: blur(26px) saturate(180%);
+  -webkit-backdrop-filter: blur(26px) saturate(180%);
+  padding-top: 12px;
+  padding-bottom: 12px;
 }
 #mainNav .nav-left { grid-column: 1; display: flex; align-items: center; gap: 6px; justify-self: start; }
 #mainNav .nav-actions { grid-column: 3; display: flex; align-items: center; gap: 2px; justify-self: end; }
@@ -556,17 +560,24 @@ body.on-landing #landingNav { display: none !important; }
 /* ─── Floating bottom tab bar ─── */
 .tab-bar {
   position: fixed; left: 50%; transform: translateX(-50%);
-  bottom: calc(10px + var(--safe-bottom));
+  /* Phone: sit a touch lower (closer to the home indicator). JS (_pinTabBar)
+     keeps it glued to the VISUAL viewport bottom so it never drifts up mid-scroll
+     on iOS. Desktop override below lifts it off the very bottom edge. */
+  bottom: max(8px, var(--safe-bottom));
   z-index: 200;
   display: flex; align-items: stretch; gap: 2px;
   width: min(440px, calc(100% - 24px));
   padding: 7px 8px;
-  background: rgba(18, 24, 42, 0.72);
-  backdrop-filter: blur(30px) saturate(180%);
-  -webkit-backdrop-filter: blur(30px) saturate(180%);
-  border: 1px solid rgba(255,255,255,0.09);
+  background: rgba(16, 21, 38, 0.5);
+  backdrop-filter: blur(34px) saturate(190%);
+  -webkit-backdrop-filter: blur(34px) saturate(190%);
+  border: 1px solid rgba(255,255,255,0.08);
   border-radius: 24px;
-  box-shadow: 0 14px 44px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05);
+  box-shadow: 0 14px 44px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06);
+  will-change: transform;
+}
+@media (min-width: 721px) {
+  .tab-bar { bottom: 24px; }
 }
 .tab-item {
   position: relative; flex: 1;
@@ -593,9 +604,9 @@ body.on-landing #landingNav { display: none !important; }
   position: fixed; top: calc(var(--safe-top) + 10px); left: max(12px, var(--safe-left));
   width: 40px; height: 40px; z-index: 250;
   display: none; align-items: center; justify-content: center;
-  background: rgba(18,24,42,0.55);
-  backdrop-filter: blur(18px) saturate(180%); -webkit-backdrop-filter: blur(18px) saturate(180%);
-  border: 1px solid rgba(255,255,255,0.09); border-radius: 50%;
+  background: rgba(16,21,38,0.42);
+  backdrop-filter: blur(22px) saturate(190%); -webkit-backdrop-filter: blur(22px) saturate(190%);
+  border: 1px solid rgba(255,255,255,0.08); border-radius: 50%;
   color: var(--text); cursor: pointer; padding: 0;
   box-shadow: 0 6px 22px rgba(0,0,0,0.45); transition: transform 0.1s, background 0.15s;
 }
@@ -2813,7 +2824,12 @@ body.coach-chat-active #page-coach.active {
      than against it, so the page doesn't bounce up-then-down on focus. The values
      here are a sane pre-JS fallback. */
   top: 0; left: 0; right: 0;
-  height: 100%;
+  /* dvh = the CURRENTLY visible viewport height. With this, the chat is correctly
+     full-screen the instant it opens with NO JS needed — fixing the "opens pushed
+     up like the keyboard is active" bug. trackCoachViewport now only intervenes
+     while the keyboard is actually open. */
+  height: 100vh;
+  height: 100dvh;
   transform: translateY(0px);
   padding: 0;
   display: flex; flex-direction: column;
@@ -8018,6 +8034,37 @@ function navBackAction() {
   navigate(dest);
 }
 
+// Keep the floating tab bar glued to the VISUAL viewport bottom. On iOS the
+// dynamic toolbar shrinks/grows the visual viewport during scroll, which makes a
+// plain `position:fixed; bottom` element drift upward (Noah's "it slides to the
+// middle"). Top-anchored fixed elements don't have this problem, only bottom ones.
+// Same technique the Coach composer uses. No-op on desktop (gap is always 0).
+function _pinTabBar() {
+  const tb = document.getElementById('tabBar');
+  if (!tb || tb.style.display === 'none') return;
+  const vv = window.visualViewport;
+  if (!vv) { tb.style.transform = 'translateX(-50%)'; return; }
+  const gap = Math.round(window.innerHeight - (vv.offsetTop + vv.height));
+  if (gap > 140) {
+    // A keyboard is up (e.g. typing in a form on a tab page) — get the bar out of
+    // the way rather than floating it over the keyboard.
+    tb.style.opacity = '0'; tb.style.pointerEvents = 'none';
+    tb.style.transform = 'translateX(-50%)';
+  } else {
+    tb.style.opacity = ''; tb.style.pointerEvents = '';
+    tb.style.transform = `translateX(-50%) translateY(${Math.max(0, gap) * -1}px)`;
+  }
+}
+let _tabPinBound = false;
+function _bindTabPin() {
+  if (_tabPinBound) return;
+  _tabPinBound = true;
+  const vv = window.visualViewport;
+  if (vv) { vv.addEventListener('resize', _pinTabBar); vv.addEventListener('scroll', _pinTabBar); }
+  window.addEventListener('scroll', _pinTabBar, { passive: true });
+  window.addEventListener('resize', _pinTabBar);
+}
+
 function updateAppChrome(page) {
   const authed = !!(state && state.user);
   const isAuthPage = page === 'landing' || page === 'login' || page === 'signup';
@@ -8031,6 +8078,7 @@ function updateAppChrome(page) {
     const activeTab = _TAB_OF_PAGE[page] || null;
     tabBar.querySelectorAll('.tab-item').forEach(b =>
       b.classList.toggle('active', b.dataset.tab === activeTab));
+    if (showTab) { _bindTabPin(); requestAnimationFrame(_pinTabBar); }
   }
   document.body.classList.toggle('has-tabbar', showTab);
 
@@ -18019,28 +18067,31 @@ async function logWorkoutFromPhoto(btn, encoded) {
 function trackCoachViewport() {
   const vv = window.visualViewport;
   if (!vv) return;
-  const nav = document.getElementById('mainNav');
   const page = document.getElementById('page-coach');
   if (!document.body.classList.contains('coach-chat-active')) {
     // Not in chat → make sure we leave no inline transforms behind on other pages.
-    if (nav) nav.style.transform = '';
+    if (page) { page.style.transform = ''; page.style.height = ''; }
+    document.body.classList.remove('coach-kb-open');
+    return;
+  }
+  // The top bar is hidden in chat now, so there's no nav to glue. CSS (100dvh)
+  // already makes the page exactly full-screen when the keyboard is CLOSED — we
+  // must NOT set an explicit height then, or a stale value pins the composer up.
+  const kbOpen = (window.innerHeight - vv.height) > 80;
+  document.body.classList.toggle('coach-kb-open', kbOpen);
+  if (!kbOpen) {
+    // Keyboard closed: hand layout back to CSS. Clearing these is what un-sticks
+    // the composer after the photo/file menu dismisses the keyboard.
     if (page) { page.style.transform = ''; page.style.height = ''; }
     return;
   }
+  // Keyboard open: glue the page to the visual viewport so the composer rides just
+  // above the keyboard, moving WITH iOS's animation rather than against it.
   const offset = Math.max(0, Math.round(vv.offsetTop));
-  const navH = nav ? Math.round(nav.getBoundingClientRect().height) : 56;
-  if (navH > 0) document.documentElement.style.setProperty('--coach-nav-h', navH + 'px');
-  if (nav) nav.style.transform = `translateY(${offset}px)`;
   if (page) {
-    // Chat spans the FULL visible area (behind the now-transparent nav) so a line
-    // or two of messages shows through above the buttons for a more open feel. The
-    // messages container is padded down by navH so the first line clears the nav.
     page.style.transform = `translateY(${offset}px)`;
     page.style.height = Math.max(0, Math.round(vv.height)) + 'px';
   }
-  // Keyboard up → it already covers the home-indicator zone, so drop the
-  // composer's safe-area bottom padding to give back that dead space.
-  document.body.classList.toggle('coach-kb-open', (window.innerHeight - vv.height) > 40);
 }
 // Reset the inline styles we set, so leaving Coach can't leave the nav/page shifted.
 function resetCoachViewport() {
