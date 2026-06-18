@@ -106,10 +106,11 @@ html, body {
   -webkit-text-size-adjust: 100%;
   -webkit-touch-callout: none;
   text-rendering: optimizeLegibility;
-  /* Kill the document rubber-band on both axes. The vertical bounce was letting
-     the whole page fly up off-screen on a fast/held scroll, dragging the floating
-     bar with it. */
-  overscroll-behavior: none;
+  /* Lock horizontal rubber-band, but KEEP the natural vertical bounce so scrolling
+     has a soft landing instead of a hard stop. (The floating tab bar no longer
+     reacts to scroll, so the bounce doesn't drag it around anymore.) */
+  overscroll-behavior-x: none;
+  overscroll-behavior-y: auto;
   /* Custom scrollbar, minimalist dark, no chunky browser default */
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
@@ -402,10 +403,12 @@ body.on-landing #landingNav { display: none !important; }
 
 /* App top bar shows the wordmark only (no logo icon), a notch larger so the
    brand reads cleanly on its own. Stays tidy down to the smallest phones. */
-.logo-wordmark-only span { font-size: 27px; }
+.logo-wordmark-only span { font-size: 31px; }
 @media (max-width: 480px) {
-  .logo-wordmark-only span { font-size: 24px; }
+  .logo-wordmark-only span { font-size: 28px; }
 }
+/* A little breathing room from the screen edge so the wordmark doesn't hug it. */
+#mainNav .nav-brand { padding-left: 4px; }
 
 .logo-mark {
   width: 32px; height: 32px;
@@ -632,6 +635,41 @@ body.has-tabbar #page-history.active,
 body.has-tabbar #page-race-planner.active {
   padding-bottom: calc(98px + var(--safe-bottom));
 }
+
+/* ─── Profile page (round 58, Strava-style athlete profile) ─── */
+.prof-head { display: flex; align-items: center; gap: 16px; padding: 6px 16px 0; }
+.prof-avatar-wrap { position: relative; flex-shrink: 0; cursor: pointer; }
+.prof-avatar { width: 84px; height: 84px; border-radius: 50%; background: var(--bg-3); display: flex; align-items: center; justify-content: center; font-size: 34px; font-weight: 700; color: var(--accent); border: 1px solid var(--border); }
+.prof-avatar-edit { position: absolute; bottom: -2px; right: -2px; width: 28px; height: 28px; border-radius: 50%; background: var(--accent); color: var(--bg); display: flex; align-items: center; justify-content: center; font-size: 13px; border: 2px solid var(--bg); }
+.prof-id { min-width: 0; }
+.prof-name { font-size: 22px; font-weight: 800; line-height: 1.15; }
+.prof-sub { font-size: 13px; color: var(--text-dim); margin-top: 3px; }
+.prof-joined { font-size: 12px; color: var(--text-mute); margin-top: 4px; }
+.prof-bio { padding: 14px 16px 0; font-size: 14px; color: var(--text-dim); line-height: 1.55; }
+.prof-edit-btn { margin: 16px 16px 0; width: calc(100% - 32px); }
+.prof-lifetime { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 18px 16px 4px; }
+.prof-life-item { background: var(--bg-2); border: 1px solid var(--border); border-radius: 14px; padding: 14px 6px; text-align: center; }
+.prof-life-n { font-size: 17px; font-weight: 800; font-family: 'JetBrains Mono', monospace; white-space: nowrap; }
+.prof-life-l { font-size: 10px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.4px; margin-top: 4px; }
+.prof-section-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-dim); padding: 24px 16px 10px; }
+.prof-sport-tabs { display: flex; gap: 6px; padding: 0 16px 14px; }
+.prof-sport-tab { flex: 1; padding: 10px 6px; border: 1px solid var(--border); background: var(--bg-2); color: var(--text-dim); border-radius: 12px; font-size: 13px; font-weight: 600; font-family: inherit; cursor: pointer; transition: background 0.15s, color 0.15s, border-color 0.15s; -webkit-tap-highlight-color: transparent; }
+.prof-sport-tab.active { background: var(--accent-soft); border-color: var(--accent-border); color: var(--accent); }
+.prof-sport-pane { padding: 0 16px; }
+.prof-pb-wrap { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.prof-pb { flex: 1; min-width: 90px; background: linear-gradient(135deg, rgba(0,229,160,0.06), transparent); border: 1px solid var(--accent-border); border-radius: 12px; padding: 11px 13px; }
+.prof-pb span { display: block; font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 3px; }
+.prof-pb b { font-size: 18px; font-weight: 800; font-family: 'JetBrains Mono', monospace; }
+.prof-empty { font-size: 13px; color: var(--text-mute); padding: 10px 0; line-height: 1.5; }
+.prof-stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.prof-stat { background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px; padding: 12px 6px; text-align: center; }
+.prof-stat-n { font-size: 16px; font-weight: 800; font-family: 'JetBrains Mono', monospace; white-space: nowrap; }
+.prof-stat-l { font-size: 10px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.4px; margin-top: 3px; }
+.prof-edit-sheet { background: var(--bg-2); border: 1px solid var(--border); border-radius: 20px 20px 0 0; padding: 10px 18px calc(22px + var(--safe-bottom)); max-width: 480px; width: 100%; max-height: 88vh; overflow-y: auto; }
+.prof-edit-handle { width: 40px; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.18); margin: 6px auto 14px; }
+.prof-edit-title { font-size: 18px; font-weight: 800; margin-bottom: 14px; }
+.prof-edit-divider { font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.5px; margin: 16px 0 10px; padding-top: 14px; border-top: 1px solid var(--border); }
+@media (min-width: 560px) { .prof-edit-sheet { border-radius: 18px; margin-bottom: 5vh; } }
 
 /* ═══ PLAN FEED (day-by-day card stack, replaces the cramped month grid) ═══ */
 .pf-feed { margin-top: 4px; }
@@ -4584,7 +4622,7 @@ body.on-auth .container {
       <button class="nav-icon-btn nav-gear" id="navGearBtn" onclick="navigate('settings')" aria-label="Settings">
         <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
       </button>
-      <button class="nav-user-btn" onclick="navigate('settings')" aria-label="Account">
+      <button class="nav-user-btn" onclick="navigate('profile')" aria-label="Profile">
         <div class="user-avatar" id="navAvatar">A</div>
       </button>
     </div>
@@ -5228,6 +5266,11 @@ body.on-auth .container {
 </div>
 
 <!-- SETTINGS -->
+<!-- PROFILE (Strava-style athlete profile, opened from the avatar) -->
+<div class="page" id="page-profile">
+  <div id="profileContent"></div>
+</div>
+
 <div class="page" id="page-settings">
   <div class="section-title" data-i18n="settings.title">Settings</div>
   <p class="section-sub" data-i18n="settings.sub">Edit your profile, training zones, and preferences.</p>
@@ -5981,6 +6024,9 @@ async function loadProfile() {
     avatarUrl: data.avatar_url || null,
     bio: data.bio || '',
     displayName: data.display_name || data.name || null,
+    location: data.location || null,
+    primarySport: data.primary_sport || null,
+    createdAt: data.created_at || null,
     // ─── Subscription state ───
     subscriptionTier: data.subscription_tier || 'free',
     trialEndsAt: data.trial_ends_at || null,
@@ -8029,7 +8075,7 @@ const _TAB_OF_PAGE = {
 // settings, help, upgrade and the auth/landing pages do NOT.
 const _TABBAR_PAGES = new Set(['dashboard', 'plan', 'trends', 'upload', 'history', 'race-planner']);
 // "Pushed" detail pages get a back arrow + centered title, no tab bar.
-const _PUSHED_TITLES = { settings: 'Settings', help: 'Help & FAQ', upgrade: 'Stryxs Pro' };
+const _PUSHED_TITLES = { settings: 'Settings', help: 'Help & FAQ', upgrade: 'Stryxs Pro', profile: 'Profile' };
 let _navPrev = 'dashboard';
 
 function _currentPageId() {
@@ -8184,6 +8230,7 @@ function navigate(page) {
   if (page === 'history') renderHistory();
   if (page === 'trends') renderTrends();
   if (page === 'settings') renderSettings();
+  if (page === 'profile') renderProfile();
   if (page === 'help') renderHelpCategories();
   if (page === 'upgrade') renderUpgradePage();
   if (page === 'upload') {
@@ -13004,6 +13051,7 @@ async function renderDashTodayCard(intake) {
   let todaysPlanned = null;
   let alreadyCompleted = false;
   let allTodaysPlanned = [];
+  let completedSportsToday = [];
   try {
     const { data: planned } = await sb.from('planned_workouts')
       .select('*')
@@ -13029,6 +13077,7 @@ async function renderDashTodayCard(intake) {
         .neq('activity_classification', 'daily_activity');
 
       const completedSports = (completedToday || []).map(w => normalizeSport(w.sport));
+      completedSportsToday = completedSports;
       // Mark complete only if at least one completed workout matches a planned sport
       alreadyCompleted = completedSports.some(cs => plannedSports.includes(cs));
     }
@@ -13066,6 +13115,42 @@ async function renderDashTodayCard(intake) {
         </div>
       </div>
     `;
+    return;
+  }
+
+  // ═══ STATE 3b: MULTIPLE sessions today (brick days, double days) ═══
+  // A single card listing each session, with a per-session done check. Previously
+  // only the first of the day showed, hiding the rest.
+  if (allTodaysPlanned.length > 1) {
+    const rows = allTodaysPlanned.map(w => {
+      const wType = w.workout_type || w.intensity_label || '';
+      const sportName = w.sport.charAt(0).toUpperCase() + w.sport.slice(1);
+      const rowTitle = wType ? `${sportName} · ${wType}` : sportName;
+      const dur = w.duration_minutes ? `${w.duration_minutes}min` : '';
+      const dist = w.distance_km ? formatDistance(w.distance_km, 1) : '';
+      const rowMeta = [dur, dist].filter(Boolean).join(' · ');
+      const done = completedSportsToday.includes(normalizeSport(w.sport));
+      const icon = typeof _sportIconHTML === 'function' ? _sportIconHTML(w.sport, 34)
+        : `<div style="font-size:24px;flex-shrink:0;">${({run:'🏃',bike:'🚴',swim:'🏊',strength:'💪',gym:'💪',mobility:'🧘',rest:'🛌'}[w.sport]||'⚡')}</div>`;
+      return `
+        <div style="display:flex; align-items:center; gap:12px;">
+          ${icon}
+          <div style="flex:1; min-width:0;">
+            <div style="font-size:14px; font-weight:700; ${done ? 'opacity:0.5; text-decoration:line-through;' : ''}">${escapeHtml(rowTitle)}</div>
+            ${rowMeta ? `<div style="font-size:12px; color:var(--text-dim);">${escapeHtml(rowMeta)}</div>` : ''}
+          </div>
+          <div style="flex-shrink:0; font-size:16px;">${done ? '<span style="color:var(--accent);">✓</span>' : '<span style="color:var(--text-mute);">→</span>'}</div>
+        </div>`;
+    }).join('<div style="height:1px; background:var(--border); margin:2px 0;"></div>');
+    const doneCount = allTodaysPlanned.filter(w => completedSportsToday.includes(normalizeSport(w.sport))).length;
+    card.innerHTML = `
+      <div class="panel" style="margin-bottom:14px; background:linear-gradient(135deg, rgba(0,229,160,0.04), transparent); border-color:rgba(0,229,160,0.2); cursor:pointer;" onclick="openPlanWorkout('${today}')">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+          <div style="font-size:10px; color:var(--accent); text-transform:uppercase; letter-spacing:1.5px; font-weight:700;">Today · ${allTodaysPlanned.length} sessions</div>
+          ${doneCount > 0 ? `<div style="font-size:11px; color:var(--accent); font-weight:700; padding:3px 9px; background:rgba(0,229,160,0.12); border:1px solid rgba(0,229,160,0.3); border-radius:999px;">${doneCount}/${allTodaysPlanned.length} done</div>` : ''}
+        </div>
+        <div style="display:flex; flex-direction:column; gap:8px;">${rows}</div>
+      </div>`;
     return;
   }
 
@@ -25078,6 +25163,221 @@ function goToday() {
 // ═══════════════════════════════════════════════════════════
 // SETTINGS
 // ═══════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════
+// PROFILE PAGE (round 58) — Strava-style athlete profile, opened from the
+// avatar (the gear still goes to Settings). Identity header + lifetime totals
+// + a daily-activity streak + per-sport benchmarks. Editable via a sheet.
+// ════════════════════════════════════════════════════════════════
+function _profMinutes(wd) {
+  if (!wd) return 0;
+  if (wd.duration_minutes) return parseFloat(wd.duration_minutes) || 0;
+  if (wd.duration) { const d = parseFloat(wd.duration) || 0; return d > 600 ? d / 60 : d; }
+  if (wd.time && wd.time !== 'N/A' && wd.time !== '--' && typeof parseTimeToSeconds === 'function') {
+    const s = parseTimeToSeconds(wd.time); if (s > 0) return s / 60;
+  }
+  if (wd.moving_time) return parseFloat(wd.moving_time) / 60;
+  if (wd.elapsed_time) return parseFloat(wd.elapsed_time) / 60;
+  return 0;
+}
+function _profDistanceKm(sport, wd) {
+  if (!wd) return 0;
+  let d = parseFloat(wd.distance || wd.distance_km || 0) || 0;
+  if (d === 0 && sport === 'swim' && Array.isArray(wd.sets)) {
+    d = wd.sets.reduce((a, s) => a + (s.distance > 0 ? s.distance : 0), 0) / 1000;
+  }
+  return d;
+}
+function _profHrs(min) {
+  const h = min / 60;
+  if (h < 1) return Math.round(min) + ' min';
+  return (h >= 10 ? Math.round(h) : h.toFixed(1)) + ' h';
+}
+
+async function renderProfile() {
+  const el = document.getElementById('profileContent');
+  if (!el || !state.user) return;
+  el.innerHTML = `<div class="loading"><div class="spinner"></div>Loading your profile…</div>`;
+
+  const [wkRes, intakeRes] = await Promise.all([
+    sb.from('workouts').select('sport, workout_data, created_at').eq('user_id', state.user.id).neq('activity_classification', 'daily_activity'),
+    sb.from('athlete_intake').select('*').eq('user_id', state.user.id).maybeSingle(),
+  ]);
+  const workouts = wkRes.data || [];
+  const intake = intakeRes.data || {};
+  const p = state.profile || {};
+
+  // ── lifetime totals + daily-activity streak ──
+  let totalDist = 0, totalMin = 0;
+  const dayset = new Set();
+  workouts.forEach(w => {
+    totalDist += _profDistanceKm(w.sport, w.workout_data);
+    totalMin += _profMinutes(w.workout_data);
+    dayset.add(toLocalYMD(new Date(w.created_at)));
+  });
+  // Current streak: consecutive days (ending today, or yesterday if nothing yet
+  // today) with at least one logged activity. Strava-style "keep it going daily".
+  let streak = 0; const cur = new Date();
+  if (!dayset.has(toLocalYMD(cur))) cur.setDate(cur.getDate() - 1);
+  while (dayset.has(toLocalYMD(cur))) { streak++; cur.setDate(cur.getDate() - 1); }
+
+  const name = state.user.name || p.displayName || 'Athlete';
+  const initial = (name[0] || 'A').toUpperCase();
+  const joined = p.createdAt ? new Date(p.createdAt) : null;
+  const joinedStr = joined ? joined.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : null;
+  const avatar = p.avatarUrl
+    ? `<div class="prof-avatar" style="background-image:url('${p.avatarUrl}');background-size:cover;background-position:center;"></div>`
+    : `<div class="prof-avatar">${initial}</div>`;
+
+  // ── per-sport aggregates (all-time / this year / this week) ──
+  const sports = ['run', 'bike', 'swim'];
+  const sportMeta = { run: { label: 'Run', emoji: '🏃' }, bike: { label: 'Bike', emoji: '🚴' }, swim: { label: 'Swim', emoji: '🏊' } };
+  const now = new Date(); const yStart = new Date(now.getFullYear(), 0, 1);
+  const weekAgo = new Date(now.getTime() - 7 * 86400000);
+  const stat = {}; sports.forEach(s => stat[s] = { n: 0, dist: 0, min: 0, yN: 0, yDist: 0, wN: 0, wDist: 0 });
+  workouts.forEach(w => {
+    const s = normalizeSport(w.sport); if (!stat[s]) return;
+    const d = _profDistanceKm(w.sport, w.workout_data), mn = _profMinutes(w.workout_data), t = new Date(w.created_at);
+    stat[s].n++; stat[s].dist += d; stat[s].min += mn;
+    if (t >= yStart) { stat[s].yN++; stat[s].yDist += d; }
+    if (t >= weekAgo) { stat[s].wN++; stat[s].wDist += d; }
+  });
+
+  const runPBs = [['5K', intake.pb_5k], ['10K', intake.pb_10k], ['Half', intake.pb_half], ['Marathon', intake.pb_marathon]].filter(x => x[1]);
+  const css = p.trainingZones && p.trainingZones.swim_css_per_100m;
+  const ftp = p.bikeFtp;
+
+  const sportBlock = (s) => {
+    const st = stat[s];
+    const pbRows = s === 'run'
+      ? (runPBs.length ? runPBs.map(([d, t]) => `<div class="prof-pb"><span>${d}</span><b>${escapeHtml(t)}</b></div>`).join('') : `<div class="prof-empty">No run PBs yet. Add them with Edit, or just tell Coach in chat.</div>`)
+      : s === 'bike'
+        ? (ftp ? `<div class="prof-pb"><span>FTP</span><b>${ftp} W</b></div>` : `<div class="prof-empty">No FTP set yet. Add it with Edit, or tell Coach.</div>`)
+        : (css ? `<div class="prof-pb"><span>CSS</span><b>${escapeHtml(String(css))}<span style="font-size:11px;"> /100m</span></b></div>` : `<div class="prof-empty">No CSS set yet. Add it with Edit, or tell Coach.</div>`);
+    return `
+      <div class="prof-sport-pane" data-sport="${s}" style="${s === 'run' ? '' : 'display:none;'}">
+        <div class="prof-pb-wrap">${pbRows}</div>
+        <div class="prof-stat-grid">
+          <div class="prof-stat"><div class="prof-stat-n">${st.n}</div><div class="prof-stat-l">activities</div></div>
+          <div class="prof-stat"><div class="prof-stat-n">${formatDistance(st.dist, 0)}</div><div class="prof-stat-l">all-time</div></div>
+          <div class="prof-stat"><div class="prof-stat-n">${_profHrs(st.min)}</div><div class="prof-stat-l">total time</div></div>
+          <div class="prof-stat"><div class="prof-stat-n">${st.yN}</div><div class="prof-stat-l">${now.getFullYear()}</div></div>
+          <div class="prof-stat"><div class="prof-stat-n">${formatDistance(st.yDist, 0)}</div><div class="prof-stat-l">this year</div></div>
+          <div class="prof-stat"><div class="prof-stat-n">${formatDistance(st.wDist, 0)}</div><div class="prof-stat-l">this week</div></div>
+        </div>
+      </div>`;
+  };
+
+  const primaryLabel = p.primarySport ? (sportMeta[normalizeSport(p.primarySport)] ? sportMeta[normalizeSport(p.primarySport)].label : (p.primarySport.charAt(0).toUpperCase() + p.primarySport.slice(1))) : null;
+  const subLine = [primaryLabel, p.location].filter(Boolean).map(escapeHtml).join('  ·  ');
+
+  el.innerHTML = `
+    <input type="file" id="profileAvatarInput" accept="image/*" style="display:none;" onchange="handleAvatarUpload(event); setTimeout(function(){ if(document.getElementById('page-profile').classList.contains('active')) renderProfile(); }, 1800);" />
+    <div class="prof-head">
+      <div class="prof-avatar-wrap" onclick="document.getElementById('profileAvatarInput').click()">
+        ${avatar}
+        <div class="prof-avatar-edit">📷</div>
+      </div>
+      <div class="prof-id">
+        <div class="prof-name">${escapeHtml(name)}</div>
+        ${subLine ? `<div class="prof-sub">${subLine}</div>` : ''}
+        ${joinedStr ? `<div class="prof-joined">Member since ${joinedStr}</div>` : ''}
+      </div>
+    </div>
+    ${p.bio ? `<div class="prof-bio">${escapeHtml(p.bio)}</div>` : ''}
+    <button class="btn ghost prof-edit-btn" onclick="openProfileEditModal()">Edit profile</button>
+
+    <div class="prof-lifetime">
+      <div class="prof-life-item"><div class="prof-life-n">${workouts.length}</div><div class="prof-life-l">activities</div></div>
+      <div class="prof-life-item"><div class="prof-life-n">${formatDistance(totalDist, 0)}</div><div class="prof-life-l">distance</div></div>
+      <div class="prof-life-item"><div class="prof-life-n">${_profHrs(totalMin)}</div><div class="prof-life-l">time</div></div>
+      <div class="prof-life-item"><div class="prof-life-n">🔥 ${streak}</div><div class="prof-life-l">day streak</div></div>
+    </div>
+
+    <div class="prof-section-title">Benchmarks</div>
+    <div class="prof-sport-tabs">
+      ${sports.map(s => `<button class="prof-sport-tab${s === 'run' ? ' active' : ''}" data-sport="${s}" onclick="_profSelectSport('${s}')">${sportMeta[s].emoji} ${sportMeta[s].label}</button>`).join('')}
+    </div>
+    ${sports.map(sportBlock).join('')}
+    <div style="height: 8px;"></div>
+  `;
+}
+
+function _profSelectSport(s) {
+  document.querySelectorAll('.prof-sport-tab').forEach(b => b.classList.toggle('active', b.dataset.sport === s));
+  document.querySelectorAll('.prof-sport-pane').forEach(pane => pane.style.display = (pane.dataset.sport === s ? 'block' : 'none'));
+}
+
+async function openProfileEditModal() {
+  if (document.getElementById('profEditModal')) return;
+  const { data: intake } = await sb.from('athlete_intake').select('sex, weight_kg, height_cm, birth_date').eq('user_id', state.user.id).maybeSingle();
+  const p = state.profile || {};
+  const name = state.user.name || p.displayName || '';
+  const sportOpts = [['', '—'], ['run', 'Running'], ['bike', 'Cycling'], ['swim', 'Swimming'], ['triathlon', 'Triathlon'], ['other', 'Other']];
+  const m = document.createElement('div');
+  m.id = 'profEditModal';
+  m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:99999;display:flex;align-items:flex-end;justify-content:center;';
+  m.innerHTML = `
+    <div class="prof-edit-sheet">
+      <div class="prof-edit-handle"></div>
+      <div class="prof-edit-title">Edit profile</div>
+      <div class="field"><label>Name</label><input id="pe_name" value="${escapeHtml(name)}" placeholder="Your name" /></div>
+      <div class="field"><label>Description</label><textarea id="pe_bio" maxlength="280" placeholder="A short bio, your goals, your story" style="min-height:64px;">${escapeHtml(p.bio || '')}</textarea></div>
+      <div class="field"><label>Location</label><input id="pe_loc" value="${escapeHtml(p.location || '')}" placeholder="e.g. Lyon, France" /></div>
+      <div class="field"><label>Primary sport</label>${renderCustomSelect ? renderCustomSelect('pe_sport', p.primarySport || '', sportOpts.map(([v, l]) => ({ value: v, label: l }))) : `<select id="pe_sport">${sportOpts.map(([v, l]) => `<option value="${v}"${(p.primarySport || '') === v ? ' selected' : ''}>${l}</option>`).join('')}</select>`}</div>
+      <div class="prof-edit-divider">Private — used by Coach, not shown on your profile</div>
+      <div class="field"><label>Birth date</label><input type="date" id="pe_dob" value="${(intake && intake.birth_date) || ''}" style="color-scheme:dark;" /></div>
+      <div class="field"><label>Gender</label>${renderCustomSelect ? renderCustomSelect('pe_sex', (intake && intake.sex) || '', [{ value: '', label: 'Prefer not to say' }, { value: 'male', label: 'Male' }, { value: 'female', label: 'Female' }]) : ''}</div>
+      <div style="display:flex;gap:10px;">
+        <div class="field" style="flex:1;"><label>Weight (kg)</label><input type="number" id="pe_wt" value="${(intake && intake.weight_kg) || ''}" step="0.1" placeholder="kg" /></div>
+        <div class="field" style="flex:1;"><label>Height (cm)</label><input type="number" id="pe_ht" value="${(intake && intake.height_cm) || ''}" placeholder="cm" /></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <button class="btn ghost" style="flex:1;" onclick="closeProfileEditModal()">Cancel</button>
+        <button class="btn" style="flex:1.4;" id="peSaveBtn" onclick="saveProfileEdits()">Save</button>
+      </div>
+    </div>`;
+  document.body.appendChild(m);
+  m.addEventListener('click', e => { if (e.target === m) closeProfileEditModal(); });
+}
+function closeProfileEditModal() { document.getElementById('profEditModal')?.remove(); }
+
+async function saveProfileEdits() {
+  const btn = document.getElementById('peSaveBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  const val = id => { const e = document.getElementById(id); return e ? (e.value || '') : ''; };
+  const name = val('pe_name').trim();
+  const bio = val('pe_bio').trim();
+  const loc = val('pe_loc').trim();
+  const sport = val('pe_sport');
+  const dob = val('pe_dob') || null;
+  const sex = val('pe_sex') || null;
+  const wt = parseFloat(val('pe_wt')) || null;
+  const ht = parseFloat(val('pe_ht')) || null;
+  try {
+    await sb.from('profiles').update({ display_name: name || null, bio, location: loc || null, primary_sport: sport || null }).eq('id', state.user.id);
+    // Derive age from DOB so the coaching maths (which read intake.age) stay correct.
+    let age = null;
+    if (dob) {
+      const b = new Date(dob + 'T12:00:00'); const t = new Date();
+      age = t.getFullYear() - b.getFullYear() - ((t.getMonth() < b.getMonth() || (t.getMonth() === b.getMonth() && t.getDate() < b.getDate())) ? 1 : 0);
+      if (age < 0 || age > 120) age = null;
+    }
+    const intakeUpd = { birth_date: dob, sex, weight_kg: wt, height_cm: ht };
+    if (age) intakeUpd.age = age;
+    await sb.from('athlete_intake').update(intakeUpd).eq('user_id', state.user.id);
+    if (name) state.user.name = name;
+    state.profile = { ...state.profile, bio, location: loc || null, primarySport: sport || null, displayName: name || null };
+    closeProfileEditModal();
+    toast('Profile updated');
+    renderProfile();
+    if (typeof updateNavAvatar === 'function') updateNavAvatar();
+  } catch (e) {
+    console.error('[Stryxs] profile save failed:', e);
+    toast('Could not save, try again');
+    if (btn) { btn.disabled = false; btn.textContent = 'Save'; }
+  }
+}
+
 async function renderSettings() {
   const el = document.getElementById('settingsContent');
   if (!el || !state.user) return;
