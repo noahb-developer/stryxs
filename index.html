@@ -513,6 +513,106 @@ body.on-landing #landingNav { display: none !important; }
 .training-tab.active { background: rgba(0, 229, 160, 0.14); color: var(--accent); }
 .training-tab:not(.active):active { background: rgba(255, 255, 255, 0.04); }
 
+/* ════════════════════════════════════════════════════════════════════
+   iOS-STYLE NAV REMODEL (round 57): floating top bar + bottom tab bar
+   + full-screen Coach. New class names so nothing collides; #mainNav
+   overrides come AFTER the original .nav rule so they win the cascade.
+   ════════════════════════════════════════════════════════════════════ */
+
+/* Floating, line-less top bar (glass). Only the in-app nav; landing/auth
+   keep the original .nav look. */
+#mainNav {
+  border-bottom: none;
+  background: rgba(10, 14, 26, 0.62);
+  backdrop-filter: blur(22px) saturate(180%);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  padding-top: calc(10px + var(--safe-top));
+  padding-bottom: 10px;
+}
+#mainNav .nav-left { grid-column: 1; display: flex; align-items: center; gap: 6px; justify-self: start; }
+#mainNav .nav-actions { grid-column: 3; display: flex; align-items: center; gap: 2px; justify-self: end; }
+#mainNav .nav-title {
+  grid-column: 2; justify-self: center; display: none;
+  font-size: 16px; font-weight: 700; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60vw;
+}
+.nav-back, .nav-icon-btn {
+  width: 38px; height: 38px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: transparent; border: none; border-radius: 11px;
+  color: var(--text); cursor: pointer; padding: 0;
+  -webkit-tap-highlight-color: transparent; transition: background 0.15s, transform 0.1s;
+}
+.nav-back:active, .nav-icon-btn:active { background: rgba(255,255,255,0.07); transform: scale(0.92); }
+.nav-back { display: none; }
+.nav-gear { display: none; }
+/* Per-page chrome modes (set by updateAppChrome) */
+#mainNav.nav-home .nav-gear { display: flex; }
+#mainNav.nav-pushed .nav-back { display: flex; }
+#mainNav.nav-pushed .nav-brand { display: none; }
+#mainNav.nav-pushed .nav-title { display: block; }
+#mainNav.nav-pushed .nav-actions { display: none; }
+
+/* ─── Floating bottom tab bar ─── */
+.tab-bar {
+  position: fixed; left: 50%; transform: translateX(-50%);
+  bottom: calc(10px + var(--safe-bottom));
+  z-index: 200;
+  display: flex; align-items: stretch; gap: 2px;
+  width: min(440px, calc(100% - 24px));
+  padding: 7px 8px;
+  background: rgba(18, 24, 42, 0.72);
+  backdrop-filter: blur(30px) saturate(180%);
+  -webkit-backdrop-filter: blur(30px) saturate(180%);
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 24px;
+  box-shadow: 0 14px 44px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05);
+}
+.tab-item {
+  position: relative; flex: 1;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 7px 2px 5px;
+  background: transparent; border: none; border-radius: 16px;
+  color: var(--text-mute); font-family: inherit; cursor: pointer;
+  transition: color 0.18s, background 0.18s, transform 0.12s;
+  -webkit-tap-highlight-color: transparent;
+}
+.tab-item .tab-ico { display: flex; align-items: center; justify-content: center; height: 24px; }
+.tab-item .tab-ico svg { width: 23px; height: 23px; }
+.tab-item .tab-label { font-size: 10px; font-weight: 600; letter-spacing: 0.2px; }
+.tab-item:active { transform: scale(0.9); }
+.tab-item.active { color: var(--accent); background: rgba(0,229,160,0.10); }
+.tab-dot {
+  position: absolute; top: 5px; left: calc(50% + 7px);
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #ef4444; box-shadow: 0 0 0 2px rgba(18,24,42,0.95);
+}
+
+/* ─── Full-screen Coach back button (shown only in chat) ─── */
+.coach-back-fab {
+  position: fixed; top: calc(var(--safe-top) + 10px); left: max(12px, var(--safe-left));
+  width: 40px; height: 40px; z-index: 250;
+  display: none; align-items: center; justify-content: center;
+  background: rgba(18,24,42,0.55);
+  backdrop-filter: blur(18px) saturate(180%); -webkit-backdrop-filter: blur(18px) saturate(180%);
+  border: 1px solid rgba(255,255,255,0.09); border-radius: 50%;
+  color: var(--text); cursor: pointer; padding: 0;
+  box-shadow: 0 6px 22px rgba(0,0,0,0.45); transition: transform 0.1s, background 0.15s;
+}
+.coach-back-fab:active { transform: scale(0.92); background: rgba(28,36,60,0.7); }
+body.coach-chat-active .coach-back-fab { display: flex; }
+
+/* Extra bottom room so the floating tab bar never covers page content. Repeats
+   the id selectors so it outranks the per-page padding rules below. */
+body.has-tabbar #page-dashboard.active,
+body.has-tabbar #page-plan.active,
+body.has-tabbar #page-trends.active,
+body.has-tabbar #page-upload.active,
+body.has-tabbar #page-history.active,
+body.has-tabbar #page-race-planner.active {
+  padding-bottom: calc(98px + var(--safe-bottom));
+}
+
 /* ═══ PLAN FEED (day-by-day card stack, replaces the cramped month grid) ═══ */
 .pf-feed { margin-top: 4px; }
 .pf-day { display: flex; gap: 10px; position: relative; }
@@ -2732,9 +2832,9 @@ body.coach-chat-active .coach-chat {
 /* Centered reading column on wide screens, full width on phones */
 body.coach-chat-active .chat-messages {
   max-width: 780px; width: 100%; margin: 0 auto;
-  /* Top padding clears the (now transparent) fixed nav so the first message
-     doesn't start under the buttons; messages scroll up behind it. */
-  padding: calc(var(--coach-nav-h, 56px) + 14px) 20px 28px;
+  /* The top bar is hidden in chat now (just a floating back button), so the
+     chat itself reserves room for the notch + the back FAB. */
+  padding: calc(var(--safe-top) + 62px) 20px 28px;
   gap: 22px;
 }
 body.coach-chat-active .chat-input-row {
@@ -4442,19 +4542,24 @@ body.on-auth .container {
 
 <nav class="nav" id="mainNav" style="display:none;">
   <div class="nav-inner">
-    <button id="navHamburger" class="hamburger" onclick="toggleNavMenu()" aria-label="Open menu" style="position: relative;">
-      <span></span><span></span><span></span>
-      <span class="hamburger-badge" id="hamburgerCoachBadge" style="display: none;"></span>
-    </button>
-    <div class="logo logo-wordmark-only" onclick="navigate('dashboard')">
-      <span>Stryx<em>s</em></span>
+    <div class="nav-left">
+      <button class="nav-back" id="navBack" onclick="navBackAction()" aria-label="Back">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+      <div class="logo logo-wordmark-only nav-brand" onclick="navigate('dashboard')">
+        <span>Stryx<em>s</em></span>
+      </div>
     </div>
-    <div style="display: flex; align-items: center; gap: 4px;">
+    <div class="nav-title" id="navPushTitle"></div>
+    <div class="nav-actions" id="navActions">
       <button class="nav-bell-btn" id="navBellBtn" onclick="toggleNotifPanel()" aria-label="Notifications">
         <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
         <span class="nav-bell-dot" id="navBellDot"></span>
       </button>
-      <button class="nav-user-btn" onclick="toggleAvatarMenu(event)" aria-label="Account menu">
+      <button class="nav-icon-btn nav-gear" id="navGearBtn" onclick="navigate('settings')" aria-label="Settings">
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+      <button class="nav-user-btn" onclick="navigate('settings')" aria-label="Account">
         <div class="user-avatar" id="navAvatar">A</div>
       </button>
     </div>
@@ -4525,6 +4630,36 @@ body.on-auth .container {
     <span data-i18n="nav.logout">Log out</span>
   </button>
 </div>
+
+<!-- iOS-style floating bottom tab bar (primary navigation) -->
+<nav class="tab-bar" id="tabBar" style="display:none;" aria-label="Primary">
+  <button class="tab-item" data-tab="dashboard" onclick="navigate('dashboard')" aria-label="Home">
+    <span class="tab-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5L12 3l9 6.5"/><path d="M5 9v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9"/></svg></span>
+    <span class="tab-label">Home</span>
+  </button>
+  <button class="tab-item" data-tab="coach" onclick="navigate('coach')" aria-label="Coach">
+    <span class="tab-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z"/></svg></span>
+    <span class="tab-label">Coach</span>
+    <span class="tab-dot" id="tabCoachDot" style="display:none;"></span>
+  </button>
+  <button class="tab-item" data-tab="plan" onclick="navigate('plan')" aria-label="Plan">
+    <span class="tab-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16.5" rx="2.5"/><path d="M3 9.5h18"/><path d="M8 2.5v4M16 2.5v4"/></svg></span>
+    <span class="tab-label">Plan</span>
+  </button>
+  <button class="tab-item" data-tab="trends" onclick="navigate('trends')" aria-label="Trends">
+    <span class="tab-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M18 20V10M12 20V4M6 20v-6"/></svg></span>
+    <span class="tab-label">Trends</span>
+  </button>
+  <button class="tab-item" data-tab="upload" onclick="navigate('upload')" aria-label="Training">
+    <span class="tab-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 8L9 4l-3 8H2"/></svg></span>
+    <span class="tab-label">Training</span>
+  </button>
+</nav>
+
+<!-- Floating back button for the full-screen Coach chat (no top/bottom bar there) -->
+<button class="coach-back-fab" id="coachBackFab" onclick="navBackAction()" aria-label="Back">
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+</button>
 
 <nav class="nav" id="landingNav">
   <div class="nav-inner">
@@ -4938,7 +5073,6 @@ body.on-auth .container {
   <div class="training-tabs">
     <button class="training-tab active" onclick="navigate('upload')">➕ Log & Analyze</button>
     <button class="training-tab" onclick="navigate('history')">📂 History</button>
-    <button class="training-tab" onclick="navigate('trends')">📈 Trends</button>
   </div>
   <div class="section-title">Log a workout</div>
   <p class="section-sub">Sync from Strava, upload a file, or enter it by hand.</p>
@@ -5026,7 +5160,6 @@ body.on-auth .container {
   <div class="training-tabs">
     <button class="training-tab" onclick="navigate('upload')">➕ Log & Analyze</button>
     <button class="training-tab active" onclick="navigate('history')">📂 History</button>
-    <button class="training-tab" onclick="navigate('trends')">📈 Trends</button>
   </div>
   <div class="section-title" data-i18n="history.title">Workout History</div>
   <p class="section-sub" id="historyCount">Your recent workouts</p>
@@ -5035,11 +5168,6 @@ body.on-auth .container {
 
 <!-- TRENDS -->
 <div class="page" id="page-trends">
-  <div class="training-tabs">
-    <button class="training-tab" onclick="navigate('upload')">➕ Log & Analyze</button>
-    <button class="training-tab" onclick="navigate('history')">📂 History</button>
-    <button class="training-tab active" onclick="navigate('trends')">📈 Trends</button>
-  </div>
   <div class="section-title" data-i18n="trends.title">Training Trends</div>
   <p class="section-sub" data-i18n="trends.subtitle">Patterns across your recent training. The bigger picture Strava and Garmin don't show.</p>
   <div id="trendsContent"></div>
@@ -7844,8 +7972,10 @@ async function runSamplePlanAudit() {
 function setCoachUnread(hasUnread) {
   const menuBadge = document.getElementById('coachUnreadBadge');
   const hamBadge = document.getElementById('hamburgerCoachBadge');
+  const tabDot = document.getElementById('tabCoachDot');
   if (menuBadge) menuBadge.style.display = hasUnread ? 'block' : 'none';
   if (hamBadge) hamBadge.style.display = hasUnread ? 'block' : 'none';
+  if (tabDot) tabDot.style.display = hasUnread ? 'block' : 'none';
   try {
     if (hasUnread) localStorage.setItem('stryxs_coach_unread', '1');
     else localStorage.removeItem('stryxs_coach_unread');
@@ -7858,13 +7988,78 @@ function checkCoachUnreadOnLoad() {
   } catch (e) {}
 }
 
+// ════════════════════════════════════════════════════════════════
+// APP CHROME CONTROLLER (round 57 iOS remodel)
+// Drives the floating top bar + the bottom tab bar + the full-screen Coach,
+// all off the SAME navigate() routing. Pure chrome — never touches page content.
+// ════════════════════════════════════════════════════════════════
+// Which bottom tab "owns" each page (sub-pages map to their parent tab).
+const _TAB_OF_PAGE = {
+  dashboard: 'dashboard', coach: 'coach',
+  plan: 'plan', 'race-planner': 'plan',
+  trends: 'trends',
+  upload: 'upload', history: 'upload',
+};
+// Pages that show the bottom tab bar (main tabs + their siblings). Coach,
+// settings, help, upgrade and the auth/landing pages do NOT.
+const _TABBAR_PAGES = new Set(['dashboard', 'plan', 'trends', 'upload', 'history', 'race-planner']);
+// "Pushed" detail pages get a back arrow + centered title, no tab bar.
+const _PUSHED_TITLES = { settings: 'Settings', help: 'Help & FAQ', upgrade: 'Stryxs Pro' };
+let _navPrev = 'dashboard';
+
+function _currentPageId() {
+  const a = document.querySelector('.page.active');
+  return a ? a.id.replace(/^page-/, '') : null;
+}
+
+// Back button target: wherever the user came from, falling back to Home.
+function navBackAction() {
+  const dest = (_navPrev && _navPrev !== _currentPageId()) ? _navPrev : 'dashboard';
+  navigate(dest);
+}
+
+function updateAppChrome(page) {
+  const authed = !!(state && state.user);
+  const isAuthPage = page === 'landing' || page === 'login' || page === 'signup';
+  const tabBar = document.getElementById('tabBar');
+  const nav = document.getElementById('mainNav');
+
+  // Bottom tab bar: authed main-tab pages only.
+  const showTab = authed && !isAuthPage && _TABBAR_PAGES.has(page);
+  if (tabBar) {
+    tabBar.style.display = showTab ? 'flex' : 'none';
+    const activeTab = _TAB_OF_PAGE[page] || null;
+    tabBar.querySelectorAll('.tab-item').forEach(b =>
+      b.classList.toggle('active', b.dataset.tab === activeTab));
+  }
+  document.body.classList.toggle('has-tabbar', showTab);
+
+  // Top bar modes. Coach is full-screen (its own floating back button), and the
+  // auth/landing pages have their own embedded nav, so the main nav hides there.
+  if (nav) {
+    if (!authed || isAuthPage || page === 'coach') {
+      if (page === 'coach') nav.style.display = 'none';
+    } else {
+      nav.style.display = 'block';
+      const pushed = Object.prototype.hasOwnProperty.call(_PUSHED_TITLES, page);
+      nav.classList.toggle('nav-pushed', pushed);
+      nav.classList.toggle('nav-home', page === 'dashboard');
+      const titleEl = document.getElementById('navPushTitle');
+      if (titleEl) titleEl.textContent = pushed ? _PUSHED_TITLES[page] : '';
+    }
+  }
+}
+
 function navigate(page) {
+  // Remember where we were so the back arrow can return there.
+  const _from = _currentPageId();
+  if (_from && _from !== page && !['login', 'signup', 'landing'].includes(_from)) _navPrev = _from;
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   const target = document.getElementById(`page-${page}`);
   if (target) target.classList.add('active');
   document.querySelectorAll('.nav-menu-item').forEach(t => t.classList.toggle('active', t.dataset.page === page));
-  // The single "Training" menu item covers the Log/History/Trends sub-tabs.
-  if (['upload', 'history', 'trends'].includes(page)) {
+  // Training now covers only Log & Analyze + History (Trends is its own tab).
+  if (['upload', 'history'].includes(page)) {
     const trainingItem = document.querySelector('.nav-menu-item[data-page-group="training"]');
     if (trainingItem) trainingItem.classList.add('active');
   }
@@ -7873,6 +8068,8 @@ function navigate(page) {
     const planItem = document.querySelector('.nav-menu-item[data-page-group="plan"]');
     if (planItem) planItem.classList.add('active');
   }
+  // Drive the floating top bar + bottom tab bar off this same navigation.
+  updateAppChrome(page);
   window.scrollTo({ top: 0, behavior: 'instant' });
 
   // Add body class so we know which page is active (for full-width landing styling)
@@ -25293,6 +25490,13 @@ async function renderSettings() {
               </div>
               <div style="color: var(--text-mute); font-size: 18px;">→</div>
             </a>
+            <button onclick="openFeedbackModal()" style="display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; background: var(--bg-elev); border: 1px solid var(--border); border-radius: 12px; color: var(--text); text-align: left; cursor: pointer; transition: border-color 0.15s;">
+              <div>
+                <div style="font-size: 14px; font-weight: 600;">Send feedback</div>
+                <div style="font-size: 12px; color: var(--text-dim); margin-top: 2px;">Tell us what's working or what's broken</div>
+              </div>
+              <div style="color: var(--text-mute); font-size: 18px;">→</div>
+            </button>
           </div>
         </div>
       </div>
