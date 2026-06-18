@@ -25249,10 +25249,10 @@ async function renderProfile() {
   const sportBlock = (s) => {
     const st = stat[s];
     const pbRows = s === 'run'
-      ? (runPBs.length ? runPBs.map(([d, t]) => `<div class="prof-pb"><span>${d}</span><b>${escapeHtml(t)}</b></div>`).join('') : `<div class="prof-empty">No run PBs yet. Add them with Edit, or just tell Coach in chat.</div>`)
+      ? (runPBs.length ? runPBs.map(([d, t]) => `<div class="prof-pb"><span>${d}</span><b>${escapeHtml(t)}</b></div>`).join('') : `<div class="prof-empty">No run PBs yet. Set them in Settings &rsaquo; Benchmarks, or just tell Coach.</div>`)
       : s === 'bike'
-        ? (ftp ? `<div class="prof-pb"><span>FTP</span><b>${ftp} W</b></div>` : `<div class="prof-empty">No FTP set yet. Add it with Edit, or tell Coach.</div>`)
-        : (css ? `<div class="prof-pb"><span>CSS</span><b>${escapeHtml(String(css))}<span style="font-size:11px;"> /100m</span></b></div>` : `<div class="prof-empty">No CSS set yet. Add it with Edit, or tell Coach.</div>`);
+        ? (ftp ? `<div class="prof-pb"><span>FTP</span><b>${ftp} W</b></div>` : `<div class="prof-empty">No FTP set yet. Set it in Settings &rsaquo; Benchmarks, or tell Coach.</div>`)
+        : (css ? `<div class="prof-pb"><span>CSS</span><b>${escapeHtml(String(css))}<span style="font-size:11px;"> /100m</span></b></div>` : `<div class="prof-empty">No CSS set yet. Set it in Settings &rsaquo; Benchmarks, or tell Coach.</div>`);
     return `
       <div class="prof-sport-pane" data-sport="${s}" style="${s === 'run' ? '' : 'display:none;'}">
         <div class="prof-pb-wrap">${pbRows}</div>
