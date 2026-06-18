@@ -106,7 +106,10 @@ html, body {
   -webkit-text-size-adjust: 100%;
   -webkit-touch-callout: none;
   text-rendering: optimizeLegibility;
-  overscroll-behavior-x: none;
+  /* Kill the document rubber-band on both axes. The vertical bounce was letting
+     the whole page fly up off-screen on a fast/held scroll, dragging the floating
+     bar with it. */
+  overscroll-behavior: none;
   /* Custom scrollbar, minimalist dark, no chunky browser default */
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
@@ -523,16 +526,18 @@ body.on-landing #landingNav { display: none !important; }
    keep the original .nav look. */
 #mainNav {
   border-bottom: none;
-  /* More transparent + heavier blur for the floating-glass feel. The notch
-     clearance comes from body{padding-top:safe-top} already, so DON'T add
-     safe-top here (that double-counted it and pushed the whole page down on
-     phones — PC was unaffected since safe-top is 0 there). */
-  background: rgba(10, 14, 26, 0.45);
-  backdrop-filter: blur(26px) saturate(180%);
-  -webkit-backdrop-filter: blur(26px) saturate(180%);
-  padding-top: 12px;
-  padding-bottom: 12px;
+  /* No bar at all — just the floating icons. (Earlier it read as a separate
+     coloured strip.) The notch clearance comes from body{padding-top:safe-top}
+     already, so DON'T add safe-top here (that double-counted it on phones). */
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  padding-top: 8px;
+  padding-bottom: 6px;
 }
+/* Keep the floating icons legible if any content scrolls up near them. */
+#mainNav .nav-inner { text-shadow: 0 1px 6px rgba(0, 0, 0, 0.5); }
+#mainNav .nav-actions svg, #mainNav .nav-back svg { filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.45)); }
 #mainNav .nav-left { grid-column: 1; display: flex; align-items: center; gap: 6px; justify-self: start; }
 #mainNav .nav-actions { grid-column: 3; display: flex; align-items: center; gap: 2px; justify-self: end; }
 #mainNav .nav-title {
@@ -568,13 +573,13 @@ body.on-landing #landingNav { display: none !important; }
   display: flex; align-items: stretch; gap: 2px;
   width: min(440px, calc(100% - 24px));
   padding: 7px 8px;
-  background: rgba(16, 21, 38, 0.5);
-  backdrop-filter: blur(34px) saturate(190%);
-  -webkit-backdrop-filter: blur(34px) saturate(190%);
+  /* Glassy but less blurry than before, and matched to the back-arrow FAB. */
+  background: rgba(16, 21, 38, 0.52);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: 24px;
   box-shadow: 0 14px 44px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06);
-  will-change: transform;
 }
 @media (min-width: 721px) {
   .tab-bar { bottom: 24px; }
@@ -604,12 +609,16 @@ body.on-landing #landingNav { display: none !important; }
   position: fixed; top: calc(var(--safe-top) + 10px); left: max(12px, var(--safe-left));
   width: 40px; height: 40px; z-index: 250;
   display: none; align-items: center; justify-content: center;
-  background: rgba(16,21,38,0.42);
-  backdrop-filter: blur(22px) saturate(190%); -webkit-backdrop-filter: blur(22px) saturate(190%);
+  /* Matched to the tab bar: same translucency + blur level. */
+  background: rgba(16,21,38,0.52);
+  backdrop-filter: blur(20px) saturate(180%); -webkit-backdrop-filter: blur(20px) saturate(180%);
   border: 1px solid rgba(255,255,255,0.08); border-radius: 50%;
   color: var(--text); cursor: pointer; padding: 0;
   box-shadow: 0 6px 22px rgba(0,0,0,0.45); transition: transform 0.1s, background 0.15s;
 }
+/* Optically centre the chevron in the circle (the glyph's stroke sits a hair
+   right of the geometric centre). */
+.coach-back-fab svg { display: block; margin-right: 2px; }
 .coach-back-fab:active { transform: scale(0.92); background: rgba(28,36,60,0.7); }
 body.coach-chat-active .coach-back-fab { display: flex; }
 
@@ -896,11 +905,11 @@ body.on-landing .container {
    padding or it doubles up and squeezes content into a narrow column on
    phones (the "restricted on the sides" feel). Vertical padding only. */
 #page-coach.active, #page-plan.active, #page-race-planner.active, #page-dashboard.active, #page-upload.active, #page-history.active, #page-settings.active {
-  padding: 24px 0 40px;
+  padding: 10px 0 40px;
 }
 @media (max-width: 720px) {
   #page-coach.active, #page-plan.active, #page-race-planner.active, #page-dashboard.active, #page-upload.active, #page-history.active, #page-settings.active {
-    padding: 12px 0 90px;
+    padding: 2px 0 90px;
   }
 }
 
@@ -8046,12 +8055,11 @@ function _pinTabBar() {
   if (!vv) { tb.style.transform = 'translateX(-50%)'; return; }
   const gap = Math.round(window.innerHeight - (vv.offsetTop + vv.height));
   if (gap > 140) {
-    // A keyboard is up (e.g. typing in a form on a tab page) — get the bar out of
-    // the way rather than floating it over the keyboard.
-    tb.style.opacity = '0'; tb.style.pointerEvents = 'none';
-    tb.style.transform = 'translateX(-50%)';
+    // A keyboard is up (typing in a form on a tab page) — tuck the bar away below
+    // the keyboard instead of floating it mid-screen. Slide, don't fade (no flicker).
+    tb.style.transform = 'translateX(-50%) translateY(200%)';
   } else {
-    tb.style.opacity = ''; tb.style.pointerEvents = '';
+    // Lift the bar by the toolbar height so it stays glued to the VISIBLE bottom.
     tb.style.transform = `translateX(-50%) translateY(${Math.max(0, gap) * -1}px)`;
   }
 }
@@ -8059,10 +8067,14 @@ let _tabPinBound = false;
 function _bindTabPin() {
   if (_tabPinBound) return;
   _tabPinBound = true;
+  // IMPORTANT: react only to viewport RESIZE (iOS toolbar show/hide, keyboard),
+  // NOT to scroll. Reacting per scroll-frame made the bar jump/pop around during
+  // momentum and overscroll. The toolbar changing size fires 'resize', which is
+  // all we need to keep it pinned to the visible bottom.
   const vv = window.visualViewport;
-  if (vv) { vv.addEventListener('resize', _pinTabBar); vv.addEventListener('scroll', _pinTabBar); }
-  window.addEventListener('scroll', _pinTabBar, { passive: true });
+  if (vv) vv.addEventListener('resize', _pinTabBar);
   window.addEventListener('resize', _pinTabBar);
+  window.addEventListener('orientationchange', () => setTimeout(_pinTabBar, 250));
 }
 
 function updateAppChrome(page) {
@@ -17855,6 +17867,11 @@ let coachAttachments = [];
 function coachPickAttachment() {
   const input = document.getElementById('coachFileInput');
   if (!input) return;
+  // Drop the keyboard FIRST. Otherwise the textarea keeps focus while the native
+  // picker is open, iOS stays in its keyboard-open layout, and the composer is
+  // left stranded "up in the air" after the picker dismisses.
+  const ta = document.getElementById('chatInput');
+  if (ta) ta.blur();
   input.value = '';
   input.click();
 }
