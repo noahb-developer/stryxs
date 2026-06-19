@@ -638,36 +638,40 @@ body.has-tabbar #page-profile.active {
 }
 
 /* ─── Profile page (round 58, athlete profile — our take on a Strava layout) ─── */
-#page-profile { position: relative; }
-.prof-glow { position: absolute; top: -60px; left: 50%; transform: translateX(-50%); width: 460px; max-width: 120%; height: 320px; pointer-events: none; z-index: 0;
-  background: radial-gradient(50% 60% at 50% 0%, rgba(0,229,160,0.16), rgba(0,196,255,0.05) 45%, transparent 72%); filter: blur(8px); }
-#page-profile > #profileContent > * { position: relative; z-index: 1; }
-.prof-edit-mini { position: absolute; top: 2px; right: 14px; z-index: 2; padding: 7px 16px; font-size: 13px; font-weight: 700; color: var(--accent);
-  background: var(--accent-soft); border: 1px solid var(--accent-border); border-radius: 999px; cursor: pointer; font-family: inherit; -webkit-tap-highlight-color: transparent; transition: background 0.15s; }
-.prof-edit-mini:active { background: rgba(0,229,160,0.18); }
-.prof-head { display: flex; align-items: center; gap: 16px; padding: 14px 16px 0; }
+/* isolate so the glow can sit at z-index:-1 BEHIND the content without a blanket
+   rule (the old `> *` rule forced position:relative on the glow + Edit button,
+   which broke the whole layout). Content stays in normal flow, glow goes behind. */
+#page-profile { position: relative; isolation: isolate; }
+.prof-glow { position: absolute; top: -50px; left: 50%; transform: translateX(-50%); width: 460px; max-width: 120%; height: 300px; pointer-events: none; z-index: -1;
+  background: radial-gradient(50% 60% at 50% 0%, rgba(0,229,160,0.15), rgba(0,196,255,0.04) 45%, transparent 72%); filter: blur(8px); }
+.prof-head { display: flex; align-items: center; gap: 16px; padding: 8px 16px 0; }
 .prof-avatar-wrap { position: relative; flex-shrink: 0; cursor: pointer; }
 .prof-avatar { width: 88px; height: 88px; border-radius: 50%; background: var(--bg-3); display: flex; align-items: center; justify-content: center; font-size: 36px; font-weight: 700; color: var(--accent); border: 2px solid rgba(0,229,160,0.25); box-shadow: 0 0 28px rgba(0,229,160,0.12); }
 .prof-avatar-edit { position: absolute; bottom: 0; right: 0; width: 28px; height: 28px; border-radius: 50%; background: var(--accent); color: var(--bg); display: flex; align-items: center; justify-content: center; font-size: 13px; border: 2px solid var(--bg); }
 .prof-id { min-width: 0; }
+.prof-joined-top { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.7px; color: var(--text-mute); margin-bottom: 5px; }
 .prof-name { font-size: 23px; font-weight: 800; line-height: 1.12; }
-.prof-sub { font-size: 13px; color: var(--text-dim); margin-top: 4px; }
-.prof-joined { font-size: 12px; color: var(--text-mute); margin-top: 4px; }
+.prof-sub { font-size: 13px; color: var(--text-dim); margin-top: 5px; }
 .prof-bio { padding: 14px 16px 0; font-size: 14px; color: var(--text-dim); line-height: 1.55; }
-/* Floating totals — no boxes, just numbers separated by hairlines. */
+/* Edit pill — sits on its own right-aligned row, just above the sport switch. */
+.prof-edit-row { display: flex; justify-content: flex-end; padding: 16px 16px 0; }
+.prof-edit-mini { padding: 7px 18px; font-size: 13px; font-weight: 700; color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent-border); border-radius: 999px; cursor: pointer; font-family: inherit; -webkit-tap-highlight-color: transparent; transition: background 0.15s; }
+.prof-edit-mini:active { background: rgba(0,229,160,0.18); }
+/* Floating totals — no boxes; label on top, number below (Strava-style). */
 .prof-totals { display: flex; align-items: stretch; padding: 22px 8px 6px; }
 .prof-total { flex: 1; text-align: center; padding: 0 4px; }
 .prof-total + .prof-total { border-left: 1px solid rgba(255,255,255,0.07); }
+.prof-total-l { font-size: 10px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
 .prof-total-n { font-size: 19px; font-weight: 800; letter-spacing: -0.3px; white-space: nowrap; }
-.prof-total-l { font-size: 10px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 5px; }
 /* Segmented sport switch */
 .prof-sport-tabs { display: flex; gap: 4px; margin: 22px 16px 16px; padding: 4px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 14px; }
 .prof-sport-tab { flex: 1; display: flex; align-items: center; justify-content: center; gap: 7px; padding: 9px 6px; border: none; background: transparent; color: var(--text-dim); border-radius: 10px; font-size: 13px; font-weight: 700; font-family: inherit; cursor: pointer; transition: background 0.15s, color 0.15s; -webkit-tap-highlight-color: transparent; }
 .prof-sport-tab .prof-sport-emoji { font-size: 15px; }
 .prof-sport-tab.active { background: var(--accent-soft); color: var(--accent); }
 .prof-sport-pane { padding: 0 16px; }
-/* Best efforts (PBs) as soft chips */
-.prof-best { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+/* Best efforts (PBs) as soft chips — shown at the BOTTOM of each sport pane. */
+.prof-best-head { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.9px; color: var(--text-mute); margin: 4px 0 10px; }
+.prof-best { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
 .prof-best-chip { flex: 1; min-width: 88px; background: linear-gradient(135deg, rgba(0,229,160,0.07), transparent); border: 1px solid var(--accent-border); border-radius: 12px; padding: 10px 13px; }
 .prof-best-chip span { display: block; font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 3px; }
 .prof-best-chip b { font-size: 18px; font-weight: 800; letter-spacing: -0.3px; }
@@ -680,9 +684,10 @@ body.has-tabbar #page-profile.active {
 .prof-row-v { font-size: 16px; font-weight: 700; color: var(--text); letter-spacing: -0.2px; }
 .prof-empty { font-size: 13px; color: var(--text-mute); padding: 10px 0 18px; line-height: 1.5; }
 /* Edit sheet — fixed, internal scroll, sticky footer so Save is always reachable */
-.prof-edit-sheet { background: var(--bg-2); border-top: 1px solid var(--border); border-radius: 20px 20px 0 0; width: 100%; max-width: 480px; margin: 0 auto; display: flex; flex-direction: column; max-height: 92dvh; max-height: 92vh; }
+.prof-edit-sheet { background: var(--bg-2); border-top: 1px solid var(--border); border-radius: 20px 20px 0 0; width: 100%; max-width: 480px; margin: 0 auto; display: flex; flex-direction: column; max-height: 86vh; max-height: 86dvh; }
 .prof-edit-handle { width: 40px; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.2); margin: 8px auto 4px; flex-shrink: 0; }
-.prof-edit-scroll { overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 8px 18px 8px; }
+.prof-edit-scroll { overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; touch-action: pan-y; padding: 8px 18px 8px; }
+html.prof-modal-open, html.prof-modal-open body { overflow: hidden; }
 .prof-edit-title { font-size: 18px; font-weight: 800; margin: 6px 0 14px; }
 .prof-edit-divider { font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.5px; margin: 18px 0 12px; padding-top: 16px; border-top: 1px solid var(--border); }
 .prof-edit-footer { flex-shrink: 0; display: flex; gap: 8px; padding: 12px 18px calc(14px + var(--safe-bottom)); border-top: 1px solid var(--border); background: var(--bg-2); }
@@ -757,7 +762,7 @@ body.has-tabbar #page-profile.active {
    it must be a <body> child because #page-plan has overflow (x:hidden → y:auto),
    and on iOS an overflow ancestor clips/contains position:fixed/sticky children,
    which is why an in-#page-plan pinned bar showed on desktop but not on phone. */
-.plan-bar { display: flex; gap: 6px; margin-bottom: 14px; padding: 0; align-items: center; flex-wrap: nowrap; }
+.plan-bar { display: flex; gap: 6px; margin-top: 12px; margin-bottom: 14px; padding: 0; align-items: center; flex-wrap: nowrap; }
 .plan-bar-btn { background: var(--bg-3); border: 1px solid var(--border-light); color: var(--text); font-size: 12.5px; font-weight: 600; border-radius: 999px; padding: 8px 12px; display: inline-flex; align-items: center; gap: 5px; cursor: pointer; font-family: inherit; white-space: nowrap; -webkit-tap-highlight-color: transparent; transition: background .15s; }
 .plan-bar-btn:active { background: var(--bg-2); }
 .plan-bar-icon { width: 34px; padding: 8px 0; justify-content: center; font-weight: 800; flex-shrink: 0; }
@@ -25284,8 +25289,9 @@ async function renderProfile() {
       : s === 'bike'
         ? (ftp ? `<div class="prof-best"><div class="prof-best-chip"><span>FTP</span><b>${ftp} W</b></div></div>` : '')
         : (css ? `<div class="prof-best"><div class="prof-best-chip"><span>CSS</span><b>${escapeHtml(String(css))} /100m</b></div></div>` : '');
+    const bestBlock = best ? `<div class="prof-best-head">Best efforts</div>${best}` : '';
     if (S.n === 0) {
-      return `<div class="prof-sport-pane" data-sport="${s}" style="${s === 'run' ? '' : 'display:none;'}">${best}<div class="prof-empty">No ${lab.toLowerCase()} activities logged yet.</div></div>`;
+      return `<div class="prof-sport-pane" data-sport="${s}" style="${s === 'run' ? '' : 'display:none;'}"><div class="prof-empty">No ${lab.toLowerCase()} activities logged yet.</div>${bestBlock}</div>`;
     }
     const body =
       sec('Activity &middot; last 4 weeks',
@@ -25302,7 +25308,7 @@ async function renderProfile() {
         row('Time', _profHM(S.min)) +
         row('Distance', formatDistance(S.dist, 0)) +
         (S.elev > 0 ? row('Elevation', formatElevation(S.elev)) : ''));
-    return `<div class="prof-sport-pane" data-sport="${s}" style="${s === 'run' ? '' : 'display:none;'}">${best}${body}</div>`;
+    return `<div class="prof-sport-pane" data-sport="${s}" style="${s === 'run' ? '' : 'display:none;'}">${body}${bestBlock}</div>`;
   };
 
   const primaryLabel = p.primarySport ? (sportMeta[normalizeSport(p.primarySport)] ? sportMeta[normalizeSport(p.primarySport)].label : (p.primarySport.charAt(0).toUpperCase() + p.primarySport.slice(1))) : null;
@@ -25311,26 +25317,27 @@ async function renderProfile() {
   el.innerHTML = `
     <div class="prof-glow"></div>
     <input type="file" id="profileAvatarInput" accept="image/*" style="display:none;" onchange="onProfileAvatarPicked(this)" />
-    <button class="prof-edit-mini" onclick="openProfileEditModal()">Edit</button>
     <div class="prof-head">
       <div class="prof-avatar-wrap" onclick="document.getElementById('profileAvatarInput').click()">
         ${avatar}
         <div class="prof-avatar-edit">📷</div>
       </div>
       <div class="prof-id">
+        ${joinedStr ? `<div class="prof-joined-top">Member since ${joinedStr}</div>` : ''}
         <div class="prof-name">${escapeHtml(name)}</div>
         ${subLine ? `<div class="prof-sub">${subLine}</div>` : ''}
-        ${joinedStr ? `<div class="prof-joined">Member since ${joinedStr}</div>` : ''}
       </div>
     </div>
     ${p.bio ? `<div class="prof-bio">${escapeHtml(p.bio)}</div>` : ''}
 
     <div class="prof-totals">
-      <div class="prof-total"><div class="prof-total-n">${workouts.length}</div><div class="prof-total-l">Activities</div></div>
-      <div class="prof-total"><div class="prof-total-n">${formatDistance(totalDist, 0)}</div><div class="prof-total-l">Distance</div></div>
-      <div class="prof-total"><div class="prof-total-n">${_profHM(totalMin)}</div><div class="prof-total-l">Time</div></div>
-      <div class="prof-total"><div class="prof-total-n">🔥 ${streak}</div><div class="prof-total-l">Day streak</div></div>
+      <div class="prof-total"><div class="prof-total-l">Activities</div><div class="prof-total-n">${workouts.length}</div></div>
+      <div class="prof-total"><div class="prof-total-l">Distance</div><div class="prof-total-n">${formatDistance(totalDist, 0)}</div></div>
+      <div class="prof-total"><div class="prof-total-l">Time</div><div class="prof-total-n">${_profHM(totalMin)}</div></div>
+      <div class="prof-total"><div class="prof-total-l">Day streak</div><div class="prof-total-n">🔥 ${streak}</div></div>
     </div>
+
+    <div class="prof-edit-row"><button class="prof-edit-mini" onclick="openProfileEditModal()">✎ Edit</button></div>
 
     <div class="prof-sport-tabs">
       ${sports.map(s => `<button class="prof-sport-tab${s === 'run' ? ' active' : ''}" data-sport="${s}" onclick="_profSelectSport('${s}')"><span class="prof-sport-emoji">${sportMeta[s].emoji}</span><span>${sportMeta[s].label}</span></button>`).join('')}
@@ -25356,7 +25363,7 @@ async function openProfileEditModal() {
   const taStyle = 'width:100%; padding:13px 14px; background:var(--bg-3); color:var(--text); border:1px solid var(--border); border-radius:10px; font-size:14px; font-family:inherit; outline:none; resize:vertical; min-height:64px; line-height:1.5;';
   const m = document.createElement('div');
   m.id = 'profEditModal';
-  m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:99999;display:flex;flex-direction:column;justify-content:flex-end;';
+  m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:99999;display:flex;flex-direction:column;justify-content:flex-end;touch-action:none;';
   m.innerHTML = `
     <div class="prof-edit-sheet">
       <div class="prof-edit-handle"></div>
@@ -25399,9 +25406,17 @@ async function openProfileEditModal() {
       </div>
     </div>`;
   document.body.appendChild(m);
+  // Lock the page behind the sheet so it can't scroll/drift, and make sure the
+  // sheet always opens scrolled to the top (not stranded mid-form).
+  document.documentElement.classList.add('prof-modal-open');
+  const scroll = m.querySelector('.prof-edit-scroll');
+  if (scroll) { scroll.scrollTop = 0; requestAnimationFrame(() => { scroll.scrollTop = 0; }); }
   m.addEventListener('click', e => { if (e.target === m) closeProfileEditModal(); });
 }
-function closeProfileEditModal() { document.getElementById('profEditModal')?.remove(); }
+function closeProfileEditModal() {
+  document.documentElement.classList.remove('prof-modal-open');
+  document.getElementById('profEditModal')?.remove();
+}
 
 async function saveProfileEdits() {
   const btn = document.getElementById('peSaveBtn');
