@@ -564,6 +564,10 @@ body.on-landing #landingNav { display: none !important; }
 #mainNav.nav-pushed .nav-brand { display: none; }
 #mainNav.nav-pushed .nav-title { display: block; }
 #mainNav.nav-pushed .nav-actions { display: none; }
+/* Profile is pushed (back + title) but ALSO shows a settings gear top-right. */
+#mainNav.nav-profile .nav-actions { display: flex; }
+#mainNav.nav-profile .nav-bell-btn, #mainNav.nav-profile .nav-user-btn { display: none; }
+#mainNav.nav-profile .nav-gear { display: flex; }
 
 /* ─── Floating bottom tab bar ─── */
 .tab-bar {
@@ -638,12 +642,13 @@ body.has-tabbar #page-profile.active {
 }
 
 /* ─── Profile page (round 58, athlete profile — our take on a Strava layout) ─── */
-/* isolate so the glow can sit at z-index:-1 BEHIND the content without a blanket
-   rule (the old `> *` rule forced position:relative on the glow + Edit button,
-   which broke the whole layout). Content stays in normal flow, glow goes behind. */
-#page-profile { position: relative; isolation: isolate; }
-.prof-glow { position: absolute; top: -50px; left: 50%; transform: translateX(-50%); width: 460px; max-width: 120%; height: 300px; pointer-events: none; z-index: -1;
-  background: radial-gradient(50% 60% at 50% 0%, rgba(0,229,160,0.15), rgba(0,196,255,0.04) 45%, transparent 72%); filter: blur(8px); }
+/* isolate so the glow can sit at z-index:-1 BEHIND the content. overflow:visible
+   (overriding .page's overflow-x:hidden, which was clipping the glow into a hard
+   horizontal line) lets the glow bleed up behind the transparent top bar so it
+   fades smoothly with no cut-off edge. */
+#page-profile { position: relative; isolation: isolate; overflow: visible; }
+.prof-glow { position: absolute; top: -120px; left: 50%; transform: translateX(-50%); width: 620px; max-width: 150%; height: 420px; pointer-events: none; z-index: -1;
+  background: radial-gradient(45% 50% at 50% 50%, rgba(0,229,160,0.16), rgba(0,196,255,0.04) 50%, transparent 75%); filter: blur(16px); }
 .prof-head { display: flex; align-items: center; gap: 16px; padding: 8px 16px 0; }
 .prof-avatar-wrap { position: relative; flex-shrink: 0; cursor: pointer; }
 .prof-avatar { width: 88px; height: 88px; border-radius: 50%; background: var(--bg-3); display: flex; align-items: center; justify-content: center; font-size: 36px; font-weight: 700; color: var(--accent); border: 2px solid rgba(0,229,160,0.25); box-shadow: 0 0 28px rgba(0,229,160,0.12); }
@@ -657,12 +662,12 @@ body.has-tabbar #page-profile.active {
 .prof-edit-row { display: flex; justify-content: flex-end; padding: 16px 16px 0; }
 .prof-edit-mini { padding: 7px 18px; font-size: 13px; font-weight: 700; color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent-border); border-radius: 999px; cursor: pointer; font-family: inherit; -webkit-tap-highlight-color: transparent; transition: background 0.15s; }
 .prof-edit-mini:active { background: rgba(0,229,160,0.18); }
-/* Floating totals — no boxes; label on top, number below (Strava-style). */
-.prof-totals { display: flex; align-items: stretch; padding: 22px 8px 6px; }
+/* Totals — three clean stats in a soft frame; label on top, number below. */
+.prof-totals { display: flex; align-items: stretch; margin: 20px 16px 0; padding: 18px 6px; background: rgba(255,255,255,0.025); border: 1px solid var(--border); border-radius: 16px; }
 .prof-total { flex: 1; text-align: center; padding: 0 4px; }
-.prof-total + .prof-total { border-left: 1px solid rgba(255,255,255,0.07); }
-.prof-total-l { font-size: 10px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
-.prof-total-n { font-size: 19px; font-weight: 800; letter-spacing: -0.3px; white-space: nowrap; }
+.prof-total + .prof-total { border-left: 1px solid var(--border); }
+.prof-total-l { font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+.prof-total-n { font-size: 23px; font-weight: 800; letter-spacing: -0.4px; white-space: nowrap; }
 /* Segmented sport switch */
 .prof-sport-tabs { display: flex; gap: 4px; margin: 22px 16px 16px; padding: 4px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 14px; }
 .prof-sport-tab { flex: 1; display: flex; align-items: center; justify-content: center; gap: 7px; padding: 9px 6px; border: none; background: transparent; color: var(--text-dim); border-radius: 10px; font-size: 13px; font-weight: 700; font-family: inherit; cursor: pointer; transition: background 0.15s, color 0.15s; -webkit-tap-highlight-color: transparent; }
@@ -686,7 +691,11 @@ body.has-tabbar #page-profile.active {
 /* Edit sheet — fixed, internal scroll, sticky footer so Save is always reachable */
 .prof-edit-sheet { background: var(--bg-2); border-top: 1px solid var(--border); border-radius: 20px 20px 0 0; width: 100%; max-width: 480px; margin: 0 auto; display: flex; flex-direction: column; max-height: 86vh; max-height: 86dvh; }
 .prof-edit-handle { width: 40px; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.2); margin: 8px auto 4px; flex-shrink: 0; }
-.prof-edit-scroll { overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; touch-action: pan-y; padding: 8px 18px 8px; }
+.prof-edit-scroll { overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; touch-action: pan-y; padding: 8px 18px 8px; }
+/* Keep every field inside the sheet — date inputs have an intrinsic min-width on
+   iOS that was pushing past the edge and letting the sheet drag side-to-side. */
+.prof-edit-scroll input, .prof-edit-scroll textarea, .prof-edit-scroll .custom-select { max-width: 100%; box-sizing: border-box; }
+.prof-edit-scroll input[type="date"] { width: 100%; min-width: 0; -webkit-appearance: none; appearance: none; }
 html.prof-modal-open, html.prof-modal-open body { overflow: hidden; }
 .prof-edit-title { font-size: 18px; font-weight: 800; margin: 6px 0 14px; }
 .prof-edit-divider { font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.5px; margin: 18px 0 12px; padding-top: 16px; border-top: 1px solid var(--border); }
@@ -8104,17 +8113,21 @@ const _TAB_OF_PAGE = {
 const _TABBAR_PAGES = new Set(['dashboard', 'plan', 'trends', 'upload', 'history', 'race-planner', 'profile']);
 // "Pushed" detail pages get a back arrow + centered title, no tab bar.
 const _PUSHED_TITLES = { settings: 'Settings', help: 'Help & FAQ', upgrade: 'Stryxs Pro', profile: 'Profile' };
-let _navPrev = 'dashboard';
+// Real content pages a back arrow can return to. Pushed/overlay pages
+// (profile/settings/help/upgrade/coach) are NOT here, so back never loops between
+// them — it always returns to the last actual tab page you were on.
+const _RETURN_PAGES = new Set(['dashboard', 'plan', 'trends', 'upload', 'history', 'race-planner']);
+let _returnPage = 'dashboard';
 
 function _currentPageId() {
   const a = document.querySelector('.page.active');
   return a ? a.id.replace(/^page-/, '') : null;
 }
 
-// Back button target: wherever the user came from, falling back to Home.
+// Back button: return to the last real content page (no pushed↔pushed loop).
 function navBackAction() {
-  const dest = (_navPrev && _navPrev !== _currentPageId()) ? _navPrev : 'dashboard';
-  navigate(dest);
+  const dest = _RETURN_PAGES.has(_returnPage) ? _returnPage : 'dashboard';
+  navigate(dest === _currentPageId() ? 'dashboard' : dest);
 }
 
 // Keep the floating tab bar glued to the VISUAL viewport bottom. On iOS the
@@ -8178,6 +8191,7 @@ function updateAppChrome(page) {
       const pushed = Object.prototype.hasOwnProperty.call(_PUSHED_TITLES, page);
       nav.classList.toggle('nav-pushed', pushed);
       nav.classList.toggle('nav-home', page === 'dashboard');
+      nav.classList.toggle('nav-profile', page === 'profile');
       const titleEl = document.getElementById('navPushTitle');
       if (titleEl) titleEl.textContent = pushed ? _PUSHED_TITLES[page] : '';
     }
@@ -8185,9 +8199,8 @@ function updateAppChrome(page) {
 }
 
 function navigate(page) {
-  // Remember where we were so the back arrow can return there.
-  const _from = _currentPageId();
-  if (_from && _from !== page && !['login', 'signup', 'landing'].includes(_from)) _navPrev = _from;
+  // Track the last real content page so the back arrow can return there.
+  if (_RETURN_PAGES.has(page)) _returnPage = page;
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   const target = document.getElementById(`page-${page}`);
   if (target) target.classList.add('active');
@@ -25226,7 +25239,8 @@ function _profHM(min) {
   const h = Math.floor(min / 60), m = min % 60;
   return m ? `${h}h ${m}m` : `${h}h`;
 }
-function _profAvgN(n) { const v = n / 4; return v >= 9.95 ? Math.round(v) : (Math.round(v * 10) / 10).toString().replace(/\.0$/, ''); }
+// Avg activities per week — always a whole number (you can't do "2.3 runs/week").
+function _profAvgN(n) { return String(Math.round(n / 4)); }
 
 async function renderProfile() {
   const el = document.getElementById('profileContent');
@@ -25333,7 +25347,6 @@ async function renderProfile() {
     <div class="prof-totals">
       <div class="prof-total"><div class="prof-total-l">Activities</div><div class="prof-total-n">${workouts.length}</div></div>
       <div class="prof-total"><div class="prof-total-l">Distance</div><div class="prof-total-n">${formatDistance(totalDist, 0)}</div></div>
-      <div class="prof-total"><div class="prof-total-l">Time</div><div class="prof-total-n">${_profHM(totalMin)}</div></div>
       <div class="prof-total"><div class="prof-total-l">Day streak</div><div class="prof-total-n">🔥 ${streak}</div></div>
     </div>
 
@@ -25370,9 +25383,9 @@ async function openProfileEditModal() {
       <div class="prof-edit-scroll">
         <div class="prof-edit-title">Edit profile</div>
         <div class="field"><label>Name</label><input id="pe_name" value="${escapeHtml(name)}" placeholder="Your name" /></div>
-        <div class="field"><label>Description</label><textarea id="pe_bio" maxlength="280" placeholder="A short bio, your goals, your story" style="${taStyle}">${escapeHtml(p.bio || '')}</textarea></div>
         <div class="field"><label>Location</label><input id="pe_loc" value="${escapeHtml(p.location || '')}" placeholder="e.g. Lyon, France" /></div>
         <div class="field"><label>Primary sport</label>${renderCustomSelect('pe_sport', p.primarySport || '', sportOpts.map(([v, l]) => ({ value: v, label: l })))}</div>
+        <div class="field"><label>Description</label><textarea id="pe_bio" maxlength="280" placeholder="A short bio, your goals, your story" style="${taStyle}">${escapeHtml(p.bio || '')}</textarea></div>
 
         <div class="prof-edit-divider">Benchmarks &middot; power your pace projections</div>
         <div style="display:flex;gap:10px;">
@@ -25411,6 +25424,25 @@ async function openProfileEditModal() {
   document.documentElement.classList.add('prof-modal-open');
   const scroll = m.querySelector('.prof-edit-scroll');
   if (scroll) { scroll.scrollTop = 0; requestAnimationFrame(() => { scroll.scrollTop = 0; }); }
+  // Drag the handle DOWN to dismiss — TOUCH only (so on desktop only Cancel closes).
+  const sheet = m.querySelector('.prof-edit-sheet');
+  const handle = m.querySelector('.prof-edit-handle');
+  if (sheet && handle) {
+    let startY = 0, dy = 0, dragging = false;
+    handle.addEventListener('touchstart', e => { dragging = true; startY = e.touches[0].clientY; dy = 0; sheet.style.transition = 'none'; }, { passive: true });
+    handle.addEventListener('touchmove', e => {
+      if (!dragging) return;
+      dy = Math.max(0, e.touches[0].clientY - startY);
+      sheet.style.transform = `translateY(${dy}px)`;
+      e.preventDefault();
+    }, { passive: false });
+    handle.addEventListener('touchend', () => {
+      if (!dragging) return; dragging = false;
+      sheet.style.transition = 'transform 0.2s ease';
+      if (dy > 110) { sheet.style.transform = 'translateY(100%)'; setTimeout(closeProfileEditModal, 180); }
+      else { sheet.style.transform = 'translateY(0)'; }
+    });
+  }
   m.addEventListener('click', e => { if (e.target === m) closeProfileEditModal(); });
 }
 function closeProfileEditModal() {
@@ -25430,15 +25462,20 @@ async function saveProfileEdits() {
   const runLthr = val('pe_runlthr') ? parseInt(val('pe_runlthr')) : null;
   const bikeLthr = val('pe_bikelthr') ? parseInt(val('pe_bikelthr')) : null;
   try {
-    // profiles: identity + FTP + LTHR + swim CSS (merged into training_zones)
+    // profiles: identity + FTP + LTHR + swim CSS (merged into training_zones).
+    // .select() so we can CONFIRM the row actually updated (a silent 0-row update
+    // is what made edits "vanish" after leaving the app).
     const tz = { ...(state.profile?.trainingZones || {}) };
     if (css) tz.swim_css_per_100m = css; else delete tz.swim_css_per_100m;
-    await sb.from('profiles').update({
-      display_name: name || null, bio, location: loc || null, primary_sport: sport || null,
+    const { data: pRows, error: pErr } = await sb.from('profiles').update({
+      name: name || null, display_name: name || null, bio, location: loc || null, primary_sport: sport || null,
       bike_ftp: ftp, run_lthr: runLthr, bike_lthr: bikeLthr, training_zones: tz,
-    }).eq('id', state.user.id);
+    }).eq('id', state.user.id).select('id');
+    if (pErr) throw new Error('profile: ' + pErr.message);
+    if (!pRows || !pRows.length) throw new Error('profile row did not update (auth/session issue?)');
 
-    // athlete_intake: PBs + LTHR mirror + private body fields + derived age
+    // athlete_intake: PBs + LTHR mirror + private body fields + derived age.
+    // UPSERT (keyed on user_id) so it still saves even if the intake row is missing.
     let age = null;
     if (dob) {
       const b = new Date(dob + 'T12:00:00'); const t = new Date();
@@ -25446,24 +25483,27 @@ async function saveProfileEdits() {
       if (age < 0 || age > 120) age = null;
     }
     const intakeUpd = {
+      user_id: state.user.id,
       birth_date: dob, sex, weight_kg: wt, height_cm: ht,
       pb_5k: val('pe_pb5k') || null, pb_10k: val('pe_pb10k') || null,
       pb_half: val('pe_pbhalf') || null, pb_marathon: val('pe_pbmar') || null,
       run_lthr: runLthr, bike_lthr: bikeLthr,
     };
     if (age) intakeUpd.age = age;
-    await sb.from('athlete_intake').update(intakeUpd).eq('user_id', state.user.id);
+    const { error: iErr } = await sb.from('athlete_intake').upsert(intakeUpd, { onConflict: 'user_id' });
+    if (iErr) throw new Error('benchmarks: ' + iErr.message);
 
     if (name) state.user.name = name;
     state.profile = { ...state.profile, bio, location: loc || null, primarySport: sport || null, displayName: name || null, bikeFtp: ftp, runLthr, bikeLthr, trainingZones: tz };
     _projectionsCache = null; _projectionsCacheTime = 0;
+    try { localStorage.removeItem('stryxs_projections_cache'); } catch (_) {}
     closeProfileEditModal();
-    toast('Profile updated');
+    toast('Profile saved');
     renderProfile();
     if (typeof updateNavAvatar === 'function') updateNavAvatar();
   } catch (e) {
     console.error('[Stryxs] profile save failed:', e);
-    toast('Could not save, try again');
+    toast('Could not save: ' + (e.message || 'try again'), 5000);
     if (btn) { btn.disabled = false; btn.textContent = 'Save'; }
   }
 }
