@@ -9646,12 +9646,16 @@ async function submitManualWorkout(btn) {
 // ZONES & PARSING
 // ═══════════════════════════════════════════════════════════
 function getZones(lthr) {
+  // LTHR-based 5-zone model (Coggan-aligned, endurance-friendly so it reads like
+  // Garmin/Strava). Must match the strava edge getZones. The OLD Z1 ceiling was
+  // 0.81*LTHR, which wrongly classified solid aerobic work (~81% LTHR) as
+  // "recovery" (e.g. a 145 bpm ride on LTHR 178 showed 42% Z1 instead of ~all Z2).
   return {
-    Z1: [0, Math.floor(lthr * 0.81)],
-    Z2: [Math.floor(lthr * 0.81), Math.floor(lthr * 0.90)],
-    Z3: [Math.floor(lthr * 0.90), Math.floor(lthr * 0.94)],
-    Z4: [Math.floor(lthr * 0.94), Math.floor(lthr * 1.0)],
-    Z5: [Math.floor(lthr * 1.0), 999],
+    Z1: [0, Math.floor(lthr * 0.68)],
+    Z2: [Math.floor(lthr * 0.68), Math.floor(lthr * 0.88)],
+    Z3: [Math.floor(lthr * 0.88), Math.floor(lthr * 0.95)],
+    Z4: [Math.floor(lthr * 0.95), Math.floor(lthr * 1.05)],
+    Z5: [Math.floor(lthr * 1.05), 999],
   };
 }
 
