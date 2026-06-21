@@ -12296,11 +12296,15 @@ async function analyzeWorkoutWithCoach(key, el) {
           const wDate = String(a.date || a.created_at || '').split('T')[0];
           if (wDate) {
             const { data: pls } = await sb.from('planned_workouts')
-              .select('sport, workout_type, duration_minutes, distance_km, description, intensity_target')
+              .select('sport, workout_type, duration_minutes, distance_km, description, intensity_target, skipped')
               .eq('user_id', state.user.id).eq('scheduled_date', wDate);
             if (pls && pls.length) {
               const sk = (typeof normalizeSport === 'function') ? normalizeSport(a.sport) : a.sport;
-              plannedWorkout = pls.find(p => normalizeSport(p.sport) === sk) || pls[0];
+              // ONLY compare against a SAME-SPORT planned session (not skipped, not rest).
+              // If they did a different sport (swapped/moved/extra), pass NO planned
+              // workout so Coach analyses it on its own and never scolds "you were
+              // supposed to run today" — it already moved or it's a deliberate swap.
+              plannedWorkout = pls.find(p => normalizeSport(p.sport) === sk && p.sport !== 'rest' && !p.skipped) || null;
             }
           }
         } catch (_) {}
@@ -23121,7 +23125,7 @@ async function renderPublicShare(token) {
                         <span style="font-size: 11px; color: var(--accent); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; padding: 2px 8px; background: rgba(0, 255, 163, 0.08); border-radius: 4px;">${w.workout_type || w.sport}</span>
                         ${!isRest ? `<span style="font-size: 12px; color: var(--text-dim); font-family: 'JetBrains Mono', monospace;">${w.duration_minutes ? `${w.duration_minutes}min` : '—min'}${w.distance_km ? ` · ${parseFloat(w.distance_km).toFixed(1)}km` : (w.sport !== 'strength' && w.sport !== 'rest' ? ' · —km' : '')}</span>` : ''}
                       </div>
-                      <div style="font-size: 14px; color: rgba(232, 237, 245, 0.78); line-height: 1.6;">${w.description || ''}</div>
+                      <div class="md-body" style="font-size: 14px; color: rgba(232, 237, 245, 0.78); line-height: 1.6;">${typeof formatMarkdown === 'function' ? formatMarkdown(w.description || '') : escapeHtml(w.description || '')}</div>
                       ${w.intensity_target ? `<div style="font-size: 11px; color: var(--accent); margin-top: 6px; font-weight: 600;">→ ${w.intensity_target}</div>` : ''}
                       ${(() => {
                         if (isRest) return '';
