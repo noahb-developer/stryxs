@@ -25110,8 +25110,116 @@ function initPlanBar() {
 }
 
 // "?" popup — explains the self-building plan (moved off the page body).
+// ═══════════════════════════════════════════════════════════
+// "MAKE THIS WEEK EASIER" — a no-regen, no-token way to lighten the rest of the
+// current week (the Runna "Not feeling 100%" idea). Directly edits the upcoming
+// planned_workouts (downgrades hard sessions to easy, trims volume) instead of
+// asking Coach to rebuild — so a tired/busy user doesn't burn plan-gen calls just
+// to take it easy. Fully reversible (snapshots the originals locally).
+// ═══════════════════════════════════════════════════════════
+function _weekMondayKey() {
+  const todayStr = (typeof getClientToday === 'function') ? getClientToday() : new Date().toISOString().split('T')[0];
+  const d = new Date(todayStr + 'T12:00:00');
+  const dow = d.getDay(); // 0=Sun..6=Sat
+  const monOff = dow === 0 ? -6 : 1 - dow;
+  const m = new Date(d); m.setDate(d.getDate() + monOff);
+  return m.toISOString().split('T')[0];
+}
+function _easeFlagKey() { return `stryxs_week_eased_${state.user?.id}_${_weekMondayKey()}`; }
+function _easeSnapKey() { return `stryxs_week_ease_snap_${state.user?.id}_${_weekMondayKey()}`; }
+function _isThisWeekEased() { try { return !!localStorage.getItem(_easeFlagKey()); } catch (_) { return false; } }
+// Compute the eased version of a workout's editable fields.
+function _easeWorkoutFields(w) {
+  const t = (w.workout_type || '').toLowerCase();
+  const isHard = /threshold|interval|vo2|tempo|hard|race|fartlek|speed|sprint|anaerobic|sweet|hill|track|brick/.test(t);
+  const isLong = /long/.test(t);
+  const isStrength = w.sport === 'strength' || /strength|gym/.test(t);
+  const mul = isHard ? 0.7 : isLong ? 0.75 : isStrength ? 0.75 : 0.85;
+  const out = {};
+  if (w.duration_minutes) out.duration_minutes = Math.max(15, Math.round((w.duration_minutes * mul) / 5) * 5);
+  if (w.distance_km) out.distance_km = Math.round(w.distance_km * mul * 10) / 10;
+  if (isHard) { out.workout_type = 'easy'; out.intensity_target = 'Easy, conversational (Zone 2)'; }
+  const note = isHard ? '🔽 Eased to an easy session for a lighter week.' : '🔽 Trimmed for a lighter week.';
+  out.description = note + (w.description ? '\n\n' + w.description : '');
+  return out;
+}
+function openEaseWeekConfirm() {
+  const isDesktop = window.innerWidth > 720;
+  const modal = document.createElement('div');
+  modal.id = 'easeWeekModal';
+  modal.style.cssText = `position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:99999;display:flex;align-items:${isDesktop ? 'center' : 'flex-end'};justify-content:center;padding:${isDesktop ? '20px' : '0'};`;
+  modal.innerHTML = `
+    <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:${isDesktop ? '18px' : '22px 22px 0 0'};padding:22px 18px calc(22px + var(--safe-bottom,0px));max-width:460px;width:100%;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;"><span style="font-size:26px;">🔽</span><div style="font-size:18px;font-weight:800;letter-spacing:-.3px;">Make this week easier?</div></div>
+      <div style="font-size:14px;color:var(--text-dim);line-height:1.6;margin-bottom:18px;">I'll lighten the rest of <strong style="color:var(--text);">this week</strong> right now, no rebuild and no waiting: harder sessions become easy, and durations come down a bit. Your goal and the weeks ahead stay exactly as they are. You can undo it anytime.</div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn ghost" style="flex:1;" onclick="document.getElementById('easeWeekModal').remove()">Cancel</button>
+        <button class="btn" style="flex:2;" onclick="document.getElementById('easeWeekModal').remove(); applyEaseWeek(this)">Make it easier</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+}
+async function applyEaseWeek() {
+  if (!state.user) return;
+  if (_isThisWeekEased()) { toast('This week is already eased.'); return; }
+  try {
+    const todayStr = (typeof getClientToday === 'function') ? getClientToday() : new Date().toISOString().split('T')[0];
+    const d = new Date(todayStr + 'T12:00:00');
+    const dow = d.getDay();
+    const sun = new Date(d); sun.setDate(d.getDate() + (dow === 0 ? 0 : 7 - dow));
+    const sunStr = sun.toISOString().split('T')[0];
+    const { data: rows, error } = await sb.from('planned_workouts')
+      .select('*')
+      .eq('user_id', state.user.id)
+      .gte('scheduled_date', todayStr)
+      .lte('scheduled_date', sunStr)
+      .neq('sport', 'rest');
+    if (error) throw error;
+    const targets = (rows || []).filter(r => !r.skipped && !r.completed);
+    if (!targets.length) { toast('Nothing left to ease this week, you are all set.', 4000); return; }
+    const snap = targets.map(r => ({ id: r.id, workout_type: r.workout_type, duration_minutes: r.duration_minutes, distance_km: r.distance_km, description: r.description, intensity_target: r.intensity_target }));
+    for (const r of targets) {
+      const upd = _easeWorkoutFields(r);
+      const { error: uErr } = await sb.from('planned_workouts').update(upd).eq('id', r.id);
+      if (uErr) console.warn('[Stryxs] ease update failed for', r.id, uErr);
+    }
+    try { localStorage.setItem(_easeSnapKey(), JSON.stringify(snap)); localStorage.setItem(_easeFlagKey(), '1'); } catch (_) {}
+    if (typeof trackEvent === 'function') { try { trackEvent('week_eased', { count: targets.length }); } catch (_) {} }
+    try { if (typeof loadWorkouts === 'function') await loadWorkouts(); } catch (_) {}
+    try { renderPlan(); } catch (_) {}
+    toast(`Done, this week is lighter (${targets.length} session${targets.length === 1 ? '' : 's'} adjusted). Tap More to undo.`, 6000);
+  } catch (e) {
+    console.error('[Stryxs] ease week failed:', e);
+    toast('Could not ease this week. Try again.', 4000);
+  }
+}
+async function undoEaseWeek() {
+  if (!state.user) return;
+  let snap = null;
+  try { snap = JSON.parse(localStorage.getItem(_easeSnapKey()) || 'null'); } catch (_) {}
+  if (!Array.isArray(snap) || !snap.length) {
+    try { localStorage.removeItem(_easeFlagKey()); } catch (_) {}
+    toast('Nothing to undo for this week.'); return;
+  }
+  try {
+    for (const s of snap) {
+      const { id, ...fields } = s;
+      const { error } = await sb.from('planned_workouts').update(fields).eq('id', id);
+      if (error) console.warn('[Stryxs] undo ease failed for', id, error);
+    }
+    try { localStorage.removeItem(_easeSnapKey()); localStorage.removeItem(_easeFlagKey()); } catch (_) {}
+    try { if (typeof loadWorkouts === 'function') await loadWorkouts(); } catch (_) {}
+    try { renderPlan(); } catch (_) {}
+    toast('Restored, this week is back to its full plan.', 5000);
+  } catch (e) {
+    console.error('[Stryxs] undo ease week failed:', e);
+    toast('Could not restore this week. Try again.', 4000);
+  }
+}
+
 // One consolidated "More" sheet for the plan bar so it stays a single clean line.
-// Holds the three plan-output actions: Reminders, Add to calendar, Share.
+// Holds the plan-output actions + the no-regen "make this week easier" control.
 function openPlanToolsMenu() {
   const isDesktop = window.innerWidth > 720;
   const modal = document.createElement('div');
@@ -25130,6 +25238,9 @@ function openPlanToolsMenu() {
     <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:${isDesktop ? '18px' : '22px 22px 0 0'};padding:20px 18px calc(20px + var(--safe-bottom,0px));max-width:460px;width:100%;">
       <div style="font-size:17px;font-weight:800;letter-spacing:-.3px;margin-bottom:14px;">Plan options</div>
       <div style="display:flex;flex-direction:column;gap:10px;">
+        ${_isThisWeekEased()
+          ? row('↩️', 'Undo easier week', 'Restore this week to its full plan', 'undoEaseWeek()')
+          : row('🔽', 'Make this week easier', 'Lighten the rest of this week, no rebuild', 'openEaseWeekConfirm()')}
         ${row('🔔', 'Reminders', 'Get a nudge before each workout', 'openReminderSettings()')}
         ${row('📅', 'Add to calendar', 'Put your plan on your phone calendar', 'exportPlanToCalendar()')}
         ${row('🔗', 'Share plan', 'Send a read-only link to a coach or friend', 'openShareModal()')}
