@@ -24418,6 +24418,7 @@ async function renderPlan() {
     ${hasPlan ? `
     <div class="plan-bar" id="planBar">
       <button class="plan-bar-btn" onclick="scrollToTodayWorkout()">📋 Today's workout</button>
+      <button class="plan-bar-btn" onclick="exportPlanToCalendar()">📅 Calendar</button>
       <button class="plan-bar-btn" onclick="openShareModal()">Share</button>
       <button class="plan-bar-btn plan-bar-icon" onclick="openPlanInfoPopup()" aria-label="How the plan works">?</button>
       <button class="plan-bar-btn plan-bar-top" id="planBarTop" onclick="planScrollTop()">↑ Top</button>
@@ -24557,6 +24558,104 @@ function _pfDurLabel(w) {
   }
   if (w.distance_km) return `${parseFloat(w.distance_km).toFixed(1)} km`;
   return '';
+}
+
+// ═══════════════════════════════════════════════════════════
+// CALENDAR EXPORT (.ics) — put the whole upcoming plan on any phone/watch
+// calendar (Apple/Google/Outlook). No watch-partner API needed: we generate a
+// standard iCalendar file the user opens to import. All-day events (one per
+// non-rest workout) so we never claim a wrong time; full session detail in the
+// description. Stable per-workout UID so re-importing updates rather than dupes.
+// ═══════════════════════════════════════════════════════════
+function _icsEscape(s) {
+  return String(s == null ? '' : s)
+    .replace(/\\/g, '\\\\')
+    .replace(/;/g, '\\;')
+    .replace(/,/g, '\\,')
+    .replace(/\r?\n/g, '\\n');
+}
+// Fold long property lines to <=75 octets per RFC 5545 (continuation = CRLF + space).
+// Byte-aware + iterates by code point so multibyte emoji never split mid-character.
+function _icsFold(line) {
+  const enc = new TextEncoder();
+  let out = '', cur = '';
+  for (const ch of line) {
+    if (enc.encode(cur + ch).length > 73) { out += (out ? '\r\n ' : '') + cur; cur = ch; }
+    else cur += ch;
+  }
+  return out + (out ? '\r\n ' : '') + cur;
+}
+function _icsDate(ymd) { return String(ymd || '').replace(/-/g, ''); }
+function _icsDatePlus1(ymd) {
+  const d = new Date(ymd + 'T12:00:00'); d.setDate(d.getDate() + 1);
+  const p2 = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}`;
+}
+function _buildPlanICS(workouts) {
+  const EMO = { run: '🏃', bike: '🚴', swim: '🏊', strength: '💪' };
+  const now = new Date();
+  const p2 = (n) => String(n).padStart(2, '0');
+  const dtstamp = `${now.getUTCFullYear()}${p2(now.getUTCMonth() + 1)}${p2(now.getUTCDate())}T${p2(now.getUTCHours())}${p2(now.getUTCMinutes())}${p2(now.getUTCSeconds())}Z`;
+  const lines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Stryxs//Training Plan//EN',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+    'X-WR-CALNAME:Stryxs Training Plan',
+  ];
+  workouts.forEach((w) => {
+    const title = _pfPrettyTitle(w);
+    const dur = _pfDurLabel(w);
+    const emo = EMO[w.sport] || '🏋️';
+    const summary = `${emo} ${title}${dur ? ' · ' + dur : ''}`;
+    const parts = [];
+    if (w.intensity_target) parts.push(`Target: ${w.intensity_target}`);
+    if (dur) parts.push(dur);
+    let desc = parts.join(' · ');
+    if (w.description) desc += (desc ? '\n\n' : '') + w.description;
+    desc += '\n\nFrom your Stryxs training plan.';
+    lines.push('BEGIN:VEVENT');
+    lines.push(`UID:stryxs-${w.id}@stryxs.com`);
+    lines.push(`DTSTAMP:${dtstamp}`);
+    lines.push(`DTSTART;VALUE=DATE:${_icsDate(w.scheduled_date)}`);
+    lines.push(`DTEND;VALUE=DATE:${_icsDatePlus1(w.scheduled_date)}`);
+    lines.push(_icsFold(`SUMMARY:${_icsEscape(summary)}`));
+    lines.push(_icsFold(`DESCRIPTION:${_icsEscape(desc)}`));
+    lines.push('TRANSP:TRANSPARENT');
+    lines.push('END:VEVENT');
+  });
+  lines.push('END:VCALENDAR');
+  return lines.join('\r\n');
+}
+// Fetch the upcoming plan (today forward, real workouts only) and download it as a
+// .ics the user opens to add every session to their calendar.
+async function exportPlanToCalendar() {
+  if (!state.user) { toast('Please sign in first.'); return; }
+  try {
+    const todayStr = (typeof getClientToday === 'function') ? getClientToday() : new Date().toISOString().split('T')[0];
+    const { data: pls, error } = await sb.from('planned_workouts')
+      .select('*')
+      .eq('user_id', state.user.id)
+      .gte('scheduled_date', todayStr)
+      .order('scheduled_date', { ascending: true });
+    if (error) throw error;
+    const workouts = (pls || []).filter((p) => p.sport && p.sport !== 'rest' && !p.skipped);
+    if (!workouts.length) { toast('No upcoming workouts to add yet.', 3500); return; }
+    const ics = _buildPlanICS(workouts);
+    const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'stryxs-training-plan.ics';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    if (typeof trackEvent === 'function') { try { trackEvent('plan_calendar_export', { count: workouts.length }); } catch (_) {} }
+    toast(`Calendar file ready — ${workouts.length} workouts. Open it to add your plan to your calendar.`, 5000);
+  } catch (e) {
+    console.error('[Stryxs] calendar export failed:', e);
+    toast('Could not build the calendar file. Try again.', 4000);
+  }
 }
 
 function _pfCardHTML(w) {
