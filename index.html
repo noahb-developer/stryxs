@@ -23079,6 +23079,54 @@ async function renderPublicShare(token) {
       }
     } catch (_) {}
 
+    // ── WHOLE-PLAN OVERVIEW: a stats strip + a weekly-volume "build" arc across
+    //    the ENTIRE plan. This is the scannable, visual hook (the old page jumped
+    //    straight into a long week list). ──
+    let planOverviewHTML = '';
+    try {
+      const { data: full } = await sb.from('planned_workouts')
+        .select('sport, scheduled_date, duration_minutes, distance_km')
+        .eq('user_id', userId)
+        .order('scheduled_date', { ascending: true });
+      const fw = (full || []).filter(w => w.sport !== 'rest');
+      if (fw.length >= 4) {
+        const wk = {};
+        for (const w of fw) {
+          const d = new Date(w.scheduled_date + 'T12:00:00');
+          const mo = new Date(d); mo.setDate(d.getDate() + (d.getDay() === 0 ? -6 : 1 - d.getDay()));
+          (wk[mo.toISOString().split('T')[0]] = wk[mo.toISOString().split('T')[0]] || []).push(w);
+        }
+        const keys = Object.keys(wk).sort();
+        const weekHrs = keys.map(k => wk[k].reduce((s, w) => s + (w.duration_minutes || 0), 0) / 60);
+        const maxHr = Math.max(...weekHrs, 0.1);
+        const totalHrs = weekHrs.reduce((s, h) => s + h, 0);
+        const totalSessions = fw.length;
+        const avgPerWeek = Math.round(totalSessions / keys.length);
+        const peakHrs = Math.max(...weekHrs);
+        const mix = {};
+        fw.forEach(w => { const s = (typeof normalizeSport === 'function' ? normalizeSport(w.sport) : w.sport); mix[s] = (mix[s] || 0) + 1; });
+        const mixEmoji = { run: '🏃', bike: '🚴', swim: '🏊', strength: '💪' };
+        const mixStr = Object.entries(mix).sort((a, b) => b[1] - a[1]).slice(0, 4)
+          .map(([s, n]) => `${mixEmoji[s] || '⚡'} ${Math.round(n / totalSessions * 100)}%`).join('   ');
+        const todayK = (() => { const t = new Date(); const mo = new Date(t); mo.setDate(t.getDate() + (t.getDay() === 0 ? -6 : 1 - t.getDay())); return mo.toISOString().split('T')[0]; })();
+        const bars = keys.map((k, i) => {
+          const h = weekHrs[i]; const pct = Math.max(6, (h / maxHr) * 100); const isNow = k === todayK;
+          return `<div title="Week of ${k}: ${h.toFixed(1)}h" style="flex:1; min-width:0; display:flex; flex-direction:column; justify-content:flex-end; align-items:center; height:100%;"><div style="width:100%; max-width:18px; height:${pct.toFixed(0)}%; border-radius:3px 3px 0 0; background:${isNow ? 'var(--accent)' : 'linear-gradient(180deg, rgba(0,229,160,0.85), rgba(0,196,255,0.45))'}; ${isNow ? 'box-shadow:0 0 10px rgba(0,229,160,0.6);' : ''}"></div></div>`;
+        }).join('');
+        const stat = (n, l) => `<div style="flex:1; text-align:center; min-width:60px;"><div style="font-size:22px; font-weight:800; color:var(--text); letter-spacing:-0.3px;">${n}</div><div style="font-size:10px; color:var(--text-mute); text-transform:uppercase; letter-spacing:0.6px; margin-top:4px;">${l}</div></div>`;
+        planOverviewHTML = `
+          <div style="margin-bottom:28px; padding:22px 22px 18px; background:rgba(20,26,38,0.6); border:1px solid rgba(255,255,255,0.08); border-radius:18px; backdrop-filter:blur(8px);">
+            <div style="display:flex; flex-wrap:wrap; gap:12px; margin-bottom:8px;">
+              ${stat(keys.length, 'Weeks')}${stat(Math.round(totalHrs) + 'h', 'Total')}${stat(avgPerWeek + '×', 'Per week')}${stat(peakHrs.toFixed(peakHrs >= 10 ? 0 : 1) + 'h', 'Peak week')}
+            </div>
+            <div style="text-align:center; font-size:13px; color:var(--text-dim); margin:8px 0 20px; font-variant-numeric:tabular-nums;">${mixStr}</div>
+            <div style="font-size:11px; color:var(--text-mute); text-transform:uppercase; letter-spacing:1.5px; font-weight:700; margin-bottom:10px;">The build</div>
+            <div style="display:flex; align-items:flex-end; gap:3px; height:90px;">${bars}</div>
+            <div style="display:flex; justify-content:space-between; font-size:10px; color:var(--text-mute); margin-top:6px;"><span>Start</span><span>Race day</span></div>
+          </div>`;
+      }
+    } catch (_) {}
+
     let headerHTML = '';
     if (showProfile && profile) {
       const name = profile.display_name || profile.name || 'Athlete';
@@ -23187,17 +23235,17 @@ async function renderPublicShare(token) {
 
     // ── Plan-structure explainer (how this plan works), keyed by goal ──
     const planExplainers = {
-      ironman:       { method: 'Joe Friel methodology', text: 'A polarized base: one long endurance session a week, 2–3 quality workouts (threshold, tempo, VO2), strength 2–3×, and ~80% of the volume kept genuinely easy.' },
-      ironman_70_3:  { method: 'Friel + Sutton', text: 'Balanced swim / bike / run with a long brick-style session, two quality workouts, strength, and most volume aerobic.' },
-      '70_3':        { method: 'Friel + Sutton', text: 'Balanced swim / bike / run with a long brick-style session, two quality workouts, strength, and most volume aerobic.' },
-      olympic_tri:   { method: 'Friel multisport', text: 'Swim / bike / run balance with sharper intervals as race day nears, plus easy aerobic support.' },
-      sprint_tri:    { method: 'Friel multisport', text: 'Short, sharp sessions across all three sports with easy support volume.' },
-      marathon:      { method: 'Pfitzinger + Daniels', text: 'A weekly long run, one to two quality sessions (tempo, intervals), easy mileage to build the aerobic engine, and a deload every few weeks.' },
-      half_marathon: { method: 'Daniels + Pfitzinger', text: 'A weekly long run, tempo and interval work, and easy aerobic mileage between the hard days.' },
-      '10k':         { method: 'Daniels VDOT', text: 'Sharpening intervals and threshold work on top of a steady aerobic base.' },
-      '5k':          { method: 'Daniels VDOT', text: 'Speed and threshold sessions supported by easy aerobic runs.' },
-      short_run:     { method: 'Daniels VDOT', text: 'Speed and threshold sessions supported by easy aerobic runs.' },
-      general:       { method: 'Attia + Seiler', text: 'A Zone-2 aerobic base, a couple of harder weekly efforts, and regular strength for long-term health.' },
+      ironman:       { method: 'periodized long-course triathlon methodology', text: 'A polarized base: one long endurance session a week, 2–3 quality workouts (threshold, tempo, VO2), strength 2–3×, and ~80% of the volume kept genuinely easy.' },
+      ironman_70_3:  { method: 'half-distance triathlon methodology', text: 'Balanced swim / bike / run with a long brick-style session, two quality workouts, strength, and most volume aerobic.' },
+      '70_3':        { method: 'half-distance triathlon methodology', text: 'Balanced swim / bike / run with a long brick-style session, two quality workouts, strength, and most volume aerobic.' },
+      olympic_tri:   { method: 'short-course triathlon methodology', text: 'Swim / bike / run balance with sharper intervals as race day nears, plus easy aerobic support.' },
+      sprint_tri:    { method: 'short-course triathlon methodology', text: 'Short, sharp sessions across all three sports with easy support volume.' },
+      marathon:      { method: 'proven marathon periodization', text: 'A weekly long run, one to two quality sessions (tempo, intervals), easy mileage to build the aerobic engine, and a deload every few weeks.' },
+      half_marathon: { method: 'proven half-marathon periodization', text: 'A weekly long run, tempo and interval work, and easy aerobic mileage between the hard days.' },
+      '10k':         { method: 'VDOT-based speed methodology', text: 'Sharpening intervals and threshold work on top of a steady aerobic base.' },
+      '5k':          { method: 'VDOT-based speed methodology', text: 'Speed and threshold sessions supported by easy aerobic runs.' },
+      short_run:     { method: 'VDOT-based speed methodology', text: 'Speed and threshold sessions supported by easy aerobic runs.' },
+      general:       { method: 'a balanced health & fitness methodology', text: 'A Zone-2 aerobic base, a couple of harder weekly efforts, and regular strength for long-term health.' },
     };
     const ex = planExplainers[intake?.goal_event] || planExplainers.general;
     const explainerHTML = `
@@ -23212,7 +23260,7 @@ async function renderPublicShare(token) {
       </div>
     `;
     const weeksHeadingHTML = Object.keys(weekMap).length
-      ? `<div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; margin-bottom: 14px;">Latest training</div>`
+      ? `<div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; margin: 4px 0 14px;">A look inside · recent weeks</div>`
       : '';
 
     container.innerHTML = `
@@ -23221,6 +23269,7 @@ async function renderPublicShare(token) {
           <a href="/" style="text-decoration: none; color: var(--text); font-weight: 400; font-family: 'Instrument Serif', serif; font-size: 30px; letter-spacing: -0.5px; line-height: 1; -webkit-font-smoothing: antialiased;">Stryx<em style="color: var(--accent); font-style: italic; font-family: 'Instrument Serif', serif;">s</em></a>
         </div>
         ${headerHTML}
+        ${planOverviewHTML}
         ${explainerHTML}
         ${weeksHeadingHTML}
         ${weeksHTML}
