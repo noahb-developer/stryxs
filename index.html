@@ -18810,6 +18810,18 @@ async function dismissReactiveMessage(btn, msgId) {
   }
 }
 
+// generate_skeleton returns EITHER a bare array (legacy) OR a wrapper object
+// { skeleton: [...], _feasibility_warnings, ... } (current edge). Always normalize
+// to the array — otherwise plan.skeleton is stored as an object, week lookups
+// (skeleton[n]) are undefined, and generatePlan's Array.isArray() guard fails so
+// the plan is built IGNORING the periodized volume targets (erratic volumes).
+async function _fetchSkeleton(intakeArg) {
+  const res = await callCoach('generate_skeleton', { intake: intakeArg });
+  if (Array.isArray(res)) return res;
+  if (res && typeof res === 'object' && Array.isArray(res.skeleton)) return res.skeleton;
+  return null;
+}
+
 async function regeneratePlanFromReactive(btn) {
   if (!state.user) return;
   btn.disabled = true;
@@ -18855,7 +18867,7 @@ async function regeneratePlanFromReactive(btn) {
 
     // If no skeleton, regenerate one
     if (!skeleton) {
-      try { skeleton = await callCoach('generate_skeleton', { intake }); } catch(e) { console.warn('skeleton regen failed:', e); }
+      try { skeleton = await _fetchSkeleton(intake); } catch(e) { console.warn('skeleton regen failed:', e); }
     }
 
     // ═══ COMPUTE THE RIGHT START DATE ═══
@@ -19057,9 +19069,9 @@ async function _rebuildPlanInPlace(intake, opts = {}) {
   document.querySelectorAll('.nav-menu-item').forEach(t => t.classList.toggle('active', t.dataset.page === 'coach'));
   window.scrollTo({ top: 0, behavior: 'instant' });
   const el = document.getElementById('coachContent');
-  if (el) el.innerHTML = `<div class="coach-hero"><div class="coach-avatar">🧠</div><div class="coach-intro"><h2>${opts.heroTitle || 'Building your new plan…'}</h2><p>${opts.heroSub || 'Mapping out your training around your next goal.'}</p><p style="margin-top:10px;padding:10px 14px;background:rgba(255,209,102,0.06);border:1px solid rgba(255,209,102,0.2);border-radius:8px;font-size:13px;color:var(--text-dim);">Don't close this window, it'll interrupt the build.</p></div></div><div class="loading"><div class="spinner"></div>Working</div>`;
+  if (el) el.innerHTML = `<div style="padding-top: calc(var(--safe-top, 0px) + 64px);"><div class="coach-hero"><div class="coach-avatar">🧠</div><div class="coach-intro"><h2>${opts.heroTitle || 'Building your new plan…'}</h2><p>${opts.heroSub || 'Mapping out your training around your next goal.'}</p><p style="margin-top:10px;padding:10px 14px;background:rgba(255,209,102,0.06);border:1px solid rgba(255,209,102,0.2);border-radius:8px;font-size:13px;color:var(--text-dim);">Don't close this window, it'll interrupt the build.</p></div></div><div class="loading"><div class="spinner"></div>Working</div></div>`;
   let skeleton = null;
-  try { skeleton = await callCoach('generate_skeleton', { intake }); } catch (e) { console.warn('[Stryxs] skeleton failed:', e); }
+  try { skeleton = await _fetchSkeleton(intake); } catch (e) { console.warn('[Stryxs] skeleton failed:', e); }
   const plan = await callCoach('generate_plan', { intake, weekNumber: 1, skeleton });
   if (skeleton) plan.skeleton = skeleton;
   await savePlanToDb(plan, state.user.id);
@@ -19335,7 +19347,9 @@ async function _applyAdjustAndRebuild(preferenceText, intake, msgs) {
     await _rebuildPlanInPlace(intakeForBuild, {
       heroSub: pref ? `Working your request in: ${pref}.` : 'Reshaping your training around your request.',
       skipIntro: true,
-      skipAutoExtend: true, // tweaks only rebuild the current cycle; the plan fills itself lazily on next view (saves ~5 plan-gen calls per edit)
+      // Build the upcoming weeks now (not lazily) so the plan is fully populated the
+      // moment the build screen finishes — no "only one week, then it fills in a few
+      // minutes later" surprise. Burn is bounded by the monthly cap + in-flight guard.
       doneMsg: "✓ Done. I've rebuilt your plan with that baked in, head to the Plan tab to see it. It'll keep topping itself up, and I'll keep this in mind for every week going forward.",
       toast: 'Plan updated!',
     });
@@ -20111,7 +20125,7 @@ async function confirmAction(type) {
       // "### Warm-up / Main set / Cool-down" descriptions, not the old
       // comma-string format (the bare { intake } call did neither).
       let skeleton = null;
-      try { skeleton = await callCoach('generate_skeleton', { intake }); } catch (e) { console.warn('skeleton regen failed:', e); }
+      try { skeleton = await _fetchSkeleton(intake); } catch (e) { console.warn('skeleton regen failed:', e); }
 
       renderBuildHero('Building week 1…');
       const plan = await callCoach('generate_plan', { intake, weekNumber: 1, skeleton });
@@ -21798,12 +21812,17 @@ async function _extendPlanByOneWeek(intake, activePlan, opts = {}) {
   if (!plan || !plan.workouts || plan.workouts.length === 0) throw new Error('Coach returned an empty plan');
 
   if (importedProfile) plan._plan_profile = importedProfile;
+  // ALWAYS carry the ORIGINAL plan anchor forward. Every extended week must keep the
+  // SAME plan_start_date (the first week's Monday). Without this, savePlanToDb stamped
+  // each new week's row with plan_start_date = THAT week's Monday, so after a few
+  // auto-extend passes the active plan's start drifted weeks into the future and the
+  // Plan page showed a false multi-week "starter week begins <future date>".
+  if (activePlan?.plan_data?.plan_start_date) plan.plan_start_date = activePlan.plan_data.plan_start_date;
   if (activePlan?.plan_data?._imported_plan) {
     plan._imported_plan = true;
     plan._imported_current_week = activePlan.plan_data._imported_current_week || null;
     plan._imported_latest_generated_week = nextWeekNumber;
     plan._imported_total_weeks = activePlan.plan_data._imported_total_weeks || null;
-    if (activePlan.plan_data.plan_start_date) plan.plan_start_date = activePlan.plan_data.plan_start_date;
   }
   if (skeleton) plan.skeleton = skeleton;
 
@@ -22593,7 +22612,7 @@ async function finalizeImportedPlan(parsedPlan, intake) {
     // Generate skeleton too so the plan has a periodization arc going forward
     let skeleton = null;
     try {
-      skeleton = await callCoach('generate_skeleton', { intake });
+      skeleton = await _fetchSkeleton(intake);
     } catch (skErr) {
       console.error('Skeleton generation failed (non-blocking):', skErr);
     }
@@ -22728,7 +22747,7 @@ async function discardImportAndBuildNew(intake) {
 
   try {
     let skeleton = null;
-    try { skeleton = await callCoach('generate_skeleton', { intake }); } catch(e) {}
+    try { skeleton = await _fetchSkeleton(intake); } catch(e) {}
     const plan = await callCoach('generate_plan', { intake, weekNumber: 1, skeleton });
     if (skeleton) plan.skeleton = skeleton;
     await savePlanToDb(plan, state.user.id);
@@ -24970,7 +24989,7 @@ function _pfCardHTML(w) {
       <div class="pf-chev">›</div>
     </div>
     <div class="pf-exp" id="${eid}" style="display:none">
-      ${w.description ? `<div class="desc">${escapeHtml(w.description)}</div>` : ''}
+      ${w.description ? `<div class="desc md-body">${typeof formatMarkdown === 'function' ? formatMarkdown(w.description) : escapeHtml(w.description)}</div>` : ''}
       ${w.intensity_target ? `<div class="it"><strong>Target:</strong> ${escapeHtml(w.intensity_target)}</div>` : ''}
       <div class="acts">
         <button class="btn" onclick="event.stopPropagation(); askCoachAboutWorkout('${w.id}')">💬 Ask Coach</button>
@@ -25151,9 +25170,21 @@ function _easeWorkoutFields(w) {
   const out = {};
   if (w.duration_minutes) out.duration_minutes = Math.max(15, Math.round((w.duration_minutes * mul) / 5) * 5);
   if (w.distance_km) out.distance_km = Math.round(w.distance_km * mul * 10) / 10;
-  if (isHard) { out.workout_type = 'easy'; out.intensity_target = 'Easy, conversational (Zone 2)'; }
-  const note = isHard ? '🔽 Eased to an easy session for a lighter week.' : '🔽 Trimmed for a lighter week.';
-  out.description = note + (w.description ? '\n\n' + w.description : '');
+  // Rewrite the WHOLE description so the card (and Coach) reflect the lighter
+  // session — not the old hard prescription with a note bolted on. Hard sessions
+  // also drop to an easy type/target so nothing still says "3x10 @ threshold".
+  const sportWord = { run: 'run', bike: 'ride', swim: 'swim', strength: 'strength session' }[w.sport] || 'session';
+  const durTxt = out.duration_minutes ? `about ${out.duration_minutes} min` : (out.distance_km ? `about ${out.distance_km} km` : '');
+  if (isHard) {
+    out.workout_type = 'easy';
+    out.intensity_target = 'Easy, conversational (Zone 2)';
+    out.description = `🔽 Lightened for an easier week.\n\nEasy ${sportWord}${durTxt ? `, ${durTxt}` : ''} — kept fully aerobic and relaxed (Zone 2, you can hold a conversation). No hard efforts this time.`;
+  } else if (isStrength) {
+    out.description = `🔽 Lightened for an easier week.\n\nShorter, easier strength session${durTxt ? ` (${durTxt})` : ''}. Lighter loads, focus on clean movement, leave plenty in the tank.`;
+  } else {
+    out.intensity_target = w.intensity_target || 'Easy (Zone 2)';
+    out.description = `🔽 Lightened for an easier week.\n\nKeep this ${sportWord} easy and relaxed${durTxt ? `, ${durTxt}` : ''} (Zone 2, conversational). Just steady aerobic time, nothing forced.`;
+  }
   return out;
 }
 function openEaseWeekConfirm() {
