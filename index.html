@@ -771,7 +771,7 @@ html.prof-modal-open, html.prof-modal-open body { overflow: hidden; }
    it must be a <body> child because #page-plan has overflow (x:hidden → y:auto),
    and on iOS an overflow ancestor clips/contains position:fixed/sticky children,
    which is why an in-#page-plan pinned bar showed on desktop but not on phone. */
-.plan-bar { display: flex; gap: 6px; margin-top: 26px; margin-bottom: 14px; padding: 0; align-items: center; flex-wrap: nowrap; }
+.plan-bar { display: flex; gap: 6px; margin-top: 46px; margin-bottom: 14px; padding: 0; align-items: center; flex-wrap: nowrap; }
 .plan-bar-btn { background: var(--bg-3); border: 1px solid var(--border-light); color: var(--text); font-size: 12.5px; font-weight: 600; border-radius: 999px; padding: 8px 12px; display: inline-flex; align-items: center; gap: 5px; cursor: pointer; font-family: inherit; white-space: nowrap; -webkit-tap-highlight-color: transparent; transition: background .15s; }
 .plan-bar-btn:active { background: var(--bg-2); }
 .plan-bar-icon { width: 34px; padding: 8px 0; justify-content: center; font-weight: 800; flex-shrink: 0; }
@@ -8134,9 +8134,17 @@ function navBackAction() {
 // plain `position:fixed; bottom` element drift upward (Noah's "it slides to the
 // middle"). Top-anchored fixed elements don't have this problem, only bottom ones.
 // Same technique the Coach composer uses. No-op on desktop (gap is always 0).
+// Installed PWA (home-screen) has NO browser toolbar, so there's nothing to follow —
+// plain position:fixed is rock-solid. Skip the transform entirely there (chasing the
+// viewport is what could make it jitter/drift in standalone). Detected once.
+const _isStandalonePWA = (() => {
+  try { return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true; }
+  catch (_) { return false; }
+})();
 function _pinTabBar() {
   const tb = document.getElementById('tabBar');
   if (!tb || tb.style.display === 'none') return;
+  if (_isStandalonePWA) { tb.style.transform = 'translateX(-50%)'; return; }
   const vv = window.visualViewport;
   if (!vv) { tb.style.transform = 'translateX(-50%)'; return; }
   const gap = Math.round(window.innerHeight - (vv.offsetTop + vv.height));
@@ -18488,11 +18496,11 @@ async function loadCoachPersonaBadge(intake) {
             <div style="flex: 1; min-width: 0;">
               <div style="font-size: 11px; color: var(--accent); text-transform: uppercase; letter-spacing: 1.5px; font-weight: 600; margin-bottom: 4px;">Coaching Style</div>
               <div style="font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 2px;">${escapeHtml(persona.label)}</div>
-              <div style="font-size: 12px; color: var(--text-dim);">Methodology: <strong style="color: var(--text);">${escapeHtml(persona.coach_brain)}</strong></div>
+              <div style="font-size: 12px; color: var(--text-dim);">Methodology: <strong style="color: var(--text);">${escapeHtml((typeof getMethodologyForGoal === 'function' ? getMethodologyForGoal(intakeForBadge?.goal_event).brain : _scrubCoachNames(persona.coach_brain)) || 'endurance methodology')}</strong></div>
             </div>
           </div>
           <div style="font-size: 12px; color: var(--text-dim); line-height: 1.55; padding-top: 10px; border-top: 1px solid rgba(255, 255, 255, 0.05);">
-            ${escapeHtml(persona.methodology_summary)}
+            ${escapeHtml(_scrubCoachNames(persona.methodology_summary))}
           </div>
           <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255, 255, 255, 0.05); font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px; font-weight: 600;">
             Phase: <strong style="color: var(--accent); text-transform: none; letter-spacing: 0;">${escapeHtml(persona.phase)}</strong>
@@ -19684,6 +19692,36 @@ function stopChatMsg() {
 function formatGoal(g) {
   const map = { marathon: 'Marathon', half_marathon: 'Half Marathon', '10k': '10K', '5k': '5K', olympic_tri: 'Olympic Triathlon', '70_3': '70.3 / Half Ironman', ironman: 'Ironman', cycling: 'Cycling', swimming: 'Swimming', ultra: 'Ultra', mile: 'Mile', general: 'General Fitness' };
   return map[g] || g;
+}
+
+// Strip real coach/author names from any text we DISPLAY (the methodology the plan
+// is built on still works the same; we just don't surface the names — copyright).
+const _COACH_NAMES = [
+  'Andrew Coggan & Hunter Allen', 'Coggan & Hunter Allen', 'House & Johnston', 'Newsome & Young',
+  'Joe Friel', 'Brett Sutton', 'Pete Pfitzinger', 'Jack Daniels', 'Renato Canova', 'Stephen Seiler',
+  'Andrew Coggan', 'Hunter Allen', 'Brad Hudson', 'Swim Smooth', 'Jason Koop', 'Krissy Moehl', 'David Roche', 'Peter Attia',
+  'Friel', 'Sutton', 'Pfitzinger', 'Daniels', 'Canova', 'Seiler', 'Coggan', 'Allen', 'Hudson', 'Newsome',
+  'Maglischo', 'Olbrecht', 'Counsilman', 'Rushall', 'Koop', 'Moehl', 'Roche', 'Maffetone', 'Attia', 'Coe', 'FasCat', 'uphill athlete',
+];
+function _scrubCoachNames(text) {
+  if (!text) return '';
+  let t = String(text);
+  _COACH_NAMES.forEach(n => {
+    const esc = n.replace(/[.*+?^${}()|[\]\\&]/g, '\\$&');
+    t = t.replace(new RegExp(esc + "['’]s\\b", 'gi'), 'proven'); // possessive -> "proven"
+    t = t.replace(new RegExp('\\b' + esc + '\\b', 'gi'), '');
+  });
+  // Tidy dangling separators/parentheses the removals leave behind.
+  t = t.replace(/\(\s*[+,&\s]*\)/g, '')
+       .replace(/(\s*[+&]\s*){2,}/g, ' + ')          // runs of separators -> single +
+       .replace(/\(\s*[+&]\s*/g, '(').replace(/\s*[+&]\s*\)/g, ')')
+       .replace(/(^|[(,])\s*[+&]\s*/g, '$1')
+       .replace(/\s*[+&]\s*($|[),.;])/g, '$1')
+       .replace(/\s{2,}/g, ' ')
+       .replace(/\s+([.,;)])/g, '$1')
+       .replace(/^[\s+,&'"’“”—–-]+/, '')              // strip stray leading separators/quotes
+       .trim();
+  return t ? t.charAt(0).toUpperCase() + t.slice(1) : '';
 }
 
 // Display name + brain for the methodology Coach will use, based on goal_event.
