@@ -771,7 +771,7 @@ html.prof-modal-open, html.prof-modal-open body { overflow: hidden; }
    it must be a <body> child because #page-plan has overflow (x:hidden → y:auto),
    and on iOS an overflow ancestor clips/contains position:fixed/sticky children,
    which is why an in-#page-plan pinned bar showed on desktop but not on phone. */
-.plan-bar { display: flex; gap: 6px; margin-top: 46px; margin-bottom: 14px; padding: 0; align-items: center; flex-wrap: wrap; }
+.plan-bar { display: flex; gap: 6px; margin-top: 46px; margin-bottom: 14px; padding: 0; align-items: center; flex-wrap: nowrap; }
 .plan-bar-btn { background: var(--bg-3); border: 1px solid var(--border-light); color: var(--text); font-size: 12.5px; font-weight: 600; border-radius: 999px; padding: 8px 12px; display: inline-flex; align-items: center; gap: 5px; cursor: pointer; font-family: inherit; white-space: nowrap; -webkit-tap-highlight-color: transparent; transition: background .15s; }
 .plan-bar-btn:active { background: var(--bg-2); }
 .plan-bar-icon { width: 34px; padding: 8px 0; justify-content: center; font-weight: 800; flex-shrink: 0; }
@@ -6690,6 +6690,13 @@ function renderPwaInstallCard(intakeDone) {
   const installButton = hasNativePrompt
     ? `<button class="btn" onclick="triggerPwaInstall()" style="font-size: 12px; padding: 7px 14px;">Install Stryxs</button>`
     : '';
+  // After a couple of "Maybe later"s, offer a clear permanent opt-out so we don't
+  // keep nagging someone who simply doesn't want it.
+  let snoozeCount = 0;
+  try { snoozeCount = parseInt(localStorage.getItem(`stryxs_pwa_snooze_count_${state.user.id}`) || '0', 10); } catch (_) {}
+  const stopButton = snoozeCount >= 2
+    ? `<button class="btn ghost" onclick="stopPwaReminders()" style="font-size: 12px; padding: 7px 14px; color: var(--text-mute);">Stop reminding me</button>`
+    : '';
   return `
     <div id="pwaInstallCard" style="padding: 16px 18px; background: linear-gradient(135deg, rgba(0, 229, 160, 0.06), rgba(80, 130, 255, 0.04)); border: 1px solid rgba(0, 229, 160, 0.25); border-radius: 14px; margin-bottom: 16px; position: relative;">
       <button onclick="snoozePwaInstall()" aria-label="Dismiss" style="position: absolute; top: 10px; right: 10px; background: transparent; border: 0; color: var(--text-mute); font-size: 18px; cursor: pointer; padding: 4px 8px; line-height: 1;">×</button>
@@ -6709,6 +6716,7 @@ function renderPwaInstallCard(intakeDone) {
         ${installButton}
         <button class="btn ghost" onclick="dismissPwaInstall()" style="font-size: 12px; padding: 7px 14px;">Got it, done that</button>
         <button class="btn ghost" onclick="snoozePwaInstall()" style="font-size: 12px; padding: 7px 14px;">Maybe later</button>
+        ${stopButton}
       </div>
     </div>`;
 }
@@ -6751,9 +6759,23 @@ function snoozePwaInstall() {
   try {
     const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
     localStorage.setItem(`stryxs_pwa_snoozed_until_${state.user.id}`, String(Date.now() + sevenDaysMs));
+    // Count snoozes so the card can offer a permanent "Stop reminding me" once the
+    // user has clearly kept putting it off (don't pester forever).
+    const n = parseInt(localStorage.getItem(`stryxs_pwa_snooze_count_${state.user.id}`) || '0', 10) + 1;
+    localStorage.setItem(`stryxs_pwa_snooze_count_${state.user.id}`, String(n));
   } catch (_) {}
   const el = document.getElementById('pwaInstallCard');
   if (el) el.remove();
+}
+// Permanent opt-out for users who keep deferring (shown after 2+ snoozes). Distinct
+// from "Got it, done that" — this is "I don't want this", not "I installed it".
+function stopPwaReminders() {
+  if (!state.user) return;
+  try { localStorage.setItem(`stryxs_pwa_dismissed_${state.user.id}`, '1'); } catch (_) {}
+  try { _scheduleClientStateSync(); } catch (_) {}
+  const el = document.getElementById('pwaInstallCard');
+  if (el) el.remove();
+  toast("Okay, I won't bring this up again. You can still install from your browser menu anytime.", 5000);
 }
 
 async function saveProfileData() {
@@ -18799,7 +18821,18 @@ async function regeneratePlanFromReactive(btn) {
 
   try {
     // Get current intake
-    const { data: intake } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).single();
+    let { data: intake } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).single();
+
+    // GUARD: don't rebuild without the training days needed to schedule the plan.
+    // If they're missing, collect them first; if the user cancels, abort cleanly
+    // (no half-built, un-schedulable plan).
+    intake = await _ensureTrainingDays(intake);
+    if (!intake) {
+      btn.disabled = false;
+      btn.textContent = '🔄 Regenerate plan now';
+      toast('Set your training days first, then I can rebuild your plan.', 4000);
+      return;
+    }
 
     // Pull the existing skeleton + plan_start_date from the active plan
     const { data: existingPlan } = await sb.from('training_plans')
@@ -19012,6 +19045,10 @@ async function submitNextGoal() {
 // the standard plan-intro message when it would be redundant.
 async function _rebuildPlanInPlace(intake, opts = {}) {
   if (!state.user || !intake) { toast('No profile found'); return false; }
+  // GUARD: never rebuild without the training days needed to schedule the plan.
+  // Collect them first if missing; abort if the user cancels the picker.
+  intake = await _ensureTrainingDays(intake);
+  if (!intake) { toast('Set your training days first, then I can rebuild your plan.', 4000); return false; }
   await sb.from('planned_workouts').delete().eq('user_id', state.user.id);
   await sb.from('training_plans').delete().eq('user_id', state.user.id);
   // Show the build live on the Coach page.
@@ -22931,11 +22968,6 @@ async function openShareModal() {
         How your plan is structured + your latest training week. It always shows your <strong style="color: var(--text);">current</strong> week, so you only share once.
       </div>
 
-      <div style="margin-bottom: 18px; padding: 14px 16px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px;">
-        <div style="font-size: 14px; color: var(--text); font-weight: 600; margin-bottom: 4px;">📅 Add to your calendar</div>
-        <div style="font-size: 12px; color: var(--text-dim); line-height: 1.5; margin-bottom: 10px;">Download your upcoming plan as a calendar file (Apple, Google, or Outlook) so every session shows up on your phone.</div>
-        <button class="btn ghost" onclick="exportPlanToCalendar()" style="width: 100%;">📅 Download calendar file (.ics)</button>
-      </div>
 
       <div style="margin-bottom: 20px; padding: 14px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px;">
         <label style="display: flex; align-items: flex-start; gap: 10px; cursor: pointer;">
@@ -24445,8 +24477,7 @@ async function renderPlan() {
     ${hasPlan ? `
     <div class="plan-bar" id="planBar">
       <button class="plan-bar-btn" onclick="scrollToTodayWorkout()">📋 Today's workout</button>
-      <button class="plan-bar-btn" onclick="openReminderSettings()">🔔 Reminders</button>
-      <button class="plan-bar-btn" onclick="openShareModal()">Share</button>
+      <button class="plan-bar-btn" onclick="openPlanToolsMenu()">⋯ More</button>
       <button class="plan-bar-btn plan-bar-icon" onclick="openPlanInfoPopup()" aria-label="How the plan works">?</button>
       <button class="plan-bar-btn plan-bar-top" id="planBarTop" onclick="planScrollTop()">↑ Top</button>
     </div>
@@ -24683,6 +24714,82 @@ async function exportPlanToCalendar() {
     console.error('[Stryxs] calendar export failed:', e);
     toast('Could not build the calendar file. Try again.', 4000);
   }
+}
+
+// ═══════════════════════════════════════════════════════════
+// REQUIRED-INFO GUARD: never let Coach (re)build a plan when it's missing the
+// info it needs to schedule one. The binding requirement is available training
+// days — without them a plan can't land on the right dates. If they're missing
+// we collect them FIRST (a quick day picker), save them, then proceed. This is
+// routed through every rebuild entry point so a user can't tap "Regenerate" and
+// get a broken, un-schedulable plan.
+// ═══════════════════════════════════════════════════════════
+function openTrainingDaysModal(prefDays, prefLong, onSave) {
+  const isDesktop = window.innerWidth > 720;
+  const picks = new Set((prefDays && prefDays.length) ? prefDays : ['tue', 'thu', 'sat', 'sun']);
+  let longDay = prefLong && picks.has(prefLong) ? prefLong : (picks.has('sat') ? 'sat' : [...picks][0]);
+  const modal = document.createElement('div');
+  modal.id = 'trainingDaysModal';
+  modal.style.cssText = `position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:99999;display:flex;align-items:${isDesktop ? 'center' : 'flex-end'};justify-content:center;padding:${isDesktop ? '20px' : '0'};`;
+  const chipCss = 'border-radius:999px;padding:10px 0;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;flex:1;min-width:0;transition:all .14s;';
+  modal.innerHTML = `
+    <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:${isDesktop ? '18px' : '22px 22px 0 0'};padding:22px 18px calc(22px + var(--safe-bottom,0px));max-width:460px;width:100%;max-height:88vh;overflow-y:auto;">
+      <div style="font-size:18px;font-weight:800;letter-spacing:-.3px;margin-bottom:6px;">Which days can you train?</div>
+      <div style="font-size:13px;color:var(--text-dim);line-height:1.5;margin-bottom:16px;">Coach needs this to schedule your plan. Tap all the days that work.</div>
+      <div id="tdmDays" style="display:flex;gap:6px;margin-bottom:18px;">
+        ${OBD_DAY_ORDER.map(d => `<button type="button" data-day="${d}" style="${chipCss}border:1px solid ${picks.has(d) ? 'var(--accent)' : 'var(--border-light)'};background:${picks.has(d) ? 'rgba(0,229,160,.16)' : 'var(--bg-3)'};color:${picks.has(d) ? 'var(--accent)' : 'var(--text)'};">${OBD_DAY_LABELS[d]}</button>`).join('')}
+      </div>
+      <div style="font-size:13px;color:var(--text-dim);margin-bottom:8px;">Best day for your longer / key session</div>
+      <select id="tdmLong" style="width:100%;background:var(--bg-3);border:1px solid var(--border-light);color:var(--text);border-radius:12px;padding:12px 14px;font-size:14px;font-family:inherit;margin-bottom:18px;"></select>
+      <div style="display:flex;gap:8px;">
+        <button class="btn ghost" id="tdmCancel" style="flex:1;">Cancel</button>
+        <button class="btn" id="tdmSave" style="flex:2;">Save &amp; continue</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  const longSel = modal.querySelector('#tdmLong');
+  const syncLong = () => {
+    const sel = OBD_DAY_ORDER.filter(d => picks.has(d));
+    if (!sel.includes(longDay)) longDay = sel.includes('sat') ? 'sat' : (sel[sel.length - 1] || '');
+    longSel.innerHTML = sel.map(d => `<option value="${d}" ${d === longDay ? 'selected' : ''}>${OBD_DAY_LABELS[d]}</option>`).join('');
+  };
+  syncLong();
+  modal.querySelectorAll('#tdmDays button').forEach(b => {
+    b.onclick = () => {
+      const d = b.dataset.day;
+      if (picks.has(d)) picks.delete(d); else picks.add(d);
+      const on = picks.has(d);
+      b.style.border = `1px solid ${on ? 'var(--accent)' : 'var(--border-light)'}`;
+      b.style.background = on ? 'rgba(0,229,160,.16)' : 'var(--bg-3)';
+      b.style.color = on ? 'var(--accent)' : 'var(--text)';
+      syncLong();
+    };
+  });
+  longSel.onchange = () => { longDay = longSel.value; };
+  const close = () => modal.remove();
+  modal.querySelector('#tdmCancel').onclick = () => { close(); onSave(null); };
+  modal.addEventListener('click', e => { if (e.target === modal) { close(); onSave(null); } });
+  modal.querySelector('#tdmSave').onclick = () => {
+    const sel = OBD_DAY_ORDER.filter(d => picks.has(d));
+    if (!sel.length) { toast('Pick at least one training day.'); return; }
+    close();
+    onSave(sel, longDay || (sel.includes('sat') ? 'sat' : sel[sel.length - 1]));
+  };
+}
+// Resolves to an intake guaranteed to have available_days (collecting + saving them
+// first if missing), or null if the user cancels (caller should abort the rebuild).
+function _ensureTrainingDays(intake) {
+  return new Promise((resolve) => {
+    const days = (intake && Array.isArray(intake.available_days) && intake.available_days.length) ? intake.available_days : null;
+    if (days) { resolve(intake); return; }
+    openTrainingDaysModal(intake?.available_days, intake?.preferred_long_day, async (selDays, longDay) => {
+      if (!selDays) { resolve(null); return; } // cancelled
+      try {
+        await sb.from('athlete_intake').update({ available_days: selDays, preferred_long_day: longDay }).eq('user_id', state.user.id);
+      } catch (e) { console.warn('[Stryxs] save training days failed:', e); }
+      resolve({ ...(intake || {}), available_days: selDays, preferred_long_day: longDay });
+    });
+  });
 }
 
 // Jump straight to the workout-reminders setup (Settings → Notifications), opening
@@ -25003,6 +25110,36 @@ function initPlanBar() {
 }
 
 // "?" popup — explains the self-building plan (moved off the page body).
+// One consolidated "More" sheet for the plan bar so it stays a single clean line.
+// Holds the three plan-output actions: Reminders, Add to calendar, Share.
+function openPlanToolsMenu() {
+  const isDesktop = window.innerWidth > 720;
+  const modal = document.createElement('div');
+  modal.id = 'planToolsModal';
+  modal.style.cssText = `position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:99999;display:flex;align-items:${isDesktop ? 'center' : 'flex-end'};justify-content:center;padding:${isDesktop ? '20px' : '0'};`;
+  const row = (icon, title, sub, call) => `
+    <button type="button" onclick="document.getElementById('planToolsModal').remove(); ${call}" style="display:flex;align-items:center;gap:14px;width:100%;text-align:left;background:var(--bg-3);border:1px solid var(--border);border-radius:14px;padding:14px 16px;cursor:pointer;font-family:inherit;color:var(--text);">
+      <span style="font-size:22px;flex-shrink:0;line-height:1;">${icon}</span>
+      <span style="flex:1;min-width:0;">
+        <span style="display:block;font-size:15px;font-weight:700;">${title}</span>
+        <span style="display:block;font-size:12px;color:var(--text-dim);margin-top:2px;line-height:1.4;">${sub}</span>
+      </span>
+      <span style="color:var(--text-mute);font-size:18px;flex-shrink:0;">›</span>
+    </button>`;
+  modal.innerHTML = `
+    <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:${isDesktop ? '18px' : '22px 22px 0 0'};padding:20px 18px calc(20px + var(--safe-bottom,0px));max-width:460px;width:100%;">
+      <div style="font-size:17px;font-weight:800;letter-spacing:-.3px;margin-bottom:14px;">Plan options</div>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        ${row('🔔', 'Reminders', 'Get a nudge before each workout', 'openReminderSettings()')}
+        ${row('📅', 'Add to calendar', 'Put your plan on your phone calendar', 'exportPlanToCalendar()')}
+        ${row('🔗', 'Share plan', 'Send a read-only link to a coach or friend', 'openShareModal()')}
+      </div>
+      <button class="btn ghost" style="width:100%;margin-top:14px;" onclick="document.getElementById('planToolsModal').remove()">Close</button>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+}
+
 function openPlanInfoPopup() {
   const pro = (typeof isUserPro === 'function') ? isUserPro() : false;
   const isDesktop = window.innerWidth > 720;
