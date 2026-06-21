@@ -24702,6 +24702,105 @@ function openReminderSettings() {
   }, 280);
 }
 
+// ═══════════════════════════════════════════════════════════
+// ZWIFT EXPORT (.zwo) — turn a bike session into a structured Zwift workout the
+// rider drops into Documents/Zwift/Workouts. We don't have per-step structured
+// data, so we build a sensible structure from the workout TYPE + duration (the
+// full text prescription rides along in <description>). Pure string-built XML.
+// ═══════════════════════════════════════════════════════════
+function _xmlEsc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+}
+function _findPlannedById(id) {
+  try {
+    for (const date in currentPlannedWorkouts) {
+      const hit = (currentPlannedWorkouts[date] || []).find(w => String(w.id) === String(id));
+      if (hit) return hit;
+    }
+  } catch (_) {}
+  return null;
+}
+// Map a workout type to a steady %FTP fraction; null = build VO2/max-effort
+// structure. Order matters: catch threshold/tempo/easy BEFORE the generic
+// "interval" word so "threshold_intervals" isn't treated as a VO2 session.
+function _zwoFtpFracFor(type) {
+  const t = (type || '').toLowerCase();
+  if (/recovery/.test(t)) return 0.5;
+  if (/vo2|anaerobic|sprint/.test(t)) return null;   // true max-intensity
+  if (/threshold|ftp|\blt\b/.test(t)) return 0.95;   // threshold (built as intervals below)
+  if (/tempo|sweet/.test(t)) return 0.84;
+  if (/easy|aerobic|endurance|long|base|z2/.test(t)) return 0.65;
+  if (/interval|hard|race/.test(t)) return null;     // generic intervals not caught above
+  return 0.68; // sensible default
+}
+function _buildZwo(w) {
+  const totalSec = Math.max(600, (w.duration_minutes || 60) * 60);
+  const name = _pfPrettyTitle(w);
+  const desc = String(w.description || '').replace(/\s+/g, ' ').trim()
+    + (w.intensity_target ? `\n\nTarget: ${w.intensity_target}` : '')
+    + '\n\nFrom your Stryxs training plan. %FTP is approximate — ride to feel/your zones.';
+  const frac = _zwoFtpFracFor(w.workout_type);
+  const r2 = (n) => Math.round(n * 100) / 100;
+  let blocks = '';
+  if (frac === null) {
+    const wu = Math.min(720, Math.round(totalSec * 0.2));
+    const cd = Math.min(600, Math.round(totalSec * 0.15));
+    const work = Math.max(0, totalSec - wu - cd);
+    const onSec = 240, offSec = 180;
+    const reps = Math.max(1, Math.floor(work / (onSec + offSec)));
+    blocks += `    <Warmup Duration="${wu}" PowerLow="0.45" PowerHigh="0.75"/>\n`;
+    blocks += `    <IntervalsT Repeat="${reps}" OnDuration="${onSec}" OffDuration="${offSec}" OnPower="1.08" OffPower="0.55"/>\n`;
+    blocks += `    <Cooldown Duration="${cd}" PowerLow="0.6" PowerHigh="0.4"/>\n`;
+  } else if (frac >= 0.9) {
+    // Threshold: a 50-min block at 0.95 is brutal/unrealistic — build it as
+    // ~10min work / 5min float intervals at threshold power instead.
+    const wu = Math.min(720, Math.round(totalSec * 0.2));
+    const cd = Math.min(420, Math.round(totalSec * 0.12));
+    const work = Math.max(0, totalSec - wu - cd);
+    const onSec = 600, offSec = 300;
+    const reps = Math.max(1, Math.floor(work / (onSec + offSec)));
+    blocks += `    <Warmup Duration="${wu}" PowerLow="0.45" PowerHigh="0.8"/>\n`;
+    blocks += `    <IntervalsT Repeat="${reps}" OnDuration="${onSec}" OffDuration="${offSec}" OnPower="${r2(frac)}" OffPower="0.55"/>\n`;
+    blocks += `    <Cooldown Duration="${cd}" PowerLow="0.6" PowerHigh="0.4"/>\n`;
+  } else if (frac >= 0.8) {
+    const wu = Math.min(720, Math.round(totalSec * 0.2));
+    const cd = Math.min(420, Math.round(totalSec * 0.12));
+    const main = Math.max(0, totalSec - wu - cd);
+    blocks += `    <Warmup Duration="${wu}" PowerLow="0.45" PowerHigh="${r2(frac - 0.1)}"/>\n`;
+    blocks += `    <SteadyState Duration="${main}" Power="${r2(frac)}"/>\n`;
+    blocks += `    <Cooldown Duration="${cd}" PowerLow="${r2(frac - 0.2)}" PowerHigh="0.4"/>\n`;
+  } else {
+    const wu = Math.min(300, Math.round(totalSec * 0.1));
+    const main = Math.max(0, totalSec - wu);
+    blocks += `    <Warmup Duration="${wu}" PowerLow="0.45" PowerHigh="${r2(frac)}"/>\n`;
+    blocks += `    <SteadyState Duration="${main}" Power="${r2(frac)}"/>\n`;
+  }
+  return `<workout_file>\n  <author>Stryxs</author>\n  <name>${_xmlEsc(name)}</name>\n  <description>${_xmlEsc(desc)}</description>\n  <sportType>bike</sportType>\n  <workout>\n${blocks}  </workout>\n</workout_file>\n`;
+}
+function exportWorkoutToZwift(id) {
+  const w = _findPlannedById(id);
+  if (!w) { toast('Could not find that workout.'); return; }
+  if (w.sport !== 'bike') { toast('Zwift export is for bike sessions.'); return; }
+  try {
+    const zwo = _buildZwo(w);
+    const blob = new Blob([zwo], { type: 'application/xml;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const slug = (_pfPrettyTitle(w) || 'workout').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
+    a.download = `stryxs-${slug || 'bike'}.zwo`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    if (typeof trackEvent === 'function') { try { trackEvent('workout_zwift_export'); } catch (_) {} }
+    toast('Zwift workout downloaded. Drop it in Documents/Zwift/Workouts, then it appears in Custom Workouts.', 6500);
+  } catch (e) {
+    console.error('[Stryxs] zwift export failed:', e);
+    toast('Could not build the Zwift file. Try again.', 4000);
+  }
+}
+
 function _pfCardHTML(w) {
   const sk = _pfSportKey(w.sport);
   if (w.sport === 'rest') {
@@ -24755,6 +24854,7 @@ function _pfCardHTML(w) {
       ${w.intensity_target ? `<div class="it"><strong>Target:</strong> ${escapeHtml(w.intensity_target)}</div>` : ''}
       <div class="acts">
         <button class="btn" onclick="event.stopPropagation(); askCoachAboutWorkout('${w.id}')">💬 Ask Coach</button>
+        ${w.sport === 'bike' ? `<button class="btn ghost" onclick="event.stopPropagation(); exportWorkoutToZwift('${w.id}')" title="Download as a Zwift workout">🚲 Zwift</button>` : ''}
         ${skipped
           ? `<button class="btn ghost" onclick="event.stopPropagation(); undoSkipWorkout('${w.id}')">↶ Un-skip</button>`
           : `<button class="btn ghost" onclick="event.stopPropagation(); openSkipWorkoutMenu('${w.id}')">⏭️ Skip</button>
