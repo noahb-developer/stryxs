@@ -2,7 +2,7 @@
 // Handles incoming Web Push messages and notification interactions.
 // Lives at /sw.js (must be served from the root for full-scope control).
 
-const CACHE_NAME = 'stryxs-sw-v4';
+const CACHE_NAME = 'stryxs-sw-v5';
 
 // Install + activate quickly — we don't precache anything since the
 // SPA reloads on each visit and we don't need offline support yet.
@@ -65,18 +65,21 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const targetUrl = event.notification.data?.url || '/';
+  // Derive the in-app destination so an ALREADY-OPEN app can route instantly via
+  // postMessage (client.navigate alone won't re-run the SPA's router). A cold start
+  // falls back to opening targetUrl, which the app's startup router reads.
+  const goToday = /[?&]go=today/.test(targetUrl);
+  const page = /\/plan\b/.test(targetUrl) ? 'plan' : null;
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      // Try to focus an existing Stryxs tab
+      // Try to focus an existing Stryxs tab and tell it where to go
       for (const client of clientList) {
         if (client.url.includes(self.location.host) && 'focus' in client) {
-          if (targetUrl !== '/' && 'navigate' in client) {
-            client.navigate(targetUrl).catch(() => {});
-          }
+          try { client.postMessage({ type: 'stryxs-open', page, goToday }); } catch (_) {}
           return client.focus();
         }
       }
-      // No existing tab — open a new one
+      // No existing tab — open a new one at the deep-linked URL
       if (self.clients.openWindow) {
         return self.clients.openWindow(targetUrl);
       }

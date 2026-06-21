@@ -17447,6 +17447,15 @@ if ('serviceWorker' in navigator) {
   } else {
     registerServiceWorker();
   }
+  // Tapping a workout-reminder notification while the app is already open: the SW
+  // posts where to go. Route in-app (no reload) to the Plan tab + today's session.
+  navigator.serviceWorker.addEventListener('message', (event) => {
+    const d = event.data || {};
+    if (d.type === 'stryxs-open') {
+      try { if (d.page && typeof navigate === 'function') navigate(d.page); } catch (_) {}
+      if (d.goToday) setTimeout(() => { try { if (typeof scrollToTodayWorkout === 'function') scrollToTodayWorkout(); } catch (_) {} }, 500);
+    }
+  });
 }
 
 async function callCoach(action, payload, options = {}) {
@@ -18834,30 +18843,16 @@ async function regeneratePlanFromReactive(btn) {
     }
 
     if (!regenStartDate) {
-      // Plan has started, find the Monday AFTER the latest scheduled workout
-      const { data: latestPlanned } = await sb.from('planned_workouts')
-        .select('scheduled_date')
-        .eq('user_id', state.user.id)
-        .order('scheduled_date', { ascending: false })
-        .limit(1);
-      if (latestPlanned && latestPlanned.length > 0) {
-        const lastDate = new Date(latestPlanned[0].scheduled_date + 'T12:00:00');
-        const nextStart = new Date(lastDate);
-        nextStart.setDate(lastDate.getDate() + 1);
-        const nsDow = nextStart.getDay();
-        if (nsDow !== 1) {
-          const daysToMon = nsDow === 0 ? 1 : (8 - nsDow);
-          nextStart.setDate(nextStart.getDate() + daysToMon);
-        }
-        regenStartDate = nextStart.toISOString().split('T')[0];
-      } else {
-        // No existing scheduled workouts, default to next Monday from today
-        const dow = today.getDay();
-        const daysUntilMonday = dow === 1 ? 0 : (dow === 0 ? 1 : (8 - dow));
-        const nextMon = new Date(today);
-        nextMon.setDate(today.getDate() + daysUntilMonday);
-        regenStartDate = nextMon.toISOString().split('T')[0];
-      }
+      // Plan already running (or no future start stored): anchor the regenerated
+      // plan to THIS week's Monday so "Week 1" is the current week.
+      // (The OLD logic anchored to the Monday AFTER the last leftover workout — and
+      // since the plan auto-builds ~a month ahead, that shoved the new start weeks
+      // into the future and stranded the user in a multi-week fake "starter week".)
+      const dow = today.getDay(); // 0=Sun..6=Sat
+      const offsetToMon = dow === 0 ? -6 : 1 - dow; // Mon→0, Tue→-1 … Sun→-6
+      const thisMon = new Date(today);
+      thisMon.setDate(today.getDate() + offsetToMon);
+      regenStartDate = thisMon.toISOString().split('T')[0];
     }
 
     console.log('[Stryxs] Regen start date:', regenStartDate, '(stored plan_start was:', storedPlanStartDate, ')');
@@ -18875,9 +18870,20 @@ async function regeneratePlanFromReactive(btn) {
     const plan = await callCoach('generate_plan', { intake, weekNumber, skeleton, recentWorkouts: [] });
     if (skeleton) plan.skeleton = skeleton;
     plan.plan_start_date = storedPlanStartDate || regenStartDate; // preserve original anchor
+
     if (importedProfile) plan._plan_profile = importedProfile; // PRESERVE the imported profile across regenerations
 
+    // Replace any leftover FUTURE workouts from the prior plan so the regenerated
+    // plan doesn't sit alongside stale sessions (savePlanToDb only clears the single
+    // week it writes). Past/completed days (< regenStartDate) are preserved.
+    try { await sb.from('planned_workouts').delete().eq('user_id', state.user.id).gte('scheduled_date', regenStartDate); }
+    catch (e) { console.warn('[Stryxs] clear future workouts before regen failed (non-fatal):', e); }
+
     await savePlanToDb(plan, state.user.id, regenStartDate);
+
+    // Fill the next few weeks so the plan isn't just one week after a regen.
+    _lastAutoExtendCheck = 0; _autoExtendInFlight = false;
+    try { await maybeAutoExtendPlan(); } catch (_) {}
 
     toast('Plan regenerated based on your changes');
 
@@ -23133,14 +23139,29 @@ async function renderPublicShare(token) {
     // stat than LTHR/level for a public share. Computed from their first planned day.
     let journeyLabel = '';
     try {
-      const { data: firstPw } = await sb.from('planned_workouts')
-        .select('scheduled_date')
+      // Anchor to plan_start_date (the SAME anchor the in-app Plan page uses) so the
+      // public "week" matches what the athlete sees in their own app. Fall back to
+      // their first planned day for older plans that predate a stored start date.
+      let anchorYMD = null;
+      const { data: planRow } = await sb.from('training_plans')
+        .select('plan_data')
         .eq('user_id', userId)
-        .order('scheduled_date', { ascending: true })
+        .eq('active', true)
+        .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
-      if (firstPw?.scheduled_date) {
-        const start = new Date(firstPw.scheduled_date + 'T12:00:00');
+      anchorYMD = planRow?.plan_data?.plan_start_date || null;
+      if (!anchorYMD) {
+        const { data: firstPw } = await sb.from('planned_workouts')
+          .select('scheduled_date')
+          .eq('user_id', userId)
+          .order('scheduled_date', { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        anchorYMD = firstPw?.scheduled_date || null;
+      }
+      if (anchorYMD) {
+        const start = new Date(anchorYMD + 'T12:00:00');
         const days = Math.floor((Date.now() - start.getTime()) / (24 * 60 * 60 * 1000));
         if (days >= 7) {
           const weeks = Math.floor(days / 7) + 1;
@@ -28844,6 +28865,11 @@ function animateShowcase() {
       return allowed.includes(p) ? p : 'dashboard';
     })();
     navigate(pageFromPath);
+    // Deep link from a tapped workout-reminder notification (/plan?go=today):
+    // once the Plan page is up, jump to today's session.
+    if (queryParams.get('go') === 'today') {
+      setTimeout(() => { try { if (typeof scrollToTodayWorkout === 'function') scrollToTodayWorkout(); } catch (_) {} }, 700);
+    }
     // If user just returned from Stripe Checkout, handle the result
     try {
       await handleStripeReturn();
