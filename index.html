@@ -11003,8 +11003,9 @@ function _stryxsSmoothPath(pts) {
 // Format a pace value (minutes-per-km as a decimal) as M:SS/km
 function _stryxsFmtPace(v, unitTail) {
   if (!Number.isFinite(v) || v <= 0) return '—';
-  const m = Math.floor(v);
-  const s = Math.round((v - m) * 60);
+  let m = Math.floor(v);
+  let s = Math.round((v - m) * 60);
+  if (s >= 60) { m += 1; s -= 60; } // carry so 5.999 → 6:00, not 5:60
   return `${m}:${String(s).padStart(2, '0')}/${unitTail || 'km'}`;
 }
 
@@ -11026,8 +11027,9 @@ function _stryxsBareFormatter(unit) {
   if (unit && String(unit).includes('min/')) {
     return v => {
       if (!Number.isFinite(v) || v <= 0) return '—';
-      const m = Math.floor(v);
-      const s = Math.round((v - m) * 60);
+      let m = Math.floor(v);
+      let s = Math.round((v - m) * 60);
+      if (s >= 60) { m += 1; s -= 60; } // carry so 5.999 → 6:00, not 5:60
       return `${m}:${String(s).padStart(2, '0')}`;
     };
   }
@@ -11782,7 +11784,7 @@ function renderSwimPaceChart(laps) {
   const valid = laps.filter(l => !l.isRest && l.distanceM > 0 && typeof l.pacePer100m === 'number' && l.pacePer100m > 0);
   if (valid.length < 4) return ''; // a line needs a few points; short sets show the laps table instead
   const paces = valid.map(l => l.pacePer100m);
-  const fmtPace = sec => `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, '0')}`;
+  const fmtPace = sec => { let m = Math.floor(sec / 60); let s = Math.round(sec % 60); if (s >= 60) { m += 1; s -= 60; } return `${m}:${String(s).padStart(2, '0')}`; }; // carry so 359.6 → 6:00, not 5:60
   // X labels at start / middle / end (lap number), like the over-time charts — no
   // per-point text, so nothing crowds/overlaps on a phone.
   const n = valid.length, midI = Math.floor((n - 1) / 2);
@@ -14597,6 +14599,15 @@ function renderTrends() {
   });
   const totalS = Object.values(sportCounts).reduce((a, b) => a+b, 0);
 
+  // Only offer the sports the athlete actually trains, so single-sport users
+  // (a pure swimmer, a run+gym athlete) don't get pickers full of empty options
+  // or a judgmental "no data" card for a discipline they never do. Drift needs
+  // HR (run/bike/swim); intensity distribution is computed for run/bike only.
+  const driftSportOpts = (() => { const s = ['run', 'bike', 'swim'].filter(x => sportCounts[x] > 0); return s.length > 1 ? ['overall', ...s] : s; })();
+  const intensitySportOpts = (() => { const s = ['run', 'bike'].filter(x => sportCounts[x] > 0); return s.length > 1 ? ['overall', ...s] : s; })();
+  if (driftSportOpts.length && !driftSportOpts.includes(state.trendsDriftSport)) state.trendsDriftSport = driftSportOpts[0];
+  if (intensitySportOpts.length && !intensitySportOpts.includes(state.trendsIntensitySport)) state.trendsIntensitySport = intensitySportOpts[0];
+
   // Compute drift for selected sport
   const driftWorkouts = (sport) => {
     if (sport === 'overall') {
@@ -14727,7 +14738,7 @@ function renderTrends() {
             <div class="panel-title" style="font-size: 14px;">Cardiac Drift</div>
             <div class="panel-sub" style="font-size: 11px;">Aerobic fitness</div>
           </div>
-          ${renderStatPicker('trendsDrift', state.trendsDriftSport, ['overall', 'run', 'bike', 'swim'], 'setTrendsDriftSport')}
+          ${driftSportOpts.length > 1 ? renderStatPicker('trendsDrift', state.trendsDriftSport, driftSportOpts, 'setTrendsDriftSport') : ''}
         </div>
         ${avgDrift !== null ? `
           <div style="display: flex; flex-direction: column; gap: 12px;">
@@ -14791,7 +14802,7 @@ function renderTrends() {
           <div class="panel-title" style="font-size: 14px;">Intensity Distribution</div>
           <div class="panel-sub" style="font-size: 11px;">Elite athletes train ~80% easy</div>
         </div>
-        ${renderStatPicker('trendsIntensity', state.trendsIntensitySport, ['overall', 'run', 'bike'], 'setTrendsIntensitySport')}
+        ${intensitySportOpts.length > 1 ? renderStatPicker('trendsIntensity', state.trendsIntensitySport, intensitySportOpts, 'setTrendsIntensitySport') : ''}
       </div>
       ${landW.length > 0 ? `
         <div class="zone-bars">
@@ -14800,9 +14811,11 @@ function renderTrends() {
           <div class="zone-row"><div class="zone-info"><div class="zone-chip" style="background: var(--z5);">Hd</div><span class="zone-name">Hard / Thresh+</span></div><div class="zone-track"><div class="zone-fill" style="width: ${hardPct}%; background: var(--z5);"></div></div><div class="zone-pct">${hardPct}%</div></div>
         </div>
         <div class="verdict ${rc}" style="margin-top: 12px;"><span class="verdict-icon">${rc==='good'?'✓':rc==='ok'?'!':'✕'}</span> ${rv}</div>
+      ` : (intensitySportOpts.length === 0 ? `
+        <div style="font-size: 12px; color: var(--text-dim); padding: 8px 0; line-height: 1.55;">Intensity distribution is tracked for running and cycling sessions — your full training mix is shown above.</div>
       ` : `
-        <div style="font-size: 12px; color: var(--text-dim); padding: 8px 0;">No intensity data for ${state.trendsIntensitySport === 'overall' ? 'cardio sports' : state.trendsIntensitySport} yet.</div>
-      `}
+        <div style="font-size: 12px; color: var(--text-dim); padding: 8px 0;">No intensity data for ${state.trendsIntensitySport === 'overall' ? 'these sports' : state.trendsIntensitySport} yet — log a session with heart rate.</div>
+      `)}
     </div>
     </div><!-- /#trendsTabStats -->
   `;
@@ -16467,7 +16480,12 @@ const OBD_GOALS = {
 };
 const OBD_SPORT_ACK = { Running: 'Runner, nice.', Cycling: 'A cyclist, love it.', Swimming: 'Swimming, great.', Triathlon: 'Triathlete, respect.', 'A mix': 'A bit of everything, nice.', 'General fitness': "Let's get you feeling great." };
 const OBD_EQUIP = { Running: ['run_gear', 'gym'], Cycling: ['bike', 'gym'], Swimming: ['pool', 'gym'], Triathlon: ['pool', 'bike', 'run_gear', 'gym'], 'A mix': ['run_gear', 'bike', 'pool', 'gym'], 'General fitness': ['gym', 'run_gear'] };
+// OBD_DAYS is only a SUGGESTED default day-spread per count now — the onboarding
+// asks the user which specific days actually work (and which is their long day),
+// so we no longer silently force everyone onto Tue/Thu/Sat/Sun + a Saturday long run.
 const OBD_DAYS = { '2': ['tue', 'sat'], '3': ['tue', 'thu', 'sat'], '4': ['tue', 'thu', 'sat', 'sun'], '5': ['mon', 'tue', 'thu', 'sat', 'sun'], '6': ['mon', 'tue', 'wed', 'thu', 'sat', 'sun'], '7': ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] };
+const OBD_DAY_ORDER = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+const OBD_DAY_LABELS = { mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri', sat: 'Sat', sun: 'Sun' };
 const OBD_EXP = { 'Just starting out': 'beginner', 'Been at it a while': 'intermediate', "I'm experienced": 'advanced' };
 const OBD_RACEEXP = { beginner: 'first_time', intermediate: '1_to_2', advanced: '3_plus' };
 const OBD_VOL = { 'Just starting (0–2h)': 2, 'A few hours (3–4h)': 4, '5–8 hours': 7, '8+ hours': 10 };
@@ -16625,7 +16643,41 @@ function _obdAskExp() {
 }
 function _obdAskDays() {
   _obdSetProg(4);
-  _obdChips(['2', '3', '4', '5', '6', '7'].map(n => ({ label: n, onPick: () => { _obdUserSay(n + ' days'); _obdA.days = n; _obdClearDock(); const ack = (+n <= 3) ? `${n} is plenty to make real progress.` : `${n} days, we can do a lot with that.`; _obdCoachSay(`${ack} And roughly how much are you training right now?`, _obdAskVolume); } })));
+  _obdChips(['2', '3', '4', '5', '6', '7'].map(n => ({ label: n, onPick: () => { _obdUserSay(n + ' days'); _obdA.days = n; _obdClearDock(); const ack = (+n <= 3) ? `${n} is plenty to make real progress.` : `${n} days, we can do a lot with that.`; _obdCoachSay(`${ack} Which days actually work for you? Tap all you can train.`, _obdAskWhichDays); } })));
+}
+// Ask which SPECIFIC days the athlete can train (pre-filled with a sensible spread
+// for their chosen count, fully editable). This replaces silently forcing everyone
+// onto the same hardcoded Tue/Thu/Sat/Sun spread.
+function _obdAskWhichDays() {
+  _obdSetProg(4);
+  const dock = document.getElementById('obdDock'); if (!dock) return; dock.innerHTML = '';
+  const picks = new Set(OBD_DAYS[_obdA.days] || OBD_DAYS['4']);
+  const wrap = document.createElement('div'); wrap.className = 'obd-chips';
+  OBD_DAY_ORDER.forEach(d => {
+    const b = document.createElement('button'); b.className = 'obd-chip' + (picks.has(d) ? ' sel' : ''); b.textContent = OBD_DAY_LABELS[d];
+    b.onclick = () => { if (picks.has(d)) { picks.delete(d); b.classList.remove('sel'); } else { picks.add(d); b.classList.add('sel'); } };
+    wrap.appendChild(b);
+  });
+  dock.appendChild(wrap);
+  const drow = document.createElement('div'); drow.className = 'obd-chips';
+  const done = document.createElement('button'); done.className = 'obd-chip'; done.textContent = 'Done →';
+  done.onclick = () => {
+    const sel = OBD_DAY_ORDER.filter(d => picks.has(d));
+    if (!sel.length) { toast('Pick at least one day you can train.'); return; }
+    _obdA.availableDays = sel;
+    _obdUserSay(sel.map(d => OBD_DAY_LABELS[d]).join(' · '));
+    _obdClearDock();
+    if (sel.length >= 2) { _obdCoachSay(`Perfect. Which of those works best for your longer, key session?`, _obdAskLongDay); }
+    else { _obdA.longDay = sel[0]; _obdCoachSay(`Got it. And roughly how much are you training right now?`, _obdAskVolume); }
+  };
+  drow.appendChild(done); dock.appendChild(drow); _obdScroll();
+}
+// Ask which of the chosen days suits the long/key session (long run/ride/swim) so
+// we stop hardcoding everyone's long day to Saturday.
+function _obdAskLongDay() {
+  _obdSetProg(4);
+  const days = (_obdA.availableDays && _obdA.availableDays.length) ? _obdA.availableDays : (OBD_DAYS[_obdA.days] || OBD_DAYS['4']);
+  _obdChips(days.map(d => ({ label: OBD_DAY_LABELS[d], onPick: () => { _obdA.longDay = d; _obdUserSay(OBD_DAY_LABELS[d]); _obdClearDock(); _obdCoachSay(`Nice, that's a great anchor for the week. And roughly how much are you training right now?`, _obdAskVolume); } })));
 }
 function _obdAskVolume() {
   _obdSetProg(5);
@@ -16707,7 +16759,10 @@ function _obdMapToIntakeAnswers() {
   const limitParts = [];
   if (a.injuryArea) limitParts.push(`${a.injuryArea}${a.injurySevText ? ' — ' + a.injurySevText : ''}`);
   if (a.timeFloor) limitParts.push(`Some weeks tight on time (can usually manage ${a.timeFloor} day${a.timeFloor === '1' ? '' : 's'})`);
-  const days = OBD_DAYS[a.days] || null;
+  const days = (a.availableDays && a.availableDays.length) ? a.availableDays : (OBD_DAYS[a.days] || null);
+  // Long day = what the user chose; else fall back to Saturday if it's available,
+  // otherwise the last available day (never a day they can't train).
+  const longDay = a.longDay || (days && days.includes('sat') ? 'sat' : (days && days.length ? days[days.length - 1] : 'sat'));
   const out = {
     plan_path: a.planPath || 'build_new',
     goal_event: a.goal_event || 'general',
@@ -16717,7 +16772,7 @@ function _obdMapToIntakeAnswers() {
     race_experience: OBD_RACEEXP[exp] || '1_to_2',
     current_weekly_hours: a.volHours || null,
     available_days: days,
-    preferred_long_day: 'sat',
+    preferred_long_day: longDay,
     equipment,
     injuries: limitParts.length ? limitParts.join('. ') : null,
     unit_preference: a.unit_preference || _guessUnitPreference(),
@@ -18966,7 +19021,11 @@ async function _rebuildPlanInPlace(intake, opts = {}) {
   if (skeleton) plan.skeleton = skeleton;
   await savePlanToDb(plan, state.user.id);
   _lastAutoExtendCheck = 0; _autoExtendInFlight = false;
-  try { await maybeAutoExtendPlan(); } catch (_) {}
+  // opts.skipAutoExtend (used by the chat "adjust" flow) avoids eagerly building a
+  // whole month here — that's up to 5 extra plan-gen calls PER tweak, which burns a
+  // user's monthly limit in ~2 edits. The plan still fills itself lazily on the next
+  // Plan/Dashboard view, so a quick "change this, then that" only costs one build each.
+  if (!opts.skipAutoExtend) { try { await maybeAutoExtendPlan(); } catch (_) {} }
   if (!opts.skipIntro) {
     try {
       const introMsg = await callCoach('plan_intro_message', { intake });
@@ -19213,6 +19272,10 @@ async function _applyAdjustAndRebuild(preferenceText, intake, msgs) {
     if (msgs) { msgs.innerHTML += renderMsg('coach', content); msgs.scrollTop = msgs.scrollHeight; }
     try { await sb.from('coach_messages').insert({ user_id: state.user.id, role: 'coach', content, context_type: 'general_chat' }); } catch (_) {}
   };
+  // Guard against back-to-back adjust commands stacking concurrent rebuilds (each is
+  // a full wipe + regenerate). If one is already running, tell the user to wait.
+  if (window._adjustRebuildInFlight) { await post("I'm still applying your last change — give me a moment, then send the next tweak."); return; }
+  window._adjustRebuildInFlight = true;
   const pref = String(preferenceText || '').trim();
   let mergedPrefs = intake?.training_preferences || '';
   if (pref) {
@@ -19229,6 +19292,7 @@ async function _applyAdjustAndRebuild(preferenceText, intake, msgs) {
     await _rebuildPlanInPlace(intakeForBuild, {
       heroSub: pref ? `Working your request in: ${pref}.` : 'Reshaping your training around your request.',
       skipIntro: true,
+      skipAutoExtend: true, // tweaks only rebuild the current cycle; the plan fills itself lazily on next view (saves ~5 plan-gen calls per edit)
       doneMsg: "✓ Done. I've rebuilt your plan with that baked in, head to the Plan tab to see it. It'll keep topping itself up, and I'll keep this in mind for every week going forward.",
       toast: 'Plan updated!',
     });
@@ -19236,6 +19300,8 @@ async function _applyAdjustAndRebuild(preferenceText, intake, msgs) {
     console.error('[Stryxs] adjust rebuild failed:', err);
     await post("I couldn't rebuild the plan just now, give it another go in a moment.");
     try { renderCoach(); } catch (_) {}
+  } finally {
+    window._adjustRebuildInFlight = false;
   }
 }
 
