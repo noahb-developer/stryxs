@@ -11655,7 +11655,9 @@ function renderSplitsTable(splits, sport) {
   if (!splits || splits.length === 0) return '';
   // 4-column grid if any split has elevation data, otherwise 3
   const hasElev = splits.some(s => typeof s.elevation === 'number' || typeof s.elevationGain === 'number');
-  const rows = splits.slice(0, 20).map(s => {
+  // Show ALL splits — the table is collapsed behind a "Show splits" toggle, so
+  // expanding is opt-in; no point hiding any behind a "+N more" you can't open.
+  const rows = splits.map(s => {
     const paceOrTime = s.pace || (s.elapsedSec ? Math.floor(s.elapsedSec / 60) + ':' + String(s.elapsedSec % 60).padStart(2, '0') : '—');
     const elev = (typeof s.elevation === 'number') ? s.elevation : (typeof s.elevationGain === 'number' ? s.elevationGain : null);
     const elevCell = hasElev ? `<div style="color: var(--text-dim); padding: 4px 0; text-align: right;">${elev != null ? (elev > 0 ? '+' : '') + Math.round(elev) + ' m' : '—'}</div>` : '';
@@ -11666,7 +11668,7 @@ function renderSplitsTable(splits, sport) {
       ${elevCell}
     `;
   }).join('');
-  const truncated = splits.length > 20 ? `<div style="font-size: 11px; color: var(--text-mute); margin-top: 8px;">+${splits.length - 20} more splits</div>` : '';
+  const truncated = '';
   const cols = hasElev ? '40px 1fr 1fr 1fr' : '40px 1fr 1fr';
   // Collapsed by default: the split table is long on phones and pushes the charts
   // way down. A "Show splits" toggle keeps them available without the clutter.
@@ -11770,37 +11772,25 @@ function renderSwimLapsTable(laps, poolLength) {
 function renderSwimPaceChart(laps) {
   if (!Array.isArray(laps)) return '';
   const valid = laps.filter(l => !l.isRest && l.distanceM > 0 && typeof l.pacePer100m === 'number' && l.pacePer100m > 0);
-  if (valid.length < 2) return '';
+  if (valid.length < 4) return ''; // a line needs a few points; short sets show the laps table instead
   const paces = valid.map(l => l.pacePer100m);
-  const lo = Math.min(...paces), hi = Math.max(...paces);
-  const range = (hi - lo) || 1;
-  const avg = paces.reduce((s, p) => s + p, 0) / paces.length;
   const fmtPace = sec => `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, '0')}`;
-  const fmtTime = sec => sec >= 60 ? `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, '0')}` : `${Math.round(sec)}s`;
-  // Faster (lower pace) = taller bar, so the chart reads intuitively.
-  const heightPct = p => Math.max(14, 14 + (1 - (p - lo) / range) * 86);
-  const showLabels = valid.length <= 16; // avoid crowding on very long sets
-  const bars = valid.map(l => {
-    const tip = `Lap ${l.lap} · ${l.distanceM} m · ${fmtTime(l.elapsedSec)} · ${fmtPace(l.pacePer100m)}/100m`;
-    return `<div style="flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%;">
-        <div style="font-size:10px; color:var(--text-dim); margin-bottom:3px; font-variant-numeric:tabular-nums; white-space:nowrap;">${fmtPace(l.pacePer100m)}</div>
-        <div title="${tip}" style="width:100%; max-width:46px; height:${heightPct(l.pacePer100m).toFixed(1)}%; background:#00e5a0; opacity:0.92; border-radius:4px 4px 0 0;"></div>
-      </div>`;
-  }).join('');
-  const labels = showLabels ? valid.map(l =>
-    `<div style="flex:1; min-width:0; text-align:center; font-size:10px; color:var(--text-mute); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${l.distanceM}m</div>`
-  ).join('') : '';
-  return `
-    <div style="background: rgba(80, 130, 255, 0.04); border: 1px solid rgba(255,255,255,0.05); border-radius: 10px; padding: 14px; margin-top: 14px;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 6px;">
-        <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px;">Pace per lap</div>
-        <div style="font-size: 11px; color: var(--text-dim); font-variant-numeric: tabular-nums;">avg ${fmtPace(avg)} · fastest ${fmtPace(lo)} · slowest ${fmtPace(hi)} /100m</div>
-      </div>
-      <div style="display:flex; align-items:flex-end; gap:6px; height:140px;">${bars}</div>
-      ${showLabels ? `<div style="display:flex; gap:6px; margin-top:6px;">${labels}</div>` : ''}
-      <div style="font-size:10px; color:var(--text-mute); margin-top:8px; text-align:center;">taller bar = faster lap${showLabels ? '' : ' · tap a bar for its distance and pace'}</div>
-    </div>
-  `;
+  // X labels at start / middle / end (lap number), like the over-time charts — no
+  // per-point text, so nothing crowds/overlaps on a phone.
+  const n = valid.length, midI = Math.floor((n - 1) / 2);
+  const xLabels = valid.map((l, i) => (i === 0 || i === n - 1 || i === midI) ? `L${l.lap}` : '');
+  if (typeof renderStryxsLineChart !== 'function') return '';
+  // invertA so a FASTER (lower) pace plots HIGHER; pace formatter keeps it m:ss /100m.
+  const chart = renderStryxsLineChart({
+    title: 'Pace per lap',
+    seriesA: paces,
+    labelA: 'Pace', unitA: '/100m', colorA: '#00e5a0',
+    invertA: true,
+    formatterA: sec => `${fmtPace(sec)} /100m`,
+    tickFormatterA: sec => fmtPace(sec),
+    xAxisLabels: xLabels, xAxisTitle: 'Lap',
+  });
+  return chart ? `<div style="margin-top:14px;">${chart}</div>` : '';
 }
 
 // Power stats for cyclists. Avg + max are free; normalized power is Pro.
@@ -13569,11 +13559,12 @@ function renderLoadFormCard() {
   const acwrNote = m.acwr == null ? '' : m.acwr > 1.5 ? 'a big jump, ease off next week to avoid injury' : m.acwr < 0.8 ? 'lighter than usual, you can ramp back up' : 'a safe, steady increase';
   card.innerHTML = `
     <div class="panel" style="margin-bottom: 14px;">
-      <div class="panel-header">
+      <div class="panel-header" style="display:flex; align-items:flex-start; justify-content:space-between; gap:10px;">
         <div>
           <div class="panel-title">📈 Your training load</div>
           <div class="panel-sub">Your fitness vs how tired you are right now</div>
         </div>
+        <button onclick="showLoadInfo()" aria-label="What's this?" style="flex-shrink:0; width:26px; height:26px; border-radius:50%; background:var(--bg-3); border:1px solid var(--border); color:var(--text-dim); font-size:13px; font-weight:700; cursor:pointer; line-height:1; padding:0; -webkit-tap-highlight-color:transparent;">?</button>
       </div>
       <!-- Plain-language headline: the one thing the user should take away -->
       <div style="background: ${st.color}14; border: 1px solid ${st.color}40; border-radius: 10px; padding: 12px 14px; margin-bottom: 12px;">
@@ -13597,9 +13588,6 @@ function renderLoadFormCard() {
           <div style="font-size: 10px; color: ${st.color};">${st.label}</div>
         </div>
       </div>
-      <div style="font-size: 11px; color: var(--text-mute); line-height: 1.5; margin-bottom: 10px;">
-        <strong style="color: var(--text-dim);">Fitness</strong> is the base you've built over weeks. <strong style="color: var(--text-dim);">Tiredness</strong> is how hard the last few days were. <strong style="color: var(--text-dim);">Freshness</strong> = fitness minus tiredness (positive = rested, negative = fatigued).
-      </div>
       ${m.acwr != null ? `<div style="font-size: 12px; color: var(--text-dim); line-height: 1.5;">This week vs your recent average: <span style="color: ${acwrColor}; font-weight: 700;">${m.acwr.toFixed(2)}×</span> — ${acwrNote}.</div>` : ''}
       ${(() => {
         // "Data quality" line: shows how the sessions were scored, so users can
@@ -13615,9 +13603,28 @@ function renderLoadFormCard() {
         if (mt.fallback > 0) bits.push(`<span style="color:var(--text-mute);">${mt.fallback} estimated from duration</span>`);
         return `<div style="font-size: 11px; color: var(--text-mute); margin-top: 8px; display:flex; flex-wrap:wrap; gap:6px 12px; line-height:1.5;"><span style="color: var(--text-dim);">Built from ${total} sessions:</span>${bits.map(b => `<span>${b}</span>`).join('')}</div>`;
       })()}
-      <div style="font-size: 10px; color: var(--text-mute); margin-top: 8px; line-height: 1.45;">These are estimates from your logged training. Watch the trend and your freshness state more than the exact numbers, they are not on the same scale as Garmin.${!m.lthrSet ? ' Set your run/bike LTHR in Settings to sharpen it.' : ''}${!m.ftpSet ? ' Set your Bike FTP in Settings for more accurate cycling load.' : ''}${m.lthrSet && m.ftpSet ? ' Logging more HR + power keeps it sharp.' : ''}</div>
     </div>
   `;
+}
+
+// Explainer for the training-load card, behind the "?" so the card stays short.
+function showLoadInfo() {
+  const m = (typeof computeLoadModel === 'function') ? computeLoadModel() : null;
+  const sharpen = m && !m.lthrSet ? ' Set your run/bike LTHR on your profile to sharpen it.'
+    : m && !m.ftpSet ? ' Set your Bike FTP on your profile for more accurate cycling load.'
+    : ' Logging more HR + power keeps it sharp.';
+  const body = `
+    <p style="margin:0 0 12px; line-height:1.6;"><strong style="color:var(--text);">Fitness</strong> is the base you've built over weeks. <strong style="color:var(--text);">Tiredness</strong> is how hard the last few days were. <strong style="color:var(--text);">Freshness</strong> = fitness minus tiredness (positive = rested, negative = fatigued).</p>
+    <p style="margin:0; line-height:1.6;">These are estimates from your logged training. Watch the trend and your freshness state more than the exact numbers — they're not on the same scale as Garmin.${sharpen}</p>`;
+  const mo = document.createElement('div');
+  mo.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;';
+  mo.innerHTML = `<div style="background:var(--bg-2);border:1px solid var(--border);border-radius:16px;padding:20px;max-width:380px;width:100%;font-size:13px;color:var(--text-dim);">
+    <div style="font-size:16px;font-weight:800;color:var(--text);margin-bottom:12px;">📈 Your training load</div>
+    ${body}
+    <button class="btn" style="width:100%;margin-top:16px;" onclick="this.closest('div[style*=fixed]').remove()">Got it</button>
+  </div>`;
+  mo.addEventListener('click', e => { if (e.target === mo) mo.remove(); });
+  document.body.appendChild(mo);
 }
 
 // ═══ GENERAL-FITNESS PROGRESS PANEL ═══
