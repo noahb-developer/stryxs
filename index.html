@@ -771,7 +771,7 @@ html.prof-modal-open, html.prof-modal-open body { overflow: hidden; }
    it must be a <body> child because #page-plan has overflow (x:hidden → y:auto),
    and on iOS an overflow ancestor clips/contains position:fixed/sticky children,
    which is why an in-#page-plan pinned bar showed on desktop but not on phone. */
-.plan-bar { display: flex; gap: 6px; margin-top: 46px; margin-bottom: 14px; padding: 0; align-items: center; flex-wrap: nowrap; }
+.plan-bar { display: flex; gap: 6px; margin-top: 46px; margin-bottom: 14px; padding: 0; align-items: center; flex-wrap: wrap; }
 .plan-bar-btn { background: var(--bg-3); border: 1px solid var(--border-light); color: var(--text); font-size: 12.5px; font-weight: 600; border-radius: 999px; padding: 8px 12px; display: inline-flex; align-items: center; gap: 5px; cursor: pointer; font-family: inherit; white-space: nowrap; -webkit-tap-highlight-color: transparent; transition: background .15s; }
 .plan-bar-btn:active { background: var(--bg-2); }
 .plan-bar-icon { width: 34px; padding: 8px 0; justify-content: center; font-weight: 800; flex-shrink: 0; }
@@ -22925,6 +22925,12 @@ async function openShareModal() {
         How your plan is structured + your latest training week. It always shows your <strong style="color: var(--text);">current</strong> week, so you only share once.
       </div>
 
+      <div style="margin-bottom: 18px; padding: 14px 16px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px;">
+        <div style="font-size: 14px; color: var(--text); font-weight: 600; margin-bottom: 4px;">📅 Add to your calendar</div>
+        <div style="font-size: 12px; color: var(--text-dim); line-height: 1.5; margin-bottom: 10px;">Download your upcoming plan as a calendar file (Apple, Google, or Outlook) so every session shows up on your phone.</div>
+        <button class="btn ghost" onclick="exportPlanToCalendar()" style="width: 100%;">📅 Download calendar file (.ics)</button>
+      </div>
+
       <div style="margin-bottom: 20px; padding: 14px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px;">
         <label style="display: flex; align-items: flex-start; gap: 10px; cursor: pointer;">
           <input type="checkbox" id="shareShowProfile" ${showProfilePref ? 'checked' : ''} style="width: 16px; height: 16px; accent-color: var(--accent); margin-top: 2px; flex-shrink: 0;">
@@ -24418,7 +24424,7 @@ async function renderPlan() {
     ${hasPlan ? `
     <div class="plan-bar" id="planBar">
       <button class="plan-bar-btn" onclick="scrollToTodayWorkout()">📋 Today's workout</button>
-      <button class="plan-bar-btn" onclick="exportPlanToCalendar()">📅 Calendar</button>
+      <button class="plan-bar-btn" onclick="openReminderSettings()">🔔 Reminders</button>
       <button class="plan-bar-btn" onclick="openShareModal()">Share</button>
       <button class="plan-bar-btn plan-bar-icon" onclick="openPlanInfoPopup()" aria-label="How the plan works">?</button>
       <button class="plan-bar-btn plan-bar-top" id="planBarTop" onclick="planScrollTop()">↑ Top</button>
@@ -24656,6 +24662,23 @@ async function exportPlanToCalendar() {
     console.error('[Stryxs] calendar export failed:', e);
     toast('Could not build the calendar file. Try again.', 4000);
   }
+}
+
+// Jump straight to the workout-reminders setup (Settings → Notifications), opening
+// that section so the user lands on the toggle, not the top of Settings.
+function openReminderSettings() {
+  try { navigate('settings'); } catch (_) {}
+  setTimeout(() => {
+    try {
+      const section = document.getElementById('section-notifications');
+      if (section && !section.classList.contains('expanded') && typeof toggleSettingsSection === 'function') {
+        toggleSettingsSection('notifications'); // expands + renders + scrolls into view
+      } else if (typeof renderNotifSettings === 'function') {
+        renderNotifSettings();
+        section?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    } catch (_) {}
+  }, 280);
 }
 
 function _pfCardHTML(w) {
@@ -26994,6 +27017,15 @@ async function renderNotifSettings() {
           <div style="font-size: 11px; color: var(--text-mute); margin-top: 6px;">Applies to all your devices.</div>
         </div>
       ` : ''}
+      ${isReceivingHere ? `
+        <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);">
+          <button onclick="sendTestNotification(this)" class="btn ghost" style="width: 100%; font-size: 13px;">🔔 Send a test notification</button>
+          <div style="font-size: 11px; color: var(--text-mute); margin-top: 6px; text-align: center;">Confirms reminders actually reach this device.</div>
+        </div>
+      ` : ''}
+    </div>
+    <div style="text-align: center; margin-top: 10px;">
+      <button onclick="runNotifDiagnostic()" style="background: none; border: none; color: var(--text-mute); font-size: 11px; text-decoration: underline; cursor: pointer; font-family: inherit;">Run notification diagnostic</button>
     </div>
   `;
 }
@@ -27021,6 +27053,35 @@ async function handleNotifToggle(btn, turningOn) {
     btn.textContent = originalLabel;
     // Always re-render so the UI reflects current state (success or failure)
     await renderNotifSettings();
+  }
+}
+
+// Fire a real test push to THIS user's subscribed devices via the send-reminders
+// edge function (test mode). The definitive "do notifications actually reach my
+// phone" check — surfaces a clear reason (no subscription / expired / provider
+// error) instead of failing silently.
+async function sendTestNotification(btn) {
+  const label = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.style.opacity = '0.6'; btn.textContent = 'Sending…'; }
+  try {
+    const { data, error } = await sb.functions.invoke('send-reminders', { body: { test: true } });
+    if (error) throw error;
+    if (data && data.success) {
+      toast('Test sent. It should pop up on this device in a few seconds. 🔔', 6000);
+    } else if (data && data.reason === 'no_subscription') {
+      toast("This device isn't subscribed yet, tap Turn on first.", 6000);
+    } else if (data && data.reason === 'expired') {
+      toast('Your subscription had expired. Tap Turn off then Turn on to refresh it.', 7000);
+      try { await renderNotifSettings(); } catch (_) {}
+    } else {
+      const detail = (data && Array.isArray(data.errors) && data.errors[0]) ? ` (${data.errors[0]})` : '';
+      toast('Could not deliver the test push.' + detail, 8000);
+    }
+  } catch (e) {
+    console.error('[Stryxs] test notification failed:', e);
+    toast('Test failed: ' + (e?.message || 'unknown'), 6000);
+  } finally {
+    if (btn) { btn.disabled = false; btn.style.opacity = '1'; btn.textContent = label || '🔔 Send a test notification'; }
   }
 }
 
