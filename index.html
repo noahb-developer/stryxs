@@ -771,7 +771,7 @@ html.prof-modal-open, html.prof-modal-open body { overflow: hidden; }
    it must be a <body> child because #page-plan has overflow (x:hidden → y:auto),
    and on iOS an overflow ancestor clips/contains position:fixed/sticky children,
    which is why an in-#page-plan pinned bar showed on desktop but not on phone. */
-.plan-bar { display: flex; gap: 6px; margin-top: 12px; margin-bottom: 14px; padding: 0; align-items: center; flex-wrap: nowrap; }
+.plan-bar { display: flex; gap: 6px; margin-top: 26px; margin-bottom: 14px; padding: 0; align-items: center; flex-wrap: nowrap; }
 .plan-bar-btn { background: var(--bg-3); border: 1px solid var(--border-light); color: var(--text); font-size: 12.5px; font-weight: 600; border-radius: 999px; padding: 8px 12px; display: inline-flex; align-items: center; gap: 5px; cursor: pointer; font-family: inherit; white-space: nowrap; -webkit-tap-highlight-color: transparent; transition: background .15s; }
 .plan-bar-btn:active { background: var(--bg-2); }
 .plan-bar-icon { width: 34px; padding: 8px 0; justify-content: center; font-weight: 800; flex-shrink: 0; }
@@ -8113,21 +8113,20 @@ const _TAB_OF_PAGE = {
 const _TABBAR_PAGES = new Set(['dashboard', 'plan', 'trends', 'upload', 'history', 'race-planner', 'profile']);
 // "Pushed" detail pages get a back arrow + centered title, no tab bar.
 const _PUSHED_TITLES = { settings: 'Settings', help: 'Help & FAQ', upgrade: 'Stryxs Pro', profile: 'Profile' };
-// Real content pages a back arrow can return to. Pushed/overlay pages
-// (profile/settings/help/upgrade/coach) are NOT here, so back never loops between
-// them — it always returns to the last actual tab page you were on.
-const _RETURN_PAGES = new Set(['dashboard', 'plan', 'trends', 'upload', 'history', 'race-planner']);
-let _returnPage = 'dashboard';
+// "Overlay" pages reached via a back arrow. Entering one remembers where you came
+// from on a stack; back pops it. So profile→settings→back→profile→back→(wherever
+// you opened profile from). Landing on any normal/tab page clears the stack.
+const _PUSHED_PAGES = new Set(['profile', 'settings', 'help', 'upgrade']);
+let _navStack = [];
 
 function _currentPageId() {
   const a = document.querySelector('.page.active');
   return a ? a.id.replace(/^page-/, '') : null;
 }
 
-// Back button: return to the last real content page (no pushed↔pushed loop).
 function navBackAction() {
-  const dest = _RETURN_PAGES.has(_returnPage) ? _returnPage : 'dashboard';
-  navigate(dest === _currentPageId() ? 'dashboard' : dest);
+  const dest = _navStack.length ? _navStack.pop() : 'dashboard';
+  navigate(dest, true); // viaBack — don't re-push
 }
 
 // Keep the floating tab bar glued to the VISUAL viewport bottom. On iOS the
@@ -8141,14 +8140,11 @@ function _pinTabBar() {
   const vv = window.visualViewport;
   if (!vv) { tb.style.transform = 'translateX(-50%)'; return; }
   const gap = Math.round(window.innerHeight - (vv.offsetTop + vv.height));
-  if (gap > 140) {
-    // A keyboard is up (typing in a form on a tab page) — tuck the bar away below
-    // the keyboard instead of floating it mid-screen. Slide, don't fade (no flicker).
-    tb.style.transform = 'translateX(-50%) translateY(200%)';
-  } else {
-    // Lift the bar by the toolbar height so it stays glued to the VISIBLE bottom.
-    tb.style.transform = `translateX(-50%) translateY(${Math.max(0, gap) * -1}px)`;
-  }
+  // ONLY follow the small iOS toolbar gap. For anything large (a keyboard, or a
+  // transient bad reading) sit flat at the bottom — NEVER translate off-screen,
+  // which is what left the bar stuck/'disappeared' until an app restart.
+  const lift = (gap > 0 && gap < 130) ? gap : 0;
+  tb.style.transform = `translateX(-50%) translateY(${-lift}px)`;
 }
 let _tabPinBound = false;
 function _bindTabPin() {
@@ -8198,9 +8194,16 @@ function updateAppChrome(page) {
   }
 }
 
-function navigate(page) {
-  // Track the last real content page so the back arrow can return there.
-  if (_RETURN_PAGES.has(page)) _returnPage = page;
+function navigate(page, viaBack) {
+  // Maintain the back stack: entering an overlay page pushes where we came from;
+  // landing on a normal page clears it. (viaBack pops, so it must not re-push.)
+  if (!viaBack) {
+    const _from = _currentPageId();
+    if (_from && _from !== page) {
+      if (_PUSHED_PAGES.has(page)) { if (_navStack[_navStack.length - 1] !== _from) _navStack.push(_from); }
+      else _navStack = [];
+    }
+  }
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   const target = document.getElementById(`page-${page}`);
   if (target) target.classList.add('active');
@@ -13235,18 +13238,23 @@ async function renderDashWeekStrip() {
   const card = document.getElementById('weekStripCard');
   if (!card) return;
 
-  // Build a 7-day window centered around today: 3 past, today, 3 future
+  // Fixed CURRENT calendar week, Monday → Sunday (no rotating window). Days stay
+  // in the same place; it advances to the next Mon–Sun block once the week turns.
   const days = [];
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  for (let offset = -3; offset <= 3; offset++) {
-    const d = new Date(today);
-    d.setDate(today.getDate() + offset);
+  const todayStrLocal = toLocalYMD(today);
+  const monday = new Date(today);
+  monday.setDate(today.getDate() - ((today.getDay() + 6) % 7)); // 0=Sun → back 6, 1=Mon → 0, …
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    const ds = toLocalYMD(d);
     days.push({
       date: d,
-      dateStr: toLocalYMD(d),
-      isToday: offset === 0,
-      isPast: offset < 0,
+      dateStr: ds,
+      isToday: ds === todayStrLocal,
+      isPast: d < today,
       label: d.toLocaleDateString('en-US', { weekday: 'short' })[0], // M T W T F S S
     });
   }
@@ -19671,20 +19679,22 @@ function formatGoal(g) {
 // Mirrors pickPersona() in the coach edge function. Used to personalize loading
 // states so users see WHO is building their plan, not just a spinner.
 function getMethodologyForGoal(goalEvent) {
+  // Generic, copyright-safe labels — no real coach/author names (these surface in
+  // shared plans). The actual proven principles still drive the edge plan-gen.
   const map = {
-    ironman:        { name: 'Friel',              brain: "Joe Friel's Triathlete's Training Bible" },
-    '70_3':         { name: 'Friel + Sutton',     brain: "Joe Friel + Brett Sutton (half-Ironman)" },
-    olympic_tri:    { name: 'Friel',              brain: "Joe Friel multisport (short-course)" },
-    sprint_tri:     { name: 'Friel',              brain: "Joe Friel multisport (short-course)" },
-    marathon:       { name: 'Pfitzinger + Daniels', brain: "Pete Pfitzinger + Jack Daniels (marathon)" },
-    half_marathon:  { name: 'Daniels + Pfitzinger', brain: "Jack Daniels + Pete Pfitzinger (half marathon)" },
-    '10k':          { name: 'Daniels VDOT',       brain: "Jack Daniels VDOT (short-distance run)" },
-    '5k':           { name: 'Daniels VDOT',       brain: "Jack Daniels VDOT (short-distance run)" },
-    cycling:        { name: 'Coggan + Friel',     brain: "Coggan & Allen power + Joe Friel + Seiler (road cycling)" },
-    swimming:       { name: 'Swim Smooth + CSS',  brain: "Swim Smooth / Critical Swim Speed + Maglischo + Olbrecht (swimming)" },
-    ultra:          { name: 'Koop + Roche',       brain: "Jason Koop + David Roche + House & Johnston (ultrarunning)" },
-    mile:           { name: 'Daniels + Coe',      brain: "Jack Daniels VDOT + Coe + Anaerobic Speed Reserve (middle distance)" },
-    general:        { name: 'Attia + Seiler',     brain: "Peter Attia + Stephen Seiler (health & fitness)" },
+    ironman:        { name: 'Stryxs Triathlon',   brain: "periodized long-course triathlon methodology" },
+    '70_3':         { name: 'Stryxs Triathlon',   brain: "half-distance triathlon methodology" },
+    olympic_tri:    { name: 'Stryxs Triathlon',   brain: "short-course triathlon methodology" },
+    sprint_tri:     { name: 'Stryxs Triathlon',   brain: "short-course triathlon methodology" },
+    marathon:       { name: 'Stryxs Marathon',    brain: "proven marathon periodization" },
+    half_marathon:  { name: 'Stryxs Half',        brain: "proven half-marathon periodization" },
+    '10k':          { name: 'Stryxs Speed',       brain: "VDOT-based short-distance run methodology" },
+    '5k':           { name: 'Stryxs Speed',       brain: "VDOT-based short-distance run methodology" },
+    cycling:        { name: 'Stryxs Cycling',     brain: "power & polarized road-cycling methodology" },
+    swimming:       { name: 'Stryxs Swim',        brain: "CSS-based swim methodology" },
+    ultra:          { name: 'Stryxs Ultra',       brain: "time-on-feet ultrarunning methodology" },
+    mile:           { name: 'Stryxs Mile',        brain: "VDOT + anaerobic speed-reserve middle-distance methodology" },
+    general:        { name: 'Stryxs Fitness',     brain: "balanced health & fitness methodology" },
   };
   return map[goalEvent] || { name: 'Stryxs Coach', brain: 'endurance methodology' };
 }
@@ -24999,7 +25009,7 @@ function openSwapWorkoutMenu(workoutId, currentDate) {
       <div style="font-size: 17px; font-weight: 700; margin-bottom: 6px;">Move workout</div>
       <div style="font-size: 13px; color: var(--text-dim); margin-bottom: 16px;">Currently scheduled for ${new Date(currentDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}.</div>
       <label style="font-size: 12px; color: var(--text-dim); display: block; margin-bottom: 6px; font-weight: 600;">New date</label>
-      <input type="date" id="swapDateInput" min="${today}" max="${maxDateStr}" value="${currentDate}" style="width: 100%; padding: 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-family: inherit; font-size: 14px; margin-bottom: 14px;" />
+      <input type="date" id="swapDateInput" min="${today}" max="${maxDateStr}" value="${currentDate}" style="width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; -webkit-appearance: none; appearance: none; color-scheme: dark; padding: 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-family: inherit; font-size: 14px; margin-bottom: 14px;" />
       <div style="display: flex; gap: 8px;">
         <button onclick="document.getElementById('swapWorkoutModal')?.remove()" style="flex: 1; padding: 12px; background: transparent; border: 1px solid var(--border); border-radius: 10px; color: var(--text-dim); font-size: 14px; cursor: pointer;">Cancel</button>
         <button onclick="swapWorkoutDate('${workoutId}', '${currentDate}')" class="btn" style="flex: 1; padding: 12px; font-size: 14px;">Move</button>
@@ -25023,6 +25033,17 @@ async function swapWorkoutDate(workoutId, fromDate) {
       .select('sport')
       .maybeSingle();
     if (error) throw error;
+    // Target was a rest day → drop its rest card so the moved workout REPLACES it
+    // (not "rest + workout" stacked on the same day).
+    try { await sb.from('planned_workouts').delete().eq('user_id', state.user.id).eq('scheduled_date', newDate).eq('sport', 'rest'); } catch (_) {}
+    // Source day now empty → leave a rest card so the day doesn't just vanish.
+    try {
+      const { data: leftover } = await sb.from('planned_workouts').select('id, sport').eq('user_id', state.user.id).eq('scheduled_date', fromDate);
+      const rows = leftover || [];
+      if (!rows.some(w => w.sport !== 'rest') && !rows.some(w => w.sport === 'rest')) {
+        await sb.from('planned_workouts').insert({ user_id: state.user.id, scheduled_date: fromDate, sport: 'rest', workout_type: 'rest', duration_minutes: 0, distance_km: 0, description: 'Rest day, full recovery.', intensity_target: 'Rest' });
+      }
+    } catch (_) {}
     trackEvent('workout_moved', { new_date: newDate });
     toast('Workout moved');
     // Log for proactive pattern detection (e.g. "always moves Saturday → Monday").
