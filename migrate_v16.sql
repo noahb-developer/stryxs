@@ -1,0 +1,12 @@
+-- v16: resolve Supabase Security Advisor "Security Definer View" (Critical) on
+-- public.user_pro_status.
+--
+-- The view derives per-user Pro status (is_pro, trial_days_left) from public.profiles.
+-- As a SECURITY DEFINER view it ran with the creator's privileges and BYPASSED RLS,
+-- so querying it through the API could expose EVERY user's subscription status, not
+-- just the caller's own. The app does not reference this view (Pro status is computed
+-- client-side from profiles, and profiles already has proper RLS: "Users read own
+-- profile" = auth.uid() = id). Rather than drop a view we didn't create, switch it to
+-- SECURITY INVOKER so it respects the querying user's RLS — a user then sees only their
+-- own row (service-role/edge callers still bypass RLS as before).
+ALTER VIEW public.user_pro_status SET (security_invoker = on);
