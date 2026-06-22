@@ -7169,29 +7169,90 @@ function openForgotPassword() {
   m.innerHTML = `
     <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:16px;padding:24px;max-width:400px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.5);">
       <div style="font-size:18px;font-weight:800;margin-bottom:6px;color:var(--text);">Reset your password</div>
-      <div style="font-size:13px;color:var(--text-dim);line-height:1.55;margin-bottom:16px;">Enter your account email and we will send you a link to set a new password.</div>
+      <div style="font-size:13px;color:var(--text-dim);line-height:1.55;margin-bottom:16px;">Enter your account email and we will send you a 6-digit code to set a new password.</div>
       <input type="email" id="forgotPwEmail" value="${escapeHtml(prefill)}" placeholder="you@example.com" autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="email" style="width:100%;padding:12px 14px;background:var(--bg-3);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;box-sizing:border-box;margin-bottom:14px;" />
       <div style="display:flex;gap:8px;">
         <button class="btn ghost" style="flex:1;" onclick="document.getElementById('forgotPwModal').remove()">Cancel</button>
-        <button class="btn" style="flex:1.4;" id="forgotPwSend" onclick="sendPasswordReset(this)">Send reset link</button>
+        <button class="btn" style="flex:1.4;" id="forgotPwSend" onclick="sendPasswordReset(this)">Send reset code</button>
       </div>
     </div>`;
   document.body.appendChild(m);
   m.addEventListener('click', e => { if (e.target === m) m.remove(); });
   setTimeout(() => { try { document.getElementById('forgotPwEmail').focus(); } catch (_) {} }, 50);
 }
+let _pendingResetEmail = null;
 async function sendPasswordReset(btn) {
   const email = (document.getElementById('forgotPwEmail')?.value || '').trim().toLowerCase();
   if (!email || !email.includes('@')) return toast('Enter a valid email');
   if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+  _pendingResetEmail = email;
   try {
-    // redirectTo = the site origin (must be in Supabase Auth → URL Configuration).
-    // The recovery token rides in the URL and fires PASSWORD_RECOVERY on return.
+    // The reset email carries a 6-digit {{ .Token }} (recovery OTP) AND, as a
+    // fallback, a link. We verify the CODE in-app (type: 'recovery') so we never
+    // depend on the link — which email scanners prefetch and consume. redirectTo
+    // must still be in Supabase Auth → URL Configuration for the link fallback.
     await sb.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
   } catch (e) { console.warn('[Stryxs] resetPasswordForEmail error (non-fatal):', e?.message || e); }
   document.getElementById('forgotPwModal')?.remove();
-  // Always show success — don't leak whether the account exists (OWASP).
-  toast('If an account exists for that email, a reset link is on its way. Check your inbox and spam.', 7000);
+  // Show the code-entry screen for everyone — don't leak whether the account
+  // exists (OWASP). If it doesn't, the code simply never arrives.
+  showResetCodeScreen(email);
+}
+// Code-based reset (Google-style): enter the 6-digit code + a new password.
+// verifyOtp(type:'recovery') creates the session, then updateUser sets the
+// password and logs them in — no link, no wrong-browser handoff.
+let _resetCodeAutoTimer = null;
+function showResetCodeScreen(email) {
+  document.getElementById('resetCodeScreen')?.remove();
+  const m = document.createElement('div');
+  m.id = 'resetCodeScreen';
+  m.style.cssText = 'position:fixed;inset:0;background:var(--bg);z-index:99998;display:flex;align-items:center;justify-content:center;padding:24px;';
+  m.innerHTML = `
+    <div style="max-width:400px;width:100%;">
+      <div style="font-size:22px;font-weight:800;margin-bottom:6px;color:var(--text);">Enter your reset code</div>
+      <div style="font-size:13px;color:var(--text-dim);line-height:1.55;margin-bottom:18px;">We emailed a 6-digit code to <strong style="color:var(--text);">${escapeHtml(email)}</strong>. Enter it below with your new password.</div>
+      <input type="text" id="resetOtpCode" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="------" autocapitalize="off" autocorrect="off" spellcheck="false" oninput="this.value=this.value.replace(/[^0-9]/g,'');" style="width:100%;padding:13px 14px;margin-bottom:12px;background:var(--bg-3);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:22px;letter-spacing:8px;text-align:center;font-family:'JetBrains Mono',monospace;box-sizing:border-box;" />
+      <div style="position:relative;margin-bottom:12px;">
+        <input type="password" id="resetOtpNewPw" placeholder="New password (at least 6 characters)" autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false" onkeydown="if(event.key==='Enter'){event.preventDefault();submitResetCode(document.getElementById('resetOtpBtn'));}" style="width:100%;padding:13px 44px 13px 14px;background:var(--bg-3);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;box-sizing:border-box;" />
+        <button type="button" aria-label="Show password" onclick="togglePasswordVisibility('resetOtpNewPw', this)" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text-mute);cursor:pointer;width:30px;height:30px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></button>
+      </div>
+      <button class="btn" style="width:100%;" id="resetOtpBtn" onclick="submitResetCode(this)">Reset password &amp; sign in</button>
+      <div style="text-align:center;margin-top:14px;font-size:12.5px;color:var(--text-mute);"><a onclick="document.getElementById('resetCodeScreen').remove();openForgotPassword();" style="color:var(--accent);cursor:pointer;">Resend code</a> &middot; <a onclick="document.getElementById('resetCodeScreen').remove();" style="color:var(--text-mute);cursor:pointer;">Cancel</a></div>
+    </div>`;
+  document.body.appendChild(m);
+  setTimeout(() => { try { document.getElementById('resetOtpCode').focus(); } catch (_) {} }, 50);
+}
+async function submitResetCode(btn) {
+  const code = (document.getElementById('resetOtpCode')?.value || '').trim();
+  const pw = document.getElementById('resetOtpNewPw')?.value || '';
+  const email = (_pendingResetEmail || '').trim().toLowerCase();
+  if (!/^\d{6,8}$/.test(code)) return toast('Enter the 6-digit code from your email');
+  if (pw.length < 6) return toast('New password must be at least 6 characters');
+  if (!email) return toast('Missing email — start the reset again');
+  if (btn && btn.disabled) return;
+  if (btn) { btn.disabled = true; btn.textContent = 'Resetting…'; }
+  try {
+    const { error: vErr } = await sb.auth.verifyOtp({ email, token: code, type: 'recovery' });
+    if (vErr) throw vErr;
+    const { error: uErr } = await sb.auth.updateUser({ password: pw });
+    if (uErr) throw uErr;
+    document.getElementById('resetCodeScreen')?.remove();
+    toast('Password updated. You are now signed in.', 5000);
+    const { data: { user } } = await sb.auth.getUser();
+    if (user) {
+      state.user = { id: user.id, email: user.email, name: user.user_metadata?.name || 'Athlete' };
+      await loadProfile(); await loadWorkouts(); showApp(); navigate('dashboard');
+    }
+  } catch (e) {
+    console.warn('[Stryxs] reset-code flow failed:', e?.message || e);
+    const msg = (e?.message || '').toLowerCase();
+    if (msg.includes('expired') || msg.includes('invalid') || msg.includes('token')) {
+      toast('That code is wrong or expired. Double-check it, or tap "Resend code".', 6000);
+    } else {
+      toast('Could not reset: ' + (e?.message || 'try again'), 6000);
+    }
+    if (btn) { btn.disabled = false; btn.textContent = 'Reset password & sign in'; }
+  }
 }
 function showResetPasswordScreen() {
   if (document.getElementById('resetPwScreen')) return;
