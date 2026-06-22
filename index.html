@@ -13402,10 +13402,11 @@ async function renderDashWeekStrip() {
             dotLabel = '–';
             darkText = true;
           } else if (dm.isRest) {
-            // Rest day: nothing to wait on — show it as handled (✓), never Planned/Missed.
-            dotColor = 'var(--accent)';
-            dotLabel = '✓';
-            darkText = true;
+            // Rest day. Once it's today or past, it's "handled" (nothing was ever due) → ✓.
+            // A FUTURE rest day hasn't happened yet, so it shouldn't read as done — show a
+            // calm upcoming-rest marker (🌙), never Planned/Missed/✓.
+            if (d.isPast || d.isToday) { dotColor = 'var(--accent)'; dotLabel = '✓'; darkText = true; }
+            else { dotColor = 'rgba(255, 255, 255, 0.10)'; dotLabel = '🌙'; }
           } else if (dm.hasPlanned && d.isPast) {
             dotColor = 'rgba(239, 68, 68, 0.6)';
             dotLabel = '·';
@@ -27415,10 +27416,13 @@ async function renderProUsageBars() {
       el.innerHTML = '<div style="font-size: 12px; color: var(--text-mute);">Usage data unavailable right now.</div>';
       return;
     }
+    // Limits come from the edge (usage._limits) so the bars always match the real
+    // server caps; the numbers here are only fallbacks if the edge didn't send them.
+    const lim = usage._limits || {};
     const rows = [
-      { label: 'Coach chats', used: Number(usage.chat_calls) || 0, max: 300 },
-      { label: 'Workout commentary', used: Number(usage.workout_commentary_calls) || 0, max: 150 },
-      { label: 'Plan generations', used: Number(usage.plan_gen_calls) || 0, max: 15 },
+      { label: 'Coach chats', used: Number(usage.chat_calls) || 0, max: Number(lim.chat) || 300 },
+      { label: 'Workout commentary', used: Number(usage.workout_commentary_calls) || 0, max: Number(lim.workout_commentary) || 150 },
+      { label: 'Plan generations', used: Number(usage.plan_gen_calls) || 0, max: Number(lim.plan_gen) || 45 },
     ];
     el.innerHTML = rows.map(r => {
       const pct = r.max > 0 ? Math.min(100, Math.round((r.used / r.max) * 100)) : 0;
