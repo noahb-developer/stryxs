@@ -4797,6 +4797,7 @@ body.on-auth .container {
         <span>Stryx<em>s</em></span>
       </div>
       <div class="lv2-nav-cta">
+        <button class="lv2-nav-login" onclick="openAuthHelp()" aria-label="Help">Help</button>
         <button class="lv2-nav-login" onclick="navigate('login')">Log in</button>
         <button class="lv2-nav-signup" onclick="navigate('signup')">Get started →</button>
       </div>
@@ -5022,12 +5023,12 @@ body.on-auth .container {
       </div>
       <div class="lv2-field">
         <label data-i18n="auth.field.email">Email</label>
-        <input type="email" id="signupEmail" placeholder="you@example.com" autocomplete="email" data-i18n-attr="placeholder:auth.field.email_placeholder" />
+        <input type="email" id="signupEmail" placeholder="you@example.com" autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="email" data-i18n-attr="placeholder:auth.field.email_placeholder" />
       </div>
       <div class="lv2-field">
         <label data-i18n="auth.field.password">Password</label>
         <div class="lv2-field-pw">
-          <input type="password" id="signupPassword" placeholder="At least 6 characters" autocomplete="new-password" oninput="validateSignupPasswordMatch()" />
+          <input type="password" id="signupPassword" placeholder="At least 6 characters" autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false" oninput="validateSignupPasswordMatch()" />
           <button type="button" class="lv2-field-pw-toggle" aria-label="Show password" onclick="togglePasswordVisibility('signupPassword', this)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
           </button>
@@ -5036,7 +5037,7 @@ body.on-auth .container {
       <div class="lv2-field">
         <label>Confirm password</label>
         <div class="lv2-field-pw">
-          <input type="password" id="signupPasswordConfirm" placeholder="Type it again" autocomplete="new-password" oninput="validateSignupPasswordMatch()" />
+          <input type="password" id="signupPasswordConfirm" placeholder="Type it again" autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false" oninput="validateSignupPasswordMatch()" />
           <button type="button" class="lv2-field-pw-toggle" aria-label="Show password" onclick="togglePasswordVisibility('signupPasswordConfirm', this)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
           </button>
@@ -5076,22 +5077,24 @@ body.on-auth .container {
 
       <div class="lv2-field">
         <label data-i18n="auth.field.email">Email</label>
-        <input type="email" id="loginEmail" placeholder="you@example.com" autocomplete="email" data-i18n-attr="placeholder:auth.field.email_placeholder" />
+        <input type="email" id="loginEmail" placeholder="you@example.com" autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="email" data-i18n-attr="placeholder:auth.field.email_placeholder" />
       </div>
       <div class="lv2-field">
         <label data-i18n="auth.field.password">Password</label>
         <div class="lv2-field-pw">
-          <input type="password" id="loginPassword" placeholder="Your password" autocomplete="current-password" />
+          <input type="password" id="loginPassword" placeholder="Your password" autocomplete="current-password" autocapitalize="off" autocorrect="off" spellcheck="false" />
           <button type="button" class="lv2-field-pw-toggle" aria-label="Show password" onclick="togglePasswordVisibility('loginPassword', this)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
           </button>
         </div>
+        <div style="text-align: right; margin-top: 6px;"><a onclick="openForgotPassword()" style="font-size: 12.5px; color: var(--lv2-acc, var(--accent)); cursor: pointer;">Forgot password?</a></div>
       </div>
       <button class="lv2-btn-primary lv2-full" onclick="doLogin()">
         <span data-i18n="auth.login.button">Log in</span>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
       </button>
       <p class="lv2-auth-switch"><span data-i18n="auth.login.no_account">New here?</span> <a onclick="navigate('signup')" data-i18n="auth.login.signup_link">Create an account</a></p>
+      <p class="lv2-auth-switch" style="margin-top:4px;"><a onclick="openAuthHelp()">Need help signing in?</a></p>
     </div>
   </div>
 </div>
@@ -7113,7 +7116,11 @@ async function doLogin() {
   const { data, error } = await sb.auth.signInWithPassword({ email, password });
 
   if (error) {
-    if (error.message.toLowerCase().includes('email not confirmed')) return showEmailVerifyScreen(email);
+    const m = (error.message || '').toLowerCase();
+    if (m.includes('email not confirmed')) return showEmailVerifyScreen(email);
+    if (m.includes('invalid login') || m.includes('invalid_credentials') || m.includes('credentials')) {
+      return toast("That email and password don't match. Double-check them, or tap \"Forgot password?\" to reset it.", 6000);
+    }
     return toast('Login failed: ' + error.message);
   }
 
@@ -7145,6 +7152,133 @@ async function doLogout() {
   window._stryxsCoachLoadedThisSession = false;
   hideFeedbackWidget();
   showLanding(); navigate('landing');
+}
+
+// ═══════════════════════════════════════════════════════════
+// FORGOT / RESET PASSWORD. The #1 reason a tester gets stuck is a password typo
+// with no way to recover. This sends a Supabase reset email; clicking the link
+// returns the user here and fires a PASSWORD_RECOVERY auth event, which opens a
+// "set a new password" screen. Works from any browser (the email confirms the
+// account; the new password then logs in anywhere).
+// ═══════════════════════════════════════════════════════════
+function openForgotPassword() {
+  const prefill = (document.getElementById('loginEmail')?.value || '').trim();
+  const m = document.createElement('div');
+  m.id = 'forgotPwModal';
+  m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:100000;display:flex;align-items:center;justify-content:center;padding:20px;';
+  m.innerHTML = `
+    <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:16px;padding:24px;max-width:400px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.5);">
+      <div style="font-size:18px;font-weight:800;margin-bottom:6px;color:var(--text);">Reset your password</div>
+      <div style="font-size:13px;color:var(--text-dim);line-height:1.55;margin-bottom:16px;">Enter your account email and we will send you a link to set a new password.</div>
+      <input type="email" id="forgotPwEmail" value="${escapeHtml(prefill)}" placeholder="you@example.com" autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="email" style="width:100%;padding:12px 14px;background:var(--bg-3);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;box-sizing:border-box;margin-bottom:14px;" />
+      <div style="display:flex;gap:8px;">
+        <button class="btn ghost" style="flex:1;" onclick="document.getElementById('forgotPwModal').remove()">Cancel</button>
+        <button class="btn" style="flex:1.4;" id="forgotPwSend" onclick="sendPasswordReset(this)">Send reset link</button>
+      </div>
+    </div>`;
+  document.body.appendChild(m);
+  m.addEventListener('click', e => { if (e.target === m) m.remove(); });
+  setTimeout(() => { try { document.getElementById('forgotPwEmail').focus(); } catch (_) {} }, 50);
+}
+async function sendPasswordReset(btn) {
+  const email = (document.getElementById('forgotPwEmail')?.value || '').trim().toLowerCase();
+  if (!email || !email.includes('@')) return toast('Enter a valid email');
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+  try {
+    // redirectTo = the site origin (must be in Supabase Auth → URL Configuration).
+    // The recovery token rides in the URL and fires PASSWORD_RECOVERY on return.
+    await sb.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
+  } catch (e) { console.warn('[Stryxs] resetPasswordForEmail error (non-fatal):', e?.message || e); }
+  document.getElementById('forgotPwModal')?.remove();
+  // Always show success — don't leak whether the account exists (OWASP).
+  toast('If an account exists for that email, a reset link is on its way. Check your inbox and spam.', 7000);
+}
+function showResetPasswordScreen() {
+  if (document.getElementById('resetPwScreen')) return;
+  const m = document.createElement('div');
+  m.id = 'resetPwScreen';
+  m.style.cssText = 'position:fixed;inset:0;background:var(--bg);z-index:99998;display:flex;align-items:center;justify-content:center;padding:24px;';
+  m.innerHTML = `
+    <div style="max-width:400px;width:100%;">
+      <div style="font-size:22px;font-weight:800;margin-bottom:6px;color:var(--text);">Set a new password</div>
+      <div style="font-size:13px;color:var(--text-dim);line-height:1.55;margin-bottom:18px;">Choose a new password for your Stryxs account, then you are in.</div>
+      <div style="position:relative;margin-bottom:12px;">
+        <input type="password" id="resetPwNew" placeholder="New password (at least 6 characters)" autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false" style="width:100%;padding:13px 44px 13px 14px;background:var(--bg-3);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;box-sizing:border-box;" />
+        <button type="button" aria-label="Show password" onclick="togglePasswordVisibility('resetPwNew', this)" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text-mute);cursor:pointer;width:30px;height:30px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></button>
+      </div>
+      <button class="btn" style="width:100%;" id="resetPwBtn" onclick="submitNewPassword(this)">Update password</button>
+    </div>`;
+  document.body.appendChild(m);
+  setTimeout(() => { try { document.getElementById('resetPwNew').focus(); } catch (_) {} }, 50);
+}
+async function submitNewPassword(btn) {
+  const pw = document.getElementById('resetPwNew')?.value || '';
+  if (pw.length < 6) return toast('Password must be at least 6 characters');
+  if (btn) { btn.disabled = true; btn.textContent = 'Updating…'; }
+  try {
+    const { error } = await sb.auth.updateUser({ password: pw });
+    if (error) throw error;
+    document.getElementById('resetPwScreen')?.remove();
+    toast('Password updated. You are now logged in.', 5000);
+    try {
+      const { data: { user } } = await sb.auth.getUser();
+      if (user) {
+        state.user = { id: user.id, email: user.email, name: user.user_metadata?.name || 'Athlete' };
+        await loadProfile(); await loadWorkouts(); showApp(); navigate('dashboard');
+      }
+    } catch (_) {}
+  } catch (e) {
+    console.error('[Stryxs] updateUser password failed:', e);
+    toast('Could not update password: ' + (e?.message || 'try again'), 6000);
+    if (btn) { btn.disabled = false; btn.textContent = 'Update password'; }
+  }
+}
+// Fire the set-new-password screen when the user returns via a reset link.
+try { sb.auth.onAuthStateChange((event) => { if (event === 'PASSWORD_RECOVERY') { try { showResetPasswordScreen(); } catch (_) {} } }); } catch (_) {}
+
+// ═══════════════════════════════════════════════════════════
+// AUTH HELP — a pre-login help/FAQ reachable WITHOUT being signed in (locked-out
+// users can't reach in-app help). Focused on the sign-in failure modes testers hit.
+// ═══════════════════════════════════════════════════════════
+function openAuthHelp() {
+  if (document.getElementById('authHelpModal')) return;
+  const m = document.createElement('div');
+  m.id = 'authHelpModal';
+  m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:100000;display:flex;align-items:center;justify-content:center;padding:20px;';
+  const item = (q, a) => `<div style="margin-bottom:14px;"><div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;">${q}</div><div style="font-size:13px;color:var(--text-dim);line-height:1.6;">${a}</div></div>`;
+  m.innerHTML = `
+    <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:16px;padding:22px;max-width:440px;width:100%;max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.5);">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+        <div style="font-size:18px;font-weight:800;color:var(--text);">Help &amp; sign-in</div>
+        <button onclick="document.getElementById('authHelpModal').remove()" aria-label="Close" style="background:none;border:none;color:var(--text-mute);font-size:22px;cursor:pointer;line-height:1;">×</button>
+      </div>
+      ${item("Didn't get the verification email?", "Check your <strong>spam / junk</strong> folder (and the Promotions tab in Gmail). It can take a minute. Make sure you used the right email, then tap Resend below.")}
+      ${item("Can't log in?", "Your email has to be verified first (tap the link in that email). If your password isn't working, use <strong>Forgot password?</strong> on the login screen to set a new one. Passwords are case-sensitive.")}
+      ${item("The link opened a different browser?", "That's fine, it still verifies your account. Just come back here and log in with your email and password.")}
+      ${item("Used the right email?", "Log in with the exact email you signed up with.")}
+      ${item("Still stuck?", 'Email <a href="mailto:support@stryxs.com" style="color:var(--accent);">support@stryxs.com</a> and include the email you signed up with.')}
+      <button class="btn ghost" style="width:100%;margin-top:6px;" onclick="resendConfirmation(this)">Resend verification email</button>
+    </div>`;
+  document.body.appendChild(m);
+  m.addEventListener('click', e => { if (e.target === m) m.remove(); });
+}
+let _resendCooldownUntil = 0;
+async function resendConfirmation(btn) {
+  let email = (document.getElementById('loginEmail')?.value || document.getElementById('signupEmail')?.value || '').trim().toLowerCase();
+  if (!email) email = (prompt('Enter the email you signed up with:') || '').trim().toLowerCase();
+  if (!email || !email.includes('@')) return toast('Enter a valid email');
+  if (Date.now() < _resendCooldownUntil) return toast('Please wait a moment before resending.');
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+  try {
+    await sb.auth.resend({ type: 'signup', email });
+    _resendCooldownUntil = Date.now() + 60000; // mirror Supabase's ~60s per-user window
+    toast('If that account still needs verifying, a new email is on the way. Check spam too.', 6000);
+  } catch (e) {
+    console.warn('[Stryxs] resend failed:', e?.message || e);
+    toast('Could not resend right now, try again in a minute.', 5000);
+  } finally {
+    if (btn) setTimeout(() => { btn.disabled = false; btn.textContent = 'Resend verification email'; }, 1500);
+  }
 }
 
 function showEmailVerifyScreen(email) {
