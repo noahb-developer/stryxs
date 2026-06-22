@@ -2473,6 +2473,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 }
 .settings-section.expanded .settings-section-body {
   max-height: 5000px; /* large enough for any section */
+  overflow: visible; /* so dropdown menus (Units, Goal) aren't clipped by the body */
 }
 .settings-section-inner {
   padding: 20px 22px 24px;
@@ -15094,12 +15095,9 @@ function renderInsightCard(p) {
           ${p.recommendation ? `<div style="font-size: 13px; color: var(--text); line-height: 1.55; padding: 10px 12px; background: rgba(0, 229, 160, 0.06); border-left: 3px solid var(--accent); border-radius: 6px;"><strong style="color: var(--accent);">→ Recommendation:</strong> ${escapeHtml(p.recommendation)}</div>` : ''}
           ${isApplied && p.data_points?.change_summary ? `<div style="margin-top: 10px; font-size: 12px; color: var(--text-dim); padding: 10px 12px; background: rgba(0, 229, 160, 0.04); border: 1px dashed rgba(0, 229, 160, 0.2); border-radius: 8px;"><strong style="color: var(--accent);">What Coach changed:</strong> ${escapeHtml(p.data_points.change_summary)}</div>` : ''}
           <div style="margin-top: 10px; display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap;">
-            ${isUserPro() 
-              ? `<button class="btn ghost" style="font-size: 11px; padding: 4px 10px;" onclick="explainInsightInChat('${p.id}', this)" title="Get a deeper explanation in Coach chat">💬 Why?</button>`
-              : ''}
-            ${canApply ? (isUserPro()
-              ? `<button class="btn" style="font-size: 12px; padding: 6px 14px;" onclick="applyInsightToPlan('${p.id}', this)">⚡ Apply to plan</button>`
-              : `<button class="btn" style="font-size: 12px; padding: 6px 14px;" onclick="navigate('upgrade')" title="Apply to plan is a Pro feature">🔒 Apply to plan</button>`) : ''}
+            ${!isApplied ? (isUserPro()
+              ? `<button class="btn" style="font-size: 12px; padding: 6px 14px;" onclick="explainInsightInChat('${p.id}', this)" title="Coach explains this and can adjust your plan if you want">💬 Ask Coach</button>`
+              : `<button class="btn ghost" style="font-size: 11px; padding: 4px 10px;" onclick="navigate('upgrade')" title="Coach chat is a Pro feature">🔒 Ask Coach</button>`) : ''}
             ${canUndo ? `<button class="btn ghost" style="font-size: 11px; padding: 4px 10px;" onclick="undoAppliedInsight('${p.id}', this)">↶ Undo</button>` : ''}
             ${!isApplied ? `<button class="btn ghost rp-dismiss-btn" data-insight-id="${p.id}" style="font-size: 11px; padding: 4px 10px; color: #f87171; border-color: rgba(239, 68, 68, 0.25);" onclick="initiateDismissTrendInsight('${p.id}', this)">Dismiss</button>` : ''}
           </div>
@@ -26225,7 +26223,7 @@ async function openProfileEditModal() {
         <div class="field"><label>Name</label><input id="pe_name" value="${escapeHtml(name)}" placeholder="Your name" /></div>
         <div class="field"><label>Location</label><input id="pe_loc" value="${escapeHtml(p.location || '')}" placeholder="e.g. Lyon, France" /></div>
         <div class="field"><label>Primary sport</label>${renderCustomSelect('pe_sport', p.primarySport || '', sportOpts.map(([v, l]) => ({ value: v, label: l })))}</div>
-        <div class="field"><label>Description</label><textarea id="pe_bio" maxlength="280" placeholder="A short bio, your goals, your story" style="${taStyle}">${escapeHtml(p.bio || '')}</textarea></div>
+        <div class="field"><label>Description</label><textarea id="pe_bio" maxlength="280" placeholder="A short bio, your goals, your story" style="${taStyle}" oninput="{const c=document.getElementById('pe_bio_count');if(c)c.textContent=this.value.length+'/280';}">${escapeHtml(p.bio || '')}</textarea><div id="pe_bio_count" style="font-size:11px;color:var(--text-mute);text-align:right;margin-top:3px;">${(p.bio || '').length}/280</div></div>
 
         <div class="prof-edit-divider">Benchmarks &middot; power your pace projections</div>
         <div style="display:flex;gap:10px;">
@@ -26505,12 +26503,6 @@ async function renderSettings() {
       </div>
       <div class="settings-section-body">
         <div class="settings-section-inner">
-          <div style="display:flex;align-items:flex-start;gap:8px;background:rgba(0,229,160,0.06);border:1px solid rgba(0,229,160,0.22);border-radius:10px;padding:10px 12px;margin-bottom:14px;">
-            <span style="font-size:15px;line-height:1.3;">👤</span>
-            <div style="flex:1;font-size:12px;color:var(--text-dim);line-height:1.5;">Your name, photo, bio, benchmarks and body stats now live on your <strong style="color:var(--text);">Profile</strong> (tap your avatar, top right). Coach can still read and update all of it.
-              <div style="margin-top:10px;"><button class="btn" style="font-size:13px;padding:8px 14px;" onclick="navigate('profile')">Open profile</button></div>
-            </div>
-          </div>
           <div class="field">
             <label>Units</label>
             ${renderCustomSelect('settingsUnits', isImperial ? 'imperial' : 'metric', [
@@ -26537,9 +26529,9 @@ async function renderSettings() {
       <div class="settings-section-body">
         <div class="settings-section-inner">
       <div style="display:flex;align-items:flex-start;gap:8px;background:rgba(0,229,160,0.06);border:1px solid rgba(0,229,160,0.22);border-radius:10px;padding:10px 12px;margin-bottom:16px;">
-        <span style="font-size:15px;line-height:1.3;">🎯</span>
-        <div style="flex:1;font-size:12px;color:var(--text-dim);line-height:1.5;">A new race or goal means a different plan. The cleanest way is <strong style="color:var(--text);">Plan a new race</strong> (or just tell Coach in chat) and I'll rebuild your whole plan around it. The fields below are for small tweaks.
-          <div style="margin-top:10px;"><button class="btn" style="font-size:13px;padding:8px 14px;" onclick="openNextGoalModal('${intake?.goal_event || ''}')">🎯 Plan a new race</button></div>
+        <span style="font-size:15px;line-height:1.3;">💬</span>
+        <div style="flex:1;font-size:12px;color:var(--text-dim);line-height:1.5;">Planning a new race or changing your goal? Just <strong style="color:var(--text);">tell Coach in chat</strong> ("I want to train for a marathon in October") and Coach will ask what's needed and build the whole plan around it, no guesswork. The fields below are only for small tweaks.
+          <div style="margin-top:10px;"><button class="btn ghost" style="font-size:13px;padding:8px 14px;" onclick="navigate('coach')">💬 Tell Coach</button></div>
         </div>
       </div>
       <div class="field">
@@ -28228,15 +28220,23 @@ function detectImportantSettingsChanges(oldIntake, oldProfile, newValues) {
     });
   }
 
-  // Injuries change (text comparison, ignore casing)
+  // Injuries change — only treat as important (and worth a Coach call) when injuries
+  // were actually ADDED/REMOVED or the wording changed at the word level. A one-letter
+  // tweak / typo fix should NOT trigger a paid reactive message ("don't spend for nothing").
   const oldInjuries = (oldIntake.injuries || '').trim().toLowerCase();
   const newInjuries = (newValues.injuries || '').trim().toLowerCase();
-  if (oldInjuries !== newInjuries && newInjuries.length > 3) {
-    changes.push({
-      field: 'injuries',
-      label: 'Injuries / health notes',
-      detail: 'updated',
-    });
+  if (oldInjuries !== newInjuries) {
+    const _injWords = (s) => new Set(s.split(/[^a-z0-9]+/).filter(w => w.length > 2));
+    const _oldW = _injWords(oldInjuries), _newW = _injWords(newInjuries);
+    const _wordChanged = [..._newW].some(w => !_oldW.has(w)) || [..._oldW].some(w => !_newW.has(w));
+    const meaningful = (!oldInjuries && newInjuries.length > 3) || (oldInjuries && !newInjuries) || _wordChanged;
+    if (meaningful) {
+      changes.push({
+        field: 'injuries',
+        label: 'Injuries / health notes',
+        detail: 'updated',
+      });
+    }
   }
 
   // LTHR changes (>3bpm difference is significant)
