@@ -7295,15 +7295,15 @@ function showEmailVerifyScreen(email) {
       <h2 class="lv2-auth-title">Verify your <em>email</em></h2>
       <p class="lv2-auth-sub">We emailed a verification code to<br><strong style="color: var(--lv2-text);">${escapeHtml(email)}</strong></p>
       <div class="lv2-field" style="margin-top: 18px;">
-        <label>Enter the code from the email</label>
-        <input type="text" id="otpCode" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="Enter your code" autocapitalize="off" autocorrect="off" spellcheck="false" style="letter-spacing: 6px; font-size: 22px; text-align: center; font-family: 'JetBrains Mono', monospace;" oninput="this.value=this.value.replace(/[^0-9]/g,'');" />
+        <label>Enter the 6-digit code</label>
+        <input type="text" id="otpCode" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="------" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go" style="letter-spacing: 10px; font-size: 26px; text-align: center; font-family: 'JetBrains Mono', monospace;" oninput="handleOtpInput(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();verifySignupCode();}" />
       </div>
       <button class="lv2-btn-primary lv2-full" id="otpVerifyBtn" onclick="verifySignupCode()">
         Verify &amp; continue
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
       </button>
       <div style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 14px 16px; margin: 18px 0 0; font-size: 13px; color: var(--lv2-text-dim); line-height: 1.6;">
-        No code? Check your <strong style="color: var(--lv2-acc);">spam / junk</strong> folder (and Gmail's Promotions tab). You can also just tap the link inside that same email. Mark Stryxs "Not Spam" so future emails reach your inbox.
+        No code? Check your <strong style="color: var(--lv2-acc);">spam / junk</strong> folder (and Gmail's Promotions tab). The code is valid for 1 hour. Mark Stryxs "Not Spam" so future emails reach your inbox.
       </div>
       <p class="lv2-auth-switch" style="margin-top: 14px;"><a onclick="resendConfirmation(this)">Resend code</a> &middot; <a onclick="openAuthHelp()">Need help?</a></p>
     `;
@@ -7312,12 +7312,28 @@ function showEmailVerifyScreen(email) {
   document.getElementById('page-signup').classList.add('active');
   setTimeout(() => { try { document.getElementById('otpCode').focus(); } catch (_) {} }, 80);
 }
+// Sanitizes the OTP field to digits only and auto-verifies once a full code
+// has landed (manual typing, paste, or iOS/Android one-time-code autofill).
+// Debounced so an 8-digit autofill isn't fired on its first 6 chars, and so a
+// slow typist isn't submitted mid-code. Mirrors how big apps (Apple, Stripe)
+// submit the instant the code is complete instead of making you tap a button.
+let _otpAutoTimer = null;
+function handleOtpInput(el) {
+  el.value = el.value.replace(/[^0-9]/g, '');
+  if (_otpAutoTimer) clearTimeout(_otpAutoTimer);
+  // Codes are 6 digits (legacy 8 still tolerated during the transition).
+  if (/^\d{6,8}$/.test(el.value)) {
+    _otpAutoTimer = setTimeout(() => { try { verifySignupCode(); } catch (_) {} }, 550);
+  }
+}
 async function verifySignupCode() {
+  if (_otpAutoTimer) { clearTimeout(_otpAutoTimer); _otpAutoTimer = null; }
   const code = (document.getElementById('otpCode')?.value || '').trim();
   const email = (_pendingVerifyEmail || document.getElementById('loginEmail')?.value || document.getElementById('signupEmail')?.value || '').trim().toLowerCase();
-  if (!/^\d{6,10}$/.test(code)) return toast('Enter the full code from your email');
+  if (!/^\d{6,8}$/.test(code)) return toast('Enter the full code from your email');
   if (!email) return toast('Missing email — please sign up again');
   const btn = document.getElementById('otpVerifyBtn');
+  if (btn && btn.disabled) return; // already verifying (e.g. auto-submit + tap race)
   if (btn) { btn.disabled = true; btn.textContent = 'Verifying…'; }
   try {
     const { data, error } = await sb.auth.verifyOtp({ email, token: code, type: 'signup' });
