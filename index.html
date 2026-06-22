@@ -4827,7 +4827,7 @@ body.on-auth .container {
       </div>
 
       <div class="lv2-meta">
-        <span><span class="lv2-dot"></span><span data-i18n="landing.meta.trial">7-day Pro trial, no card</span></span>
+        <span><span class="lv2-dot"></span><span data-i18n="landing.meta.trial">14-day Pro trial, no card</span></span>
         <span><span class="lv2-dot"></span><span data-i18n="landing.meta.works_with">Works with Strava + CSV from any watch</span></span>
         <span><span class="lv2-dot"></span><span data-i18n="landing.meta.cancel">Cancel anytime</span></span>
       </div>
@@ -4976,7 +4976,7 @@ body.on-auth .container {
     <section class="lv2-section">
       <div class="lv2-cta-strip">
         <h2><span data-i18n="landing.cta_strip.title_a">Stop guessing.</span><br><span data-i18n="landing.cta_strip.title_b">Start training.</span></h2>
-        <p data-i18n="landing.cta_strip.subtitle">Start with a 7-day Pro trial, no card required. After that, keep training on the free tier or stay on Pro for unlimited plan generation, adaptive coaching, and deep trend analysis.</p>
+        <p data-i18n="landing.cta_strip.subtitle">Start with a 14-day Pro trial, no card required. After that, keep training on the free tier or stay on Pro for unlimited plan generation, adaptive coaching, and deep trend analysis.</p>
         <button class="lv2-btn-primary" onclick="navigate('signup')">
           <span data-i18n="landing.cta_strip.button">Create your free account</span>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
@@ -5015,7 +5015,7 @@ body.on-auth .container {
 
     <div class="lv2-auth-card">
       <h2 class="lv2-auth-title" data-i18n="auth.signup.title">Create your account</h2>
-      <p class="lv2-auth-sub" data-i18n="auth.signup.subtitle">Start your 7-day Pro trial, no credit card required</p>
+      <p class="lv2-auth-sub" data-i18n="auth.signup.subtitle">Start your 14-day Pro trial, no credit card required</p>
 
       <div class="lv2-field">
         <label data-i18n="auth.field.name">Name</label>
@@ -5532,17 +5532,17 @@ const I18N = {
     'landing.hero.cta_primary': 'Start training free',
     'landing.hero.cta_secondary': 'See how it works',
     'landing.hero.subtitle': 'An AI coach that actually reads your training data. Builds your plan. Adapts as you go. The first endurance coach that lives in your pocket.',
-    'landing.meta.trial': '7-day Pro trial, no card',
+    'landing.meta.trial': '14-day Pro trial, no card',
     'landing.meta.works_with': 'Works with Strava + CSV from any watch',
     'landing.meta.cancel': 'Cancel anytime',
     'landing.cta_strip.title_a': 'Stop guessing.',
     'landing.cta_strip.title_b': 'Start training.',
-    'landing.cta_strip.subtitle': 'Start with a 7-day Pro trial, no card required. After that, keep training on the free tier or stay on Pro for unlimited plan generation, adaptive coaching, and deep trend analysis.',
+    'landing.cta_strip.subtitle': 'Start with a 14-day Pro trial, no card required. After that, keep training on the free tier or stay on Pro for unlimited plan generation, adaptive coaching, and deep trend analysis.',
     'landing.cta_strip.button': 'Create your free account',
 
     // Auth (signup + login)
     'auth.signup.title': 'Create your account',
-    'auth.signup.subtitle': 'Start your 7-day Pro trial, no credit card required',
+    'auth.signup.subtitle': 'Start your 14-day Pro trial, no credit card required',
     'auth.signup.button': 'Create account',
     'auth.signup.have_account': 'Already have an account?',
     'auth.signup.log_in_link': 'Log in',
@@ -5711,9 +5711,9 @@ const I18N = {
     'pro.feature_gate.coach_chat.desc': 'Upgrade to chat unlimited with your AI coach.',
 
     // Trial welcome card (shown once on first dashboard visit for new signups)
-    'trial.welcome.title': 'Your 7-day Pro trial is live',
+    'trial.welcome.title': 'Your 14-day Pro trial is live',
     'trial.welcome.body': 'For the next {days} days you have full access to Stryxs Pro, unlimited plan generation, full-context AI coach chat, smart plan adjustments, and deep trend analysis. No credit card needed.',
-    'trial.welcome.after': 'After day 7, your account automatically switches to the Free tier. Your data stays, you just get usage limits on plan generation and coach chat. Upgrade anytime to keep Pro features.',
+    'trial.welcome.after': 'After day 14, your account automatically switches to the Free tier. Your data stays, you just get usage limits on plan generation and coach chat. Upgrade anytime to keep Pro features.',
     'trial.welcome.cta_coach': 'Start with Coach →',
   },
   fr: {
@@ -6288,7 +6288,7 @@ function renderTrialBanner() {
 }
 
 // One-time welcome card shown ONLY on the very first dashboard visit after signup.
-// Explains the trial: 7 days of full Pro access, no credit card, auto-converts to free
+// Explains the trial: 14 days of full Pro access, no credit card, auto-converts to free
 // when the trial ends. Dismissible. Per-user localStorage flag means multiple accounts
 // on the same browser don't conflict.
 function renderTrialWelcomeCard() {
@@ -7281,27 +7281,64 @@ async function resendConfirmation(btn) {
   }
 }
 
+// 6-digit CODE verification screen (replaces the link-only "check your email").
+// Typing the code in the SAME browser avoids the wrong-browser handoff. Falls back
+// gracefully: the email also contains the link, so if the code isn't there yet
+// (template not updated) the user can still tap the link. Verifying creates the
+// session here and drops them into the app.
+let _pendingVerifyEmail = null;
 function showEmailVerifyScreen(email) {
+  _pendingVerifyEmail = email;
   const wrap = document.querySelector('#page-signup .lv2-auth-card');
   if (wrap) {
     wrap.innerHTML = `
-      <h2 class="lv2-auth-title">Check your <em>email</em></h2>
-      <p class="lv2-auth-sub">We sent a verification link to<br><strong style="color: var(--lv2-text);">${email}</strong></p>
-      <div style="background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; padding: 18px; margin: 20px 0; font-size: 14px; color: var(--lv2-text-dim); line-height: 1.65;">
-        <strong style="color: var(--lv2-text); font-weight: 600;">Important:</strong> emails sometimes land in spam.<br><br>
-        1. Open your inbox (and check the <strong style="color: var(--lv2-acc);">spam / junk</strong> folder)<br>
-        2. Click the verification link from <strong>Stryxs</strong><br>
-        3. Come back here and log in<br><br>
-        Mark Stryxs as "Not Spam" so future emails go to inbox.
+      <h2 class="lv2-auth-title">Verify your <em>email</em></h2>
+      <p class="lv2-auth-sub">We emailed a 6-digit code to<br><strong style="color: var(--lv2-text);">${escapeHtml(email)}</strong></p>
+      <div class="lv2-field" style="margin-top: 18px;">
+        <label>Enter the code</label>
+        <input type="text" id="otpCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" autocapitalize="off" autocorrect="off" spellcheck="false" style="letter-spacing: 8px; font-size: 22px; text-align: center; font-family: 'JetBrains Mono', monospace;" oninput="this.value=this.value.replace(/[^0-9]/g,'');" />
       </div>
-      <button class="lv2-btn-primary lv2-full" onclick="navigate('login')">
-        I verified, let me log in
+      <button class="lv2-btn-primary lv2-full" id="otpVerifyBtn" onclick="verifySignupCode()">
+        Verify &amp; continue
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
       </button>
+      <div style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 14px 16px; margin: 18px 0 0; font-size: 13px; color: var(--lv2-text-dim); line-height: 1.6;">
+        No code? Check your <strong style="color: var(--lv2-acc);">spam / junk</strong> folder (and Gmail's Promotions tab). You can also just tap the link inside that same email. Mark Stryxs "Not Spam" so future emails reach your inbox.
+      </div>
+      <p class="lv2-auth-switch" style="margin-top: 14px;"><a onclick="resendConfirmation(this)">Resend code</a> &middot; <a onclick="openAuthHelp()">Need help?</a></p>
     `;
   }
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById('page-signup').classList.add('active');
+  setTimeout(() => { try { document.getElementById('otpCode').focus(); } catch (_) {} }, 80);
+}
+async function verifySignupCode() {
+  const code = (document.getElementById('otpCode')?.value || '').trim();
+  const email = (_pendingVerifyEmail || document.getElementById('loginEmail')?.value || document.getElementById('signupEmail')?.value || '').trim().toLowerCase();
+  if (!/^\d{6}$/.test(code)) return toast('Enter the 6-digit code from your email');
+  if (!email) return toast('Missing email — please sign up again');
+  const btn = document.getElementById('otpVerifyBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Verifying…'; }
+  try {
+    const { data, error } = await sb.auth.verifyOtp({ email, token: code, type: 'signup' });
+    if (error) throw error;
+    const user = data?.user || data?.session?.user;
+    if (!user) throw new Error('Verification did not complete, please try again');
+    state.user = { id: user.id, email: user.email, name: user.user_metadata?.name || 'Athlete' };
+    try { localStorage.setItem(`stryxs_show_trial_welcome_${user.id}`, '1'); } catch (_) {}
+    await loadProfile(); await loadWorkouts();
+    try { trackEvent('signup_completed', { source: 'otp' }); } catch (_) {}
+    showApp(); navigate('dashboard');
+  } catch (e) {
+    console.warn('[Stryxs] verifyOtp failed:', e?.message || e);
+    const msg = (e?.message || '').toLowerCase();
+    if (msg.includes('expired') || msg.includes('invalid') || msg.includes('token')) {
+      toast('That code is wrong or expired. Double-check it, or tap "Resend code".', 6000);
+    } else {
+      toast('Could not verify: ' + (e?.message || 'try again'), 5000);
+    }
+    if (btn) { btn.disabled = false; btn.textContent = 'Verify & continue'; }
+  }
 }
 
 async function checkSession() {
