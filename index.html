@@ -7897,21 +7897,29 @@ function maybeOfferSpotlightTour() {
   return true;
 }
 
+// WELCOME MODAL (replaces the old multi-step spotlight/coachmark tour).
+// Research (2024-26): linear coachmark tours of the UI are the worst-performing
+// onboarding pattern — most users drop off by step 3. The high-retention pattern
+// for an AI-coaching app is a single welcome that names the "aha moment" and
+// funnels the user into their FIRST coach interaction (the activation event),
+// backed by the persistent Getting-Started checklist on Home (the durable guide).
 function showTourOfferModal() {
   const existing = document.getElementById('tourOfferModal');
   if (existing) existing.remove();
+  const first = String(state.user?.name || '').trim().split(/\s+/)[0] || '';
   const overlay = document.createElement('div');
   overlay.id = 'tourOfferModal';
   overlay.className = 'onb-overlay';
   overlay.innerHTML = `
-    <div class="onb-modal" style="max-width: 460px;">
-      <div class="onb-emoji">🧭</div>
-      <div class="onb-title">Quick tour?</div>
-      <div class="onb-sub">Stryxs has a few main areas. Let me show you where they live, takes 30 seconds, then your getting-started checklist takes over.</div>
-      <div class="onb-actions" style="flex-direction: column; gap: 8px;">
-        <button class="btn" style="width: 100%;" onclick="acceptTourOffer()">Yes, show me around</button>
+    <div class="onb-modal" style="max-width: 440px;">
+      <div class="onb-emoji">✨</div>
+      <div class="onb-title">${first ? `You're all set, ${escapeHtml(first)}.` : "You're all set."}</div>
+      <div class="onb-sub">Stryxs adapts to you. Your AI coach knows your plan, your history, and your goals, so you can ask it anything, anytime. That's the best place to start, try asking what to do today.</div>
+      <div class="onb-actions" style="flex-direction: column; gap: 8px; margin-top: 6px;">
+        <button class="btn" style="width: 100%;" onclick="acceptTourOffer()">💬 Ask my coach</button>
         <button class="btn ghost" style="width: 100%;" onclick="declineTourOffer()">I'll explore on my own</button>
       </div>
+      <div style="font-size: 11px; color: var(--text-mute); margin-top: 14px; line-height: 1.5;">Your getting-started checklist is on the Home tab whenever you need it.</div>
     </div>
   `;
   document.body.appendChild(overlay);
@@ -7920,24 +7928,20 @@ function showTourOfferModal() {
 function acceptTourOffer() {
   const modal = document.getElementById('tourOfferModal');
   if (modal) modal.remove();
-  // Small delay so the modal exit animation completes before tour overlay shows
-  setTimeout(() => startSpotlightTour(), 200);
+  try { navigate('coach'); } catch (_) {}
 }
 
 function declineTourOffer() {
   const modal = document.getElementById('tourOfferModal');
   if (modal) modal.remove();
-  // Flag is already set by maybeOfferSpotlightTour, so no further action needed.
-  // The user lands on the dashboard with the activation checklist visible.
+  // The user lands on the dashboard with the activation checklist as the guide.
 }
 
-// Settings link to re-trigger the tour
+// Settings → replay the welcome.
 function showSpotlightTourAgain() {
   if (!state.user) return;
-  try { localStorage.removeItem(`${SPOTLIGHT_TOUR_KEY}_${state.user.id}`); } catch(e) {}
-  try { _scheduleClientStateSync(); } catch (_) {} // cross-device persist
   navigate('dashboard');
-  setTimeout(() => startSpotlightTour(), 400);
+  setTimeout(() => showTourOfferModal(), 350);
 }
 
 // ═══════════════════════════════════════════════════════════
