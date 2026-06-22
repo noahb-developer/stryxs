@@ -6080,6 +6080,14 @@ async function loadProfile() {
     // ─── Locale (UI language) ───
     locale: (data.locale === 'fr' || data.locale === 'en') ? data.locale : null,
   };
+  // If a Pro trial has expired, downgrade the stored tier to 'free' so the whole app
+  // sees a consistent state. isUserPro() already treats an expired trial as not-Pro,
+  // but the stored tier must follow so the "trial ended" card (which keys on
+  // tier==='free') surfaces and paywalls read correctly.
+  if (state.profile.subscriptionTier === 'pro_trial' && state.profile.trialEndsAt && new Date(state.profile.trialEndsAt) <= new Date()) {
+    state.profile.subscriptionTier = 'free';
+    try { sb.from('profiles').update({ subscription_tier: 'free' }).eq('id', state.user.id).then(() => {}, () => {}); } catch (_) {}
+  }
   if (data.name) state.user.name = data.name;
   if (data.display_name) state.user.name = data.display_name;
   // Apply profile locale (overrides browser/localStorage default) — non-blocking, skip DB write.
@@ -6141,6 +6149,29 @@ function getTrialDaysLeft() {
   if (!isInTrial()) return 0;
   const ms = new Date(state.profile.trialEndsAt) - new Date();
   return Math.max(0, Math.ceil(ms / (1000 * 60 * 60 * 24)));
+}
+
+// REVERSE TRIAL: a brand-new user gets TRIAL_DAYS of full Pro, then drops to the
+// limited free tier (not a hard wall) — the research-backed model for a new,
+// AI-cost-heavy app. Started once, at the aha moment (first plan = completeIntake).
+// Never restarts (trialEndsAt set = already used), and never overrides a manual
+// 'pro' grant. No payment involved — when it ends, isUserPro() simply returns false
+// and the free-tier caps apply. (Stripe checkout slots in at the upgrade point later.)
+const TRIAL_DAYS = 14;
+async function startTrialIfEligible() {
+  if (!state.user || !state.profile) return;
+  const p = state.profile;
+  if (p.subscriptionTier === 'pro') return;        // manual/paid Pro — leave it
+  if (p.subscriptionTier === 'pro_trial') return;  // trial already running
+  if (p.trialEndsAt) return;                        // already used a trial
+  const ends = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  try {
+    const { error } = await sb.from('profiles').update({ subscription_tier: 'pro_trial', trial_ends_at: ends }).eq('id', state.user.id);
+    if (error) throw error;
+    state.profile.subscriptionTier = 'pro_trial';
+    state.profile.trialEndsAt = ends;
+    try { trackEvent('trial_started', { days: TRIAL_DAYS }); } catch (_) {}
+  } catch (e) { console.warn('[Stryxs] startTrialIfEligible failed (non-fatal):', e?.message || e); }
 }
 
 // Returns one of: 'pro' (paying), 'trial' (active trial), 'free' (everything else).
@@ -17673,6 +17704,10 @@ function showUsageLimitModal(payload) {
 
 async function completeIntake() {
   const el = document.getElementById('coachContent');
+
+  // Start the 14-day Pro reverse-trial at the aha moment (first plan), so the build
+  // and everything after runs with full Pro until the trial ends, then drops to free.
+  try { await startTrialIfEligible(); } catch (_) {}
 
   // Add beforeunload warning so user doesn't accidentally leave during generation
   const beforeUnloadHandler = (e) => {
