@@ -690,7 +690,10 @@ body.has-tabbar #page-profile.active {
 .prof-empty { font-size: 13px; color: var(--text-mute); padding: 10px 0 18px; line-height: 1.5; }
 /* Edit sheet — fixed, internal scroll, sticky footer so Save is always reachable */
 .prof-edit-sheet { background: var(--bg-2); border-top: 1px solid var(--border); border-radius: 20px 20px 0 0; width: 100%; max-width: 480px; margin: 0 auto; display: flex; flex-direction: column; max-height: 86vh; max-height: 86dvh; }
-.prof-edit-handle { width: 40px; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.2); margin: 8px auto 4px; flex-shrink: 0; }
+/* Bigger invisible grab area (easier to hit with a thumb) with a small visible bar
+   drawn via ::before. The whole 120x22 box is draggable, the bar itself stays slim. */
+.prof-edit-handle { width: 100%; max-width: 120px; height: 22px; margin: 2px auto 2px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; cursor: grab; touch-action: none; }
+.prof-edit-handle::before { content: ''; width: 44px; height: 5px; border-radius: 3px; background: rgba(255,255,255,0.22); }
 .prof-edit-scroll { overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; touch-action: pan-y; padding: 8px 18px 8px; }
 /* Keep every field inside the sheet — date inputs have an intrinsic min-width on
    iOS that was pushing past the edge and letting the sheet drag side-to-side. */
@@ -12911,6 +12914,10 @@ async function renderDashboard() {
   // ═══ STEP 6b: Training Load & Form (fitness/fatigue/form + ACWR) ═══
   try { renderLoadFormCard(); } catch (e) { console.warn('[Stryxs] load card failed:', e); }
 
+  // If Coach eased recent weeks for high load and the load is now back to healthy,
+  // proactively offer to restore full volume (fire-and-forget; self-throttles).
+  try { if (typeof maybeLoadRecoveryCheckin === 'function') maybeLoadRecoveryCheckin(); } catch (_) {}
+
   // #9: on app open (dashboard is home), top the plan up to ~a month ahead.
   // Fire-and-forget; self-throttles so it's a cheap no-op when already buffered.
   try { if (typeof maybeAutoExtendPlan === 'function') maybeAutoExtendPlan(); } catch (_) {}
@@ -13186,6 +13193,26 @@ async function renderDashTodayCard(intake) {
             <div style="font-size: 14px; font-weight: 700; margin-bottom: 4px;">Rest day</div>
             <div style="font-size: 12px; color: var(--text-dim); line-height: 1.5;">Recovery is training too. Hydrate, sleep, eat.</div>
           </div>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // ═══ STATE 2b: Today is a planned REST day ═══
+  // A rest day needs no action and nothing to "complete" — show it as settled
+  // (✓, no tap target) so the home card never implies an undone workout. Rest is
+  // part of the plan, so it counts as handled the moment the day is a rest day.
+  if (allTodaysPlanned.length === 1 && todaysPlanned.sport === 'rest') {
+    card.innerHTML = `
+      <div class="panel" style="margin-bottom: 14px;">
+        <div style="display: flex; align-items: center; gap: 14px;">
+          <div style="font-size: 28px;">🛌</div>
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-size: 14px; font-weight: 700; margin-bottom: 4px;">Rest day</div>
+            <div style="font-size: 12px; color: var(--text-dim); line-height: 1.5;">Recovery is training too. Nothing to log today, hydrate, sleep, eat well.</div>
+          </div>
+          <div style="flex-shrink: 0; color: var(--accent); font-size: 18px;">✓</div>
         </div>
       </div>
     `;
@@ -18664,6 +18691,14 @@ function renderMsg(role, content, contextType = null, msgId = null, imageUrl = n
         </button>
       </div>
     `;
+  } else if (role === 'coach' && contextType === 'load_recovery') {
+    // Load is back to healthy → offer to restore full volume after the easing.
+    actionsHtml = `
+      <div style="margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap;">
+        <button class="btn" style="font-size: 13px; padding: 8px 14px;" onclick="restoreFullVolume(this)">↗️ Back to full volume</button>
+        <button class="btn ghost" style="font-size: 13px; padding: 8px 14px;" onclick="dismissReactiveMessage(this, '${msgId || ''}')">Keep it lighter</button>
+      </div>
+    `;
   } else if (role === 'coach' && contextType === 'post_race_checkin') {
     // After race day: offer to set the next goal and rebuild the plan.
     actionsHtml = `
@@ -21899,6 +21934,9 @@ async function maybeAutoExtendPlan() {
         const m = window._stryxsLoadModel || (typeof computeLoadModel === 'function' ? computeLoadModel() : null);
         if (m && (m.acwr > 1.5 || m.tsb < -25)) {
           fatigueNote = `\n\nHeads up: your recent training load is running high, so I kept the new weeks on the easier side to protect you. If you're feeling fresh and want to push instead, just say so here and I'll firm them up.`;
+          // Remember Coach eased for load so we can proactively offer to restore full
+          // volume once the load comes back down (see maybeLoadRecoveryCheckin).
+          try { localStorage.setItem(`stryxs_coach_eased_load_${state.user.id}`, '1'); } catch (_) {}
         }
       } catch (_) {}
 
@@ -24261,6 +24299,21 @@ async function renderPlan() {
     .limit(1);
 
   const hasPlan = latestPlanned && latestPlanned.length > 0;
+
+  // Does the rest of THIS week still have something worth easing? "Make this week
+  // easier" mainly downgrades hard/long sessions, so if Coach has already lightened
+  // the week (load protection) and only short easy sessions remain, there's nothing
+  // to ease — we disable the control instead of letting it strip the week to nothing.
+  try {
+    const _mk = _weekMondayKey();
+    const _td = (typeof getClientToday === 'function') ? getClientToday() : new Date().toISOString().split('T')[0];
+    const _dd = new Date(_td + 'T12:00:00'); const _dow = _dd.getDay();
+    const _sun = new Date(_dd); _sun.setDate(_dd.getDate() + (_dow === 0 ? 0 : 7 - _dow));
+    const _sunStr = _sun.toISOString().split('T')[0];
+    const _HARD = /threshold|interval|vo2|tempo|hard|race|fartlek|speed|sprint|anaerobic|sweet|hill|track|brick|long/;
+    const _up = (planned || []).filter(p => p.scheduled_date >= _td && p.scheduled_date <= _sunStr && p.sport !== 'rest' && !p.skipped && !_findActualForPlanned(p));
+    window._weekHasHardToEase = _up.some(p => _HARD.test((p.workout_type || '').toLowerCase()) || (p.duration_minutes || 0) >= 75);
+  } catch (_) { window._weekHasHardToEase = true; }
   let nextWeekStartLabel = '';
   if (hasPlan) {
     const latest = new Date(latestPlanned[0].scheduled_date + 'T12:00:00');
@@ -25280,6 +25333,49 @@ function dismissMissedNudge() {
   const el = document.getElementById('missedNudge'); if (el) el.remove();
 }
 
+// When Coach eased recent weeks for high training load, proactively check in once
+// the load comes back to a healthy range and offer to restore full volume. The
+// flag is set in maybeAutoExtendPlan when the fatigue easing fires. The research
+// is clear that load-protection easing should be TEMPORARY — resume normal
+// progression once recovered — so this closes that loop instead of leaving the
+// athlete stuck on a permanently-lighter plan.
+async function maybeLoadRecoveryCheckin() {
+  if (!state.user) return;
+  let eased = false;
+  try { eased = localStorage.getItem(`stryxs_coach_eased_load_${state.user.id}`) === '1'; } catch (_) {}
+  if (!eased) return;
+  const m = window._stryxsLoadModel || (typeof computeLoadModel === 'function' ? computeLoadModel() : null);
+  if (!m || (m.counted || 0) < 6) return; // need enough data to trust the read
+  const acwrOk = (typeof m.acwr !== 'number') || m.acwr <= 1.3;
+  const tsbOk = (typeof m.tsb !== 'number') || m.tsb >= -12;
+  if (!acwrOk || !tsbOk || m.sustainedFatigue) return; // still recovering
+  // Clear the flag FIRST so this only posts once per ease-cycle (survives re-renders).
+  try { localStorage.removeItem(`stryxs_coach_eased_load_${state.user.id}`); } catch (_) {}
+  try {
+    await sb.from('coach_messages').insert({
+      user_id: state.user.id, role: 'coach',
+      content: "Good news, your training load is back in a healthy range. I'd eased your recent weeks to protect you while you were carrying a lot of fatigue. Want me to bring your plan back up to full volume, or keep it a touch lighter for now?",
+      context_type: 'load_recovery',
+    });
+    if (typeof renderCoachBadge === 'function') { try { renderCoachBadge(); } catch (_) {} }
+  } catch (e) { console.warn('[Stryxs] load recovery check-in failed:', e); }
+}
+// Rebuild the plan back to full/normal volume after a load-protection easing.
+async function restoreFullVolume(btn) {
+  if (btn) { btn.disabled = true; btn.textContent = 'On it…'; }
+  const wrap = btn && btn.closest ? btn.closest('.msg-actions-wrap') : null;
+  if (wrap) wrap.innerHTML = `<div style="font-size:12px;color:var(--accent);padding:4px 0;">✓ Bringing it back to full</div>`;
+  try {
+    const { data: intake } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).single();
+    const msgs = document.getElementById('chatMessages');
+    await _applyAdjustAndRebuild('Recovered from the high-load period — return my training to full/normal volume now.', intake, msgs);
+  } catch (e) {
+    console.error('[Stryxs] restoreFullVolume failed:', e);
+    toast('Could not rebuild just now, give it another go.', 4000);
+    if (btn) { btn.disabled = false; btn.textContent = '↗️ Back to full volume'; }
+  }
+}
+
 // One consolidated "More" sheet for the plan bar so it stays a single clean line.
 // Holds the plan-output actions + the no-regen "make this week easier" control.
 function openPlanToolsMenu() {
@@ -25302,7 +25398,9 @@ function openPlanToolsMenu() {
       <div style="display:flex;flex-direction:column;gap:10px;">
         ${_isThisWeekEased()
           ? row('↩️', 'Undo easier week', 'Restore this week to its full plan', 'undoEaseWeek()')
-          : row('🔽', 'Make this week easier', 'Lighten the rest of this week, no rebuild', 'openEaseWeekConfirm()')}
+          : (window._weekHasHardToEase === false
+            ? `<div style="display:flex;align-items:center;gap:14px;width:100%;background:var(--bg-3);border:1px solid var(--border);border-radius:14px;padding:14px 16px;opacity:0.55;"><span style="font-size:22px;flex-shrink:0;line-height:1;">🔽</span><span style="flex:1;min-width:0;"><span style="display:block;font-size:15px;font-weight:700;">This week is already light</span><span style="display:block;font-size:12px;color:var(--text-dim);margin-top:2px;line-height:1.4;">Nothing left to ease, it's already easy sessions only.</span></span></div>`
+            : row('🔽', 'Make this week easier', 'Lighten the rest of this week, no rebuild', 'openEaseWeekConfirm()'))}
         ${row('🔔', 'Reminders', 'Get a nudge before each workout', 'openReminderSettings()')}
         ${row('📅', 'Add to calendar', 'Put your plan on your phone calendar', 'exportPlanToCalendar()')}
         ${row('🔗', 'Share plan', 'Send a read-only link to a coach or friend', 'openShareModal()')}
