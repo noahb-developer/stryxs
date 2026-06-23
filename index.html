@@ -20114,7 +20114,7 @@ async function sendChatMsg() {
       .select('role, content')
       .eq('user_id', state.user.id)
       .order('created_at', { ascending: false })
-      .limit(20);
+      .limit(12);
     const history = (historyDesc || []).slice().reverse();
 
     const messages = history.map(h => ({
