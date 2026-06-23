@@ -19692,9 +19692,11 @@ function formatMarkdown(text) {
   // newlines), which would render as a literal "##". Promote inline heading
   // markers to real lines — a colon-bounded title becomes a bold lead; any
   // other stray marker just becomes a paragraph break.
+  // Only touch markers that appear INLINE (preceded by text + same-line space) —
+  // proper line-start headings like "### Warm-up" in workout cards are left intact.
   text = String(text)
-    .replace(/\s*#{1,4}\s+([^\n#]*?:)/g, '\n\n**$1**\n')
-    .replace(/\s*#{1,4}\s+/g, '\n\n');
+    .replace(/([^\n])[^\S\n]+#{1,4}[^\S\n]+([^\n#]*?:)/g, '$1\n\n**$2**\n')
+    .replace(/([^\n])[^\S\n]+#{1,4}[^\S\n]+/g, '$1\n\n');
   const inline = (s) => {
     let h = escapeHtml(s);
     h = h.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
