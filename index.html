@@ -6091,6 +6091,10 @@ async function loadProfile() {
     state.profile.subscriptionTier = 'free';
     try { sb.from('profiles').update({ subscription_tier: 'free' }).eq('id', state.user.id).then(() => {}, () => {}); } catch (_) {}
   }
+  // Normalize the trial to the full 14-day window (a DB signup trigger may set a
+  // shorter default). Awaited so the dashboard banner shows the correct count on
+  // first paint. Idempotent — only writes when the end date is actually off.
+  try { await startTrialIfEligible(); } catch (_) {}
   if (data.name) state.user.name = data.name;
   if (data.display_name) state.user.name = data.display_name;
   // Apply profile locale (overrides browser/localStorage default) — non-blocking, skip DB write.
@@ -6161,13 +6165,23 @@ function getTrialDaysLeft() {
 // 'pro' grant. No payment involved — when it ends, isUserPro() simply returns false
 // and the free-tier caps apply. (Stripe checkout slots in at the upgrade point later.)
 const TRIAL_DAYS = 14;
+// The trial runs TRIAL_DAYS from account creation. A Supabase signup trigger can
+// create the profile with a SHORTER default trial_ends_at (we saw new accounts
+// land on 7 days), so the frontend is the source of truth: we anchor the end to
+// created_at + TRIAL_DAYS and normalize any mismatch. Anchoring (not "now + N")
+// makes this idempotent — re-running never extends a trial that's partway through.
 async function startTrialIfEligible() {
   if (!state.user || !state.profile) return;
   const p = state.profile;
-  if (p.subscriptionTier === 'pro') return;        // manual/paid Pro — leave it
-  if (p.subscriptionTier === 'pro_trial') return;  // trial already running
-  if (p.trialEndsAt) return;                        // already used a trial
-  const ends = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  if (p.subscriptionTier === 'pro') return; // manual/paid Pro — never touch
+  const createdMs = p.createdAt ? new Date(p.createdAt).getTime() : Date.now();
+  const intendedEnd = new Date(createdMs + TRIAL_DAYS * 24 * 60 * 60 * 1000);
+  // Never revive a trial whose real 14-day window already elapsed.
+  if (intendedEnd.getTime() <= Date.now()) return;
+  // Already on a correct-length trial (within a day of the intended end)? Leave it.
+  if (p.subscriptionTier === 'pro_trial' && p.trialEndsAt &&
+      Math.abs(new Date(p.trialEndsAt).getTime() - intendedEnd.getTime()) < 24 * 60 * 60 * 1000) return;
+  const ends = intendedEnd.toISOString();
   try {
     const { error } = await sb.from('profiles').update({ subscription_tier: 'pro_trial', trial_ends_at: ends }).eq('id', state.user.id);
     if (error) throw error;
@@ -14929,7 +14943,7 @@ async function viewHistoryDetail(ref) {
 
       if (messages && messages.length > 0) {
         const commentaryEl = document.createElement('div');
-        commentaryEl.innerHTML = `<div class="coach-box" style="margin-top: 16px;"><div class="coach-title">💬 Coach's analysis</div><div style="font-size:11px;color:var(--text-mute);margin:-2px 0 8px;line-height:1.5;">What Coach said about this workout, saved here so you don't have to scroll back through the Coach chat.</div><div class="coach-text md-body">${formatMarkdown(messages[0].content)}</div></div>`;
+        commentaryEl.innerHTML = `<div class="coach-box" style="margin-top: 16px;"><div class="coach-title">💬 Coach's analysis</div><div style="font-size:11px;color:var(--text-mute);margin:-2px 0 8px;line-height:1.5;">What Coach said about this workout, saved here so you don't have to scroll back through the Coach chat.</div><div class="coach-text md-body">${formatMarkdown(_scrubCoachNames(messages[0].content))}</div></div>`;
         output.appendChild(commentaryEl);
       }
     } catch (err) {
@@ -16873,7 +16887,7 @@ const OBD_GOALS = {
   ],
   'A mix': [
     { label: 'Build all three (swim/bike/run)', dated: false, event: 'general', fhGoal: 'build_aerobic', fhSports: ['run', 'bike', 'swim'] },
-    { label: 'Hybrid: strength + endurance', dated: false, event: 'general', fhGoal: 'sport_performance', fhSports: ['mixed', 'gym'] },
+    { label: 'Strength + cardio (gym + run/bike)', dated: false, event: 'general', fhGoal: 'sport_performance', fhSports: ['run', 'bike', 'gym'] },
     { label: 'Overall fitness', dated: false, event: 'general', fhGoal: 'general_health', fhSports: ['mixed'] },
   ],
   'General fitness': [
@@ -16905,9 +16919,10 @@ function _obdInjectStyles() {
   const s = document.createElement('style'); s.id = 'obdStyles';
   s.textContent = `
   .obd-wrap{max-width:520px;margin:0 auto;display:flex;flex-direction:column;min-height:62vh;padding:6px 2px 0;}
-  .obd-backrow{position:sticky;top:0;z-index:6;padding:10px 0 8px;margin:0 0 2px;background:linear-gradient(var(--bg) 72%, transparent);backdrop-filter:blur(4px);}
-  .obd-back{background:var(--bg-3);border:1px solid var(--border-light);color:var(--text);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;padding:7px 13px;border-radius:999px;display:none;align-items:center;gap:5px;transition:all .14s;}
+  .obd-backrow{height:42px;margin:0;}
+  .obd-back{position:fixed;top:calc(env(safe-area-inset-top,0px) + 12px);left:14px;z-index:50;background:var(--bg-3);border:1px solid var(--border-light);color:var(--text);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;padding:8px 14px;border-radius:999px;display:none;align-items:center;gap:5px;transition:all .14s;box-shadow:0 4px 14px rgba(0,0,0,.35);}
   .obd-back:hover{border-color:var(--accent);color:var(--accent);}
+  .obd-back:active{transform:scale(.96);}
   .obd-prog{display:flex;gap:6px;justify-content:center;margin:4px 0 16px;}
   .obd-prog i{height:4px;width:24px;border-radius:99px;background:var(--bg-3);transition:background .3s;}
   .obd-prog i.on{background:var(--accent);}
@@ -17226,15 +17241,35 @@ function _obdAskAround() {
     b.onclick = () => { if (picks.has(l)) { picks.delete(l); b.classList.remove('sel'); } else { picks.add(l); b.classList.add('sel'); } };
     wrap.appendChild(b);
   });
+  // Free-text: let them describe anything in their own words (e.g. "recovering from
+  // an ACL", "no running on pavement"). It rides into the plan's injuries/limits
+  // field so Coach adapts around it. Toggling shows an inline input.
+  const otherBtn = document.createElement('button'); otherBtn.className = 'obd-chip'; otherBtn.textContent = '✏️ Something else';
+  otherBtn.onclick = () => {
+    if (document.getElementById('obdAroundOtherRow')) { document.getElementById('obdAroundOtherRow').remove(); otherBtn.classList.remove('sel'); _obdA.aroundOther = null; return; }
+    otherBtn.classList.add('sel');
+    const row = document.createElement('div'); row.className = 'obd-typerow'; row.id = 'obdAroundOtherRow'; row.style.marginTop = '8px';
+    row.innerHTML = `<input placeholder="e.g. recovering from an ACL injury, no pavement running…"><button class="obd-send">→</button>`;
+    const inp = row.querySelector('input'); const send = row.querySelector('.obd-send');
+    const save = () => { _obdA.aroundOther = (inp.value || '').trim() || null; };
+    send.onclick = save; inp.addEventListener('input', save); inp.addEventListener('keydown', e => { if (e.key === 'Enter') { save(); done.click(); } });
+    dock.appendChild(row); try { inp.focus(); } catch (_) {}
+  };
+  wrap.appendChild(otherBtn);
   dock.appendChild(wrap);
   const drow = document.createElement('div'); drow.className = 'obd-chips';
   const done = document.createElement('button'); done.className = 'obd-chip'; done.textContent = 'Done →';
   done.onclick = () => _obdFinishAround([...picks]); drow.appendChild(done); dock.appendChild(drow); _obdScroll();
 }
 function _obdFinishAround(list) {
-  _obdA.around = list.length ? list : ['All good'];
+  const base = list.length ? list.slice() : [];
+  if (_obdA.aroundOther) base.push(_obdA.aroundOther);
+  _obdA.around = base.length ? base : ['All good'];
   _obdUserSay(_obdA.around.join(' · ')); _obdClearDock();
-  if (_obdA.around.some(x => /injury|niggle/i.test(x))) { _obdCoachSay(`Let's keep you safe then. Where's the issue?`, _obdAskInjuryArea); }
+  const tappedInjury = list.some(x => /injury|niggle/i.test(x));
+  // If they typed their own note, it already has the detail — skip the structured
+  // "where's the issue" sub-flow and let the free text drive the plan adaptation.
+  if (tappedInjury && !_obdA.aroundOther) { _obdCoachSay(`Let's keep you safe then. Where's the issue?`, _obdAskInjuryArea); }
   else { _obdMaybeAskTime(); }
 }
 function _obdAskInjuryArea() {
@@ -17296,6 +17331,7 @@ function _obdMapToIntakeAnswers() {
   const exp = a.experience || 'intermediate';
   const limitParts = [];
   if (a.injuryArea) limitParts.push(`${a.injuryArea}${a.injurySevText ? ' — ' + a.injurySevText : ''}`);
+  if (a.aroundOther) limitParts.push(a.aroundOther);
   if (a.timeFloor) limitParts.push(`Some weeks tight on time (can usually manage ${a.timeFloor} day${a.timeFloor === '1' ? '' : 's'})`);
   const days = (a.availableDays && a.availableDays.length) ? a.availableDays : (OBD_DAYS[a.days] || null);
   // Long day = what the user chose; else fall back to Saturday if it's available,
@@ -18561,9 +18597,18 @@ async function completeIntake() {
     toast('Plan ready!');
     renderCoach();
     // Land the user at the START of Coach's welcome message, not scrolled to the
-    // bottom (renderCoach's anchorBottom would otherwise drop them mid-message).
-    // 650ms beats anchorBottom's last timer (500ms) so this wins.
-    setTimeout(() => { try { const c = document.getElementById('chatMessages'); if (c) c.scrollTop = 0; window.scrollTo(0, 0); } catch (_) {} }, 650);
+    // bottom (renderCoach's anchorBottom drops them mid-message). The intro loads
+    // async from the DB, so retry over a window to win the race + beat anchorBottom.
+    const scrollIntroTop = () => {
+      try {
+        const c = document.getElementById('chatMessages'); if (!c) return;
+        const last = c.lastElementChild;
+        if (last && last.scrollIntoView) last.scrollIntoView({ block: 'start', behavior: 'auto' });
+        else c.scrollTop = 0;
+        window.scrollTo(0, 0);
+      } catch (_) {}
+    };
+    [600, 1000, 1500, 2200].forEach(ms => setTimeout(scrollIntroTop, ms));
     // If Coach flagged feasibility issues, show them now, non-blocking but
     // the athlete needs to see them before they look at the plan as gospel.
     if (feasibilityWarnings && feasibilityWarnings.length > 0) {
@@ -19159,7 +19204,9 @@ function renderMsg(role, content, contextType = null, msgId = null, imageUrl = n
   const avatar = role === 'coach'
     ? '<svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:var(--accent)" aria-hidden="true"><path d="M12 2.5c.5 4.2 1.8 5.5 6 6-4.2.5-5.5 1.8-6 6-.5-4.2-1.8-5.5-6-6 4.2-.5 5.5-1.8 6-6z"/></svg>'
     : (state.user?.name?.[0]?.toUpperCase() || 'A');
-  const formatted = role === 'coach' ? formatMarkdown(content) : escapeHtml(content);
+  // Coach output is scrubbed of real coach/author names before display — the app
+  // never surfaces a person's name; the methodology still works the same.
+  const formatted = role === 'coach' ? formatMarkdown(_scrubCoachNames(content)) : escapeHtml(content);
   // When the row carries a real image URL, suppress the legacy media-marker
   // captions ("📷 Photo" / "📄 PDF") that we save for back-compat — they were
   // showing up as duplicated text under the photo on reload.
