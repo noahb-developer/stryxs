@@ -6741,15 +6741,33 @@ function _detectA2hsBrowser() {
   return 'desktop';
 }
 let _a2hsSelected = null;
+// The install card lives on the dashboard, where the onboarding's .obd-chip styles
+// aren't loaded — so it gets its own self-contained styling (injected once).
+function _a2hsInjectStyles() {
+  if (document.getElementById('a2hsStyles')) return;
+  const s = document.createElement('style'); s.id = 'a2hsStyles';
+  s.textContent = `
+  .a2hs-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:4px;}
+  .a2hs-chip{background:var(--bg-3);border:1px solid var(--border);color:var(--text-dim);font-size:12.5px;font-weight:600;border-radius:10px;padding:8px 13px;cursor:pointer;font-family:inherit;transition:all .14s;}
+  .a2hs-chip:hover{border-color:var(--accent);color:var(--text);}
+  .a2hs-chip.sel{background:rgba(0,229,160,.12);border-color:var(--accent);color:var(--accent);}
+  .a2hs-steps{list-style:none;counter-reset:a2hs;margin:0;padding:0;}
+  .a2hs-steps li{counter-increment:a2hs;position:relative;padding:0 0 0 32px;margin-bottom:11px;font-size:13.5px;color:var(--text-dim);line-height:1.5;min-height:22px;display:flex;align-items:center;}
+  .a2hs-steps li:last-child{margin-bottom:0;}
+  .a2hs-steps li::before{content:counter(a2hs);position:absolute;left:0;top:0;width:22px;height:22px;border-radius:50%;background:rgba(0,229,160,.14);color:var(--accent);font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;}
+  .a2hs-steps strong{color:var(--text);font-weight:700;}
+  .a2hs-divider{height:1px;background:var(--border);margin:14px 0;opacity:.6;}`;
+  document.head.appendChild(s);
+}
 function _a2hsStepsHtml(key) {
   const g = A2HS_GUIDE[key] || A2HS_GUIDE.desktop;
-  return g.steps.map(s => `<li>${s}</li>`).join('');
+  return g.steps.map(s => `<li><span>${s}</span></li>`).join('');
 }
 function selectA2hsBrowser(key) {
   _a2hsSelected = key;
   const stepsEl = document.getElementById('a2hsSteps');
   if (stepsEl) stepsEl.innerHTML = _a2hsStepsHtml(key);
-  document.querySelectorAll('#a2hsChips .obd-chip').forEach(c => {
+  document.querySelectorAll('#a2hsChips .a2hs-chip').forEach(c => {
     c.classList.toggle('sel', c.getAttribute('data-a2hs') === key);
   });
 }
@@ -6778,6 +6796,7 @@ function renderPwaInstallCard(intakeDone) {
     ? `<button class="btn ghost" onclick="stopPwaReminders()" style="font-size: 12px; padding: 7px 14px; color: var(--text-mute);">Stop reminding me</button>`
     : '';
   const detected = _a2hsSelected || _detectA2hsBrowser();
+  _a2hsInjectStyles();
   return `
     <div id="pwaInstallCard" style="padding: 16px 18px; background: linear-gradient(135deg, rgba(0, 229, 160, 0.06), rgba(80, 130, 255, 0.04)); border: 1px solid rgba(0, 229, 160, 0.25); border-radius: 14px; margin-bottom: 16px; position: relative;">
       <button onclick="snoozePwaInstall()" aria-label="Dismiss" style="position: absolute; top: 10px; right: 10px; background: transparent; border: 0; color: var(--text-mute); font-size: 18px; cursor: pointer; padding: 4px 8px; line-height: 1;">×</button>
@@ -6785,14 +6804,15 @@ function renderPwaInstallCard(intakeDone) {
         <span style="font-size: 18px;">📱</span>
         <div style="font-size: 14px; font-weight: 700; color: var(--text); letter-spacing: -0.01em;">Add Stryxs to your home screen</div>
       </div>
-      <div style="font-size: 12px; color: var(--text-dim); line-height: 1.55; margin-bottom: 10px;">
+      <div style="font-size: 12.5px; color: var(--text-dim); line-height: 1.55; margin-bottom: 14px;">
         Stryxs runs great as an app, quick access from your home screen, no browser bar, works offline.
       </div>
-      <div style="font-size: 11px; color: var(--text-mute); margin-bottom: 7px;">Pick your browser:</div>
-      <div id="a2hsChips" class="obd-chips" style="justify-content: flex-start; margin-bottom: 12px;">
-        ${Object.keys(A2HS_GUIDE).map(k => `<button class="obd-chip${k === detected ? ' sel' : ''}" data-a2hs="${k}" onclick="selectA2hsBrowser('${k}')" style="font-size:12px;padding:6px 11px;">${A2HS_GUIDE[k].label}</button>`).join('')}
+      <div style="font-size: 11px; font-weight: 600; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 9px;">Pick your browser</div>
+      <div id="a2hsChips" class="a2hs-chips">
+        ${Object.keys(A2HS_GUIDE).map(k => `<button class="a2hs-chip${k === detected ? ' sel' : ''}" data-a2hs="${k}" onclick="selectA2hsBrowser('${k}')">${A2HS_GUIDE[k].label}</button>`).join('')}
       </div>
-      <ol id="a2hsSteps" style="font-size: 12px; color: var(--text-dim); line-height: 1.7; margin: 0 0 14px 18px; padding: 0;">
+      <div class="a2hs-divider"></div>
+      <ol id="a2hsSteps" class="a2hs-steps" style="margin-bottom: 16px;">
         ${_a2hsStepsHtml(detected)}
       </ol>
       <div style="display: flex; gap: 8px; flex-wrap: wrap;">
@@ -16885,9 +16905,9 @@ function _obdInjectStyles() {
   const s = document.createElement('style'); s.id = 'obdStyles';
   s.textContent = `
   .obd-wrap{max-width:520px;margin:0 auto;display:flex;flex-direction:column;min-height:62vh;padding:6px 2px 0;}
-  .obd-backrow{height:20px;margin:0 0 2px;}
-  .obd-back{background:none;border:none;color:var(--text-mute);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;padding:2px 4px;display:none;align-items:center;gap:4px;}
-  .obd-back:hover{color:var(--accent);}
+  .obd-backrow{position:sticky;top:0;z-index:6;padding:10px 0 8px;margin:0 0 2px;background:linear-gradient(var(--bg) 72%, transparent);backdrop-filter:blur(4px);}
+  .obd-back{background:var(--bg-3);border:1px solid var(--border-light);color:var(--text);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;padding:7px 13px;border-radius:999px;display:none;align-items:center;gap:5px;transition:all .14s;}
+  .obd-back:hover{border-color:var(--accent);color:var(--accent);}
   .obd-prog{display:flex;gap:6px;justify-content:center;margin:4px 0 16px;}
   .obd-prog i{height:4px;width:24px;border-radius:99px;background:var(--bg-3);transition:background .3s;}
   .obd-prog i.on{background:var(--accent);}
@@ -16926,20 +16946,81 @@ function _obdSetProg(step) {
 }
 // Records a back-point: the chat + answers + progress as they are right when a new
 // question is about to be presented (coach prompt shown, no answer given yet).
+// Only named step functions are recorded (anonymous transition callbacks like the
+// resume prompt aren't real questions and can't be restored on reload).
 function _obdRecord(fn) {
+  if (!fn || !fn.name) return;
   const chat = document.getElementById('obdChat');
   _obdNav.push({ render: fn, chat: chat ? chat.innerHTML : '', A: JSON.parse(JSON.stringify(_obdA)), prog: _obdProgStep });
   _obdRenderBack();
+  _obdSave();
+}
+// ── Save / resume: persist in-progress intake so leaving Coach (or a reload)
+// doesn't lose answers. Keyed per user, expires after 7 days.
+function _OBD_KEY() { return 'stryxs_obd_progress_' + (state.user && state.user.id ? state.user.id : 'anon'); }
+function _obdSave() {
+  try {
+    if (!_obdNav.length) return;
+    localStorage.setItem(_OBD_KEY(), JSON.stringify({
+      A: _obdA,
+      nav: _obdNav.map(n => ({ name: n.render && n.render.name, chat: n.chat, A: n.A, prog: n.prog })),
+      ts: Date.now(),
+    }));
+  } catch (_) {}
+}
+function _obdLoadSave() {
+  try {
+    const raw = localStorage.getItem(_OBD_KEY()); if (!raw) return null;
+    const p = JSON.parse(raw);
+    if (p && p.ts && (Date.now() - p.ts) > 7 * 24 * 3600 * 1000) { _obdClearSave(); return null; }
+    return p;
+  } catch (_) { return null; }
+}
+function _obdClearSave() { try { localStorage.removeItem(_OBD_KEY()); } catch (_) {} }
+function _obdOfferResume(saved) {
+  _obdCoachSay(`Welcome back 👋 Want to pick up where you left off, or start fresh?`, () => {
+    _obdChips([
+      { label: 'Continue', onPick: () => { _obdClearDock(); _obdResume(saved); } },
+      { label: 'Start over', ghost: true, onPick: () => {
+        _obdClearDock(); _obdClearSave(); _obdA = {}; _obdNav = [];
+        const chat = document.getElementById('obdChat'); if (chat) chat.innerHTML = '';
+        _obdSetProg(0); _obdRenderBack();
+        _obdCoachSay(`No problem, fresh start. Are you starting fresh, or do you already follow a plan you'd like to bring in?`, _obdAskStart);
+      } },
+    ]);
+  });
+}
+function _obdResume(saved) {
+  _obdA = saved.A ? JSON.parse(JSON.stringify(saved.A)) : {};
+  _obdNav = (saved.nav || []).map(n => ({
+    render: (n.name && typeof window[n.name] === 'function') ? window[n.name] : _obdAskStart,
+    chat: n.chat || '', A: n.A || {}, prog: n.prog || 0,
+  }));
+  const last = _obdNav[_obdNav.length - 1];
+  const chat = document.getElementById('obdChat');
+  if (chat && last) chat.innerHTML = last.chat;
+  _obdSetProg(last ? last.prog : 0);
+  _obdRenderBack();
+  try { if (last && typeof last.render === 'function') last.render(); } catch (_) {}
 }
 function _obdRenderBack() {
   const b = document.getElementById('obdBack');
-  if (b) b.style.display = _obdNav.length > 1 ? 'inline-flex' : 'none';
+  if (!b) return;
+  // Always visible: "Back" once they're past the first question, "Exit" at the
+  // very start so an accidental entry into Coach is never a dead end.
+  b.style.display = 'inline-flex';
+  b.textContent = _obdNav.length > 1 ? '← Back' : '✕ Exit';
+}
+// Leaves the intake without losing progress — any in-progress answers stay saved
+// so re-entering Coach offers to continue.
+function _obdExitOnboarding() {
+  try { navigate('dashboard'); } catch (_) { try { showApp(); } catch (__) {} }
 }
 // Steps back one question: drop the current step, restore the previous snapshot,
 // and re-render that question's options. Answers given after it are discarded so
-// the user genuinely re-answers from there.
+// the user genuinely re-answers from there. At the first question, "Back" exits.
 function _obdBack() {
-  if (_obdNav.length < 2) return;
+  if (_obdNav.length < 2) { _obdExitOnboarding(); return; }
   _obdNav.pop();
   const prev = _obdNav[_obdNav.length - 1];
   _obdA = JSON.parse(JSON.stringify(prev.A));
@@ -16948,6 +17029,7 @@ function _obdBack() {
   _obdClearDock();
   _obdSetProg(prev.prog);
   _obdRenderBack();
+  _obdSave();
   try { if (typeof prev.render === 'function') prev.render(); } catch (_) {}
 }
 function _obdCoachSay(html, cb) {
@@ -16987,9 +17069,16 @@ function renderChatOnboarding(el, existingIntake) {
   _obdA = {};
   _obdNav = [];
   if (existingIntake && existingIntake.unit_preference) _obdA.unit_preference = existingIntake.unit_preference;
-  el.innerHTML = `<div class="obd-wrap"><div class="obd-backrow"><button class="obd-back" id="obdBack" onclick="_obdBack()">← Back</button></div><div class="obd-prog" id="obdProg"></div><div class="obd-chat" id="obdChat"></div><div class="obd-dock" id="obdDock"></div><div class="obd-note">Setting you up · about a minute · scripted, no AI tokens spent until your plan builds</div></div>`;
+  el.innerHTML = `<div class="obd-wrap"><div class="obd-backrow"><button class="obd-back" id="obdBack" onclick="_obdBack()">✕ Exit</button></div><div class="obd-prog" id="obdProg"></div><div class="obd-chat" id="obdChat"></div><div class="obd-dock" id="obdDock"></div><div class="obd-note">Takes about a minute. These quick questions are free, your plan is built at the end.</div></div>`;
   _obdSetProg(0);
-  _obdCoachSay(`Hey 👋 I'm your coach. I'll get you set up in about a minute.<br><br>Are you starting fresh, or do you already follow a plan you'd like to bring in?`, _obdAskStart);
+  _obdRenderBack();
+  // If they left a previous intake unfinished, offer to continue instead of losing it.
+  const saved = _obdLoadSave();
+  if (saved && Array.isArray(saved.nav) && saved.nav.length > 1) {
+    _obdOfferResume(saved);
+  } else {
+    _obdCoachSay(`Hey 👋 I'm your coach. I'll get you set up in about a minute.<br><br>Are you starting fresh, or do you already follow a plan you'd like to bring in?`, _obdAskStart);
+  }
 }
 function _obdAskStart() {
   _obdChips([
@@ -17071,7 +17160,9 @@ function _obdAskDays() {
 function _obdAskWhichDays() {
   _obdSetProg(4);
   const dock = document.getElementById('obdDock'); if (!dock) return; dock.innerHTML = '';
-  const picks = new Set(OBD_DAYS[_obdA.days] || OBD_DAYS['4']);
+  // Start with NOTHING selected — the user picks their own days (pre-selecting a
+  // guess made people think the choice was already made for them).
+  const picks = new Set(_obdA.availableDays || []);
   const wrap = document.createElement('div'); wrap.className = 'obd-chips';
   OBD_DAY_ORDER.forEach(d => {
     const b = document.createElement('button'); b.className = 'obd-chip' + (picks.has(d) ? ' sel' : ''); b.textContent = OBD_DAY_LABELS[d];
@@ -17103,14 +17194,34 @@ function _obdAskVolume() {
   _obdSetProg(5);
   _obdChips(Object.keys(OBD_VOL).map(l => ({ label: l, onPick: () => { _obdUserSay(l); _obdA.volHours = OBD_VOL[l]; _obdClearDock(); _obdCoachSay(`Got it. Last thing — anything I should train around? Tap all that apply.`, _obdAskAround); } })));
 }
+// The concrete set of sports actually in play for this athlete, so we never ask
+// about equipment for a sport they don't do (e.g. a runner shouldn't see "No pool"
+// or "No bike"). 'mixed' is intentionally NOT treated as swim/bike — we only claim
+// a sport when it's explicitly chosen.
+function _obdSportSet() {
+  const s = new Set();
+  const sp = _obdA.sport;
+  if (sp === 'Running') s.add('run');
+  else if (sp === 'Cycling') s.add('bike');
+  else if (sp === 'Swimming') s.add('swim');
+  else if (sp === 'Triathlon') { s.add('run'); s.add('bike'); s.add('swim'); }
+  (_obdA.fhSports || []).forEach(x => { if (['run', 'bike', 'swim', 'gym'].includes(x)) s.add(x); });
+  return s;
+}
 function _obdAskAround() {
   _obdSetProg(6);
   const dock = document.getElementById('obdDock'); if (!dock) return; dock.innerHTML = '';
+  const sports = _obdSportSet();
   const picks = new Set();
   const wrap = document.createElement('div'); wrap.className = 'obd-chips';
   const allgood = document.createElement('button'); allgood.className = 'obd-chip'; allgood.textContent = 'All good 👍';
   allgood.onclick = () => _obdFinishAround(['All good']); wrap.appendChild(allgood);
-  ['A niggle / injury', 'No gym', 'No pool', 'No bike right now', 'Tight on time some weeks'].forEach(l => {
+  // Build the option list to match the athlete's actual sports.
+  const opts = ['A niggle / injury', 'No gym'];
+  if (sports.has('swim')) opts.push('No pool');
+  if (sports.has('bike')) opts.push('No bike right now');
+  opts.push('Tight on time some weeks');
+  opts.forEach(l => {
     const b = document.createElement('button'); b.className = 'obd-chip'; b.textContent = l;
     b.onclick = () => { if (picks.has(l)) { picks.delete(l); b.classList.remove('sel'); } else { picks.add(l); b.classList.add('sel'); } };
     wrap.appendChild(b);
@@ -17169,7 +17280,14 @@ function _guessUnitPreference() {
 function _obdMapToIntakeAnswers() {
   const a = _obdA;
   const sport = a.sport || 'Running';
-  let equipment = (OBD_EQUIP[sport] || ['run_gear', 'gym']).slice();
+  // Derive equipment from the sports actually in play (not the broad per-sport
+  // default), so a runner's plan never assumes a pool or bike.
+  const sports = _obdSportSet();
+  let equipment = [];
+  if (sports.has('bike')) equipment.push('bike');
+  if (sports.has('swim')) equipment.push('pool');
+  if (sports.has('run') || (!sports.has('bike') && !sports.has('swim'))) equipment.push('run_gear');
+  equipment.push('gym');
   (a.around || []).forEach(x => {
     if (/no gym/i.test(x)) equipment = equipment.filter(e => e !== 'gym');
     if (/no pool/i.test(x)) equipment = equipment.filter(e => e !== 'pool');
@@ -17207,6 +17325,9 @@ function _obdMapToIntakeAnswers() {
 }
 async function _obdBuild() {
   _obdSetProg(6);
+  // Intake is complete — clear the saved-progress snapshot so we don't offer to
+  // "resume" a finished intake next time.
+  _obdClearSave();
   // Hand the collected answers to the existing completion path. For "build" it
   // generates a plan; for "import_adapt" completeIntake routes to the import flow.
   // completeIntake is async — await it so a failure inside the plan build is
