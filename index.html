@@ -19688,6 +19688,13 @@ async function _rebuildPlanInPlace(intake, opts = {}) {
 // list items group into one list.
 function formatMarkdown(text) {
   if (text === null || text === undefined) return '';
+  // Safety net: models sometimes emit "## Heading" INLINE (no surrounding
+  // newlines), which would render as a literal "##". Promote inline heading
+  // markers to real lines — a colon-bounded title becomes a bold lead; any
+  // other stray marker just becomes a paragraph break.
+  text = String(text)
+    .replace(/\s*#{1,4}\s+([^\n#]*?:)/g, '\n\n**$1**\n')
+    .replace(/\s*#{1,4}\s+/g, '\n\n');
   const inline = (s) => {
     let h = escapeHtml(s);
     h = h.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
