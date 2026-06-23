@@ -20184,10 +20184,16 @@ async function sendChatMsg() {
     // Coach may emit a structured "log this workout" block when it reads a
     // workout photo that didn't sync. Strip it from the visible text and offer
     // a one-tap "Add this workout" button (the user confirms before it's saved).
-    // The agentic coach appends [[stryxs:plan_changed]] when it edited the plan
-    // via a write tool. Strip it (never display or save it) and flag a refresh.
+    // The agentic coach appends sentinels: [[stryxs:plan_changed]] for a small
+    // edit (refresh), [[stryxs:rebuild_plan]] for a full rebuild. Strip them
+    // (never display or save) and flag the matching follow-up.
     let planChanged = false;
+    let rebuildPlan = false;
     let reply2 = reply;
+    if (reply2.includes('[[stryxs:rebuild_plan]]')) {
+      rebuildPlan = true;
+      reply2 = reply2.replace(/\[\[stryxs:rebuild_plan\]\]/g, '').trim();
+    }
     if (reply2.includes('[[stryxs:plan_changed]]')) {
       planChanged = true;
       reply2 = reply2.replace(/\[\[stryxs:plan_changed\]\]/g, '').trim();
@@ -20230,6 +20236,18 @@ async function sendChatMsg() {
       try { toast('Plan updated ✓'); } catch (_) {}
       try { if (typeof loadWorkouts === 'function') await loadWorkouts(); } catch (_) {}
       try { if (document.getElementById('page-plan')?.classList.contains('active') && typeof renderPlan === 'function') renderPlan(); } catch (_) {}
+    }
+
+    // If the coach asked for a FULL rebuild (regenerate_plan / set_training_days),
+    // run the proven rebuild flow with the athlete's current (possibly just-updated)
+    // intake. _rebuildPlanInPlace takes over the Coach screen with its own progress.
+    if (rebuildPlan) {
+      try {
+        const { data: freshIntake } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).single();
+        if (freshIntake && typeof _rebuildPlanInPlace === 'function') {
+          await _rebuildPlanInPlace(freshIntake, { skipIntro: true, heroSub: 'Reworking your plan around your request.', doneMsg: '✓ Your plan is rebuilt. Head to the Plan tab to see it.' });
+        }
+      } catch (e) { console.warn('[Stryxs] chat-triggered rebuild failed:', e); try { toast('Could not rebuild just now, try again.'); } catch (_) {} }
     }
 
     // ═══ CHAT-BASED PROFILE CORRECTION ═══
