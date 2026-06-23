@@ -4797,7 +4797,6 @@ body.on-auth .container {
         <span>Stryx<em>s</em></span>
       </div>
       <div class="lv2-nav-cta">
-        <button class="lv2-nav-login" onclick="openAuthHelp()" aria-label="Help">Help</button>
         <button class="lv2-nav-login" onclick="navigate('login')">Log in</button>
         <button class="lv2-nav-signup" onclick="navigate('signup')">Get started →</button>
       </div>
@@ -5009,6 +5008,7 @@ body.on-auth .container {
         <span>Stryx<em>s</em></span>
       </div>
       <div class="lv2-nav-cta">
+        <button class="lv2-nav-login" onclick="openAuthHelp()" aria-label="Help">Help</button>
         <button class="lv2-nav-login" onclick="navigate('login')" data-i18n="landing.nav.login">Log in</button>
       </div>
     </nav>
@@ -6299,7 +6299,10 @@ function renderTrialWelcomeCard() {
   if (!shouldShow) return '';
   // Only show if they're actually in trial, otherwise the message would be misleading
   if (!isInTrial()) return '';
-  const days = getTrialDaysLeft();
+  // This one-time welcome card describes the OFFER (the full 14-day trial), so it
+  // stays internally consistent with the "14-day" title and "after day 14" line.
+  // The live countdown ("X days left") lives in renderTrialBanner(), not here.
+  const days = TRIAL_DAYS;
   return `
     <div id="trialWelcomeCard" style="padding: 18px 20px; background: linear-gradient(135deg, rgba(0, 229, 160, 0.08), rgba(80, 130, 255, 0.04)); border: 1px solid rgba(0, 229, 160, 0.32); border-radius: 14px; margin-bottom: 16px; position: relative;">
       <button onclick="dismissTrialWelcome()" aria-label="${t('common.close')}" style="position: absolute; top: 10px; right: 10px; background: transparent; border: 0; color: var(--text-mute); font-size: 18px; cursor: pointer; padding: 4px 8px; line-height: 1;">×</button>
@@ -6714,6 +6717,42 @@ function shouldShowInstallCard(intakeDone) {
   return true;
 }
 
+// Per-browser "Add to Home Screen" instructions. The generic "Share or menu →
+// Add to Home Screen" copy failed real users (e.g. Chrome doesn't have the Safari
+// Share button), so we detect the browser, show the exact steps for it, and let
+// the user switch browsers if our guess is wrong.
+const A2HS_GUIDE = {
+  ios_safari:     { label: 'iPhone · Safari',       steps: ['Tap the <strong>Share</strong> button (the square with an up-arrow) in the bottom toolbar.', 'Scroll down and tap <strong>Add to Home Screen</strong>.', 'Tap <strong>Add</strong> (top-right). Stryxs lands on your home screen.'] },
+  ios_chrome:     { label: 'iPhone · Chrome/Edge',  steps: ['Tap the <strong>Share</strong> icon (the square with an up-arrow) in the address bar.', 'Tap <strong>Add to Home Screen</strong>.', 'Tap <strong>Add</strong>. Stryxs lands on your home screen.'] },
+  android_chrome: { label: 'Android · Chrome',      steps: ['Tap the <strong>⋮</strong> menu (top-right).', 'Tap <strong>Add to Home screen</strong> (or <strong>Install app</strong>).', 'Tap <strong>Add</strong> / <strong>Install</strong> to confirm.'] },
+  samsung:        { label: 'Samsung Internet',      steps: ['Tap the <strong>☰</strong> menu (bottom bar).', 'Tap <strong>Add page to</strong>, then <strong>Home screen</strong>.', 'Tap <strong>Add</strong> to confirm.'] },
+  firefox:        { label: 'Android · Firefox',     steps: ['Tap the <strong>⋮</strong> menu (top-right).', 'Tap <strong>Add to Home screen</strong> (or <strong>Install</strong>).', 'Confirm. Stryxs lands on your home screen.'] },
+  edge:           { label: 'Android · Edge',        steps: ['Tap the <strong>⋯</strong> menu (bottom).', 'Tap <strong>Add to phone</strong> (or <strong>Add to Home screen</strong>).', 'Confirm to add Stryxs.'] },
+  desktop:        { label: 'Computer',              steps: ['Look for the <strong>install icon</strong> (a monitor with a down-arrow) at the right end of the address bar.', 'Click it, then click <strong>Install</strong>.', 'No icon? Open the browser <strong>⋮</strong> menu → <strong>Install Stryxs</strong> / <strong>Apps</strong>.'] },
+};
+function _detectA2hsBrowser() {
+  const ua = navigator.userAgent || '';
+  const isIOS = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  if (isIOS) return /CriOS|EdgiOS|FxiOS/.test(ua) ? 'ios_chrome' : 'ios_safari';
+  if (/SamsungBrowser/.test(ua)) return 'samsung';
+  if (/EdgA/.test(ua)) return 'edge';
+  if (/Firefox/.test(ua)) return 'firefox';
+  if (/Android/.test(ua)) return 'android_chrome';
+  return 'desktop';
+}
+let _a2hsSelected = null;
+function _a2hsStepsHtml(key) {
+  const g = A2HS_GUIDE[key] || A2HS_GUIDE.desktop;
+  return g.steps.map(s => `<li>${s}</li>`).join('');
+}
+function selectA2hsBrowser(key) {
+  _a2hsSelected = key;
+  const stepsEl = document.getElementById('a2hsSteps');
+  if (stepsEl) stepsEl.innerHTML = _a2hsStepsHtml(key);
+  document.querySelectorAll('#a2hsChips .obd-chip').forEach(c => {
+    c.classList.toggle('sel', c.getAttribute('data-a2hs') === key);
+  });
+}
 function renderPwaInstallCard(intakeDone) {
   if (!shouldShowInstallCard(intakeDone)) return '';
   // ONE unified card for all mobile devices. We deliberately avoid mentioning
@@ -6738,6 +6777,7 @@ function renderPwaInstallCard(intakeDone) {
   const stopButton = snoozeCount >= 2
     ? `<button class="btn ghost" onclick="stopPwaReminders()" style="font-size: 12px; padding: 7px 14px; color: var(--text-mute);">Stop reminding me</button>`
     : '';
+  const detected = _a2hsSelected || _detectA2hsBrowser();
   return `
     <div id="pwaInstallCard" style="padding: 16px 18px; background: linear-gradient(135deg, rgba(0, 229, 160, 0.06), rgba(80, 130, 255, 0.04)); border: 1px solid rgba(0, 229, 160, 0.25); border-radius: 14px; margin-bottom: 16px; position: relative;">
       <button onclick="snoozePwaInstall()" aria-label="Dismiss" style="position: absolute; top: 10px; right: 10px; background: transparent; border: 0; color: var(--text-mute); font-size: 18px; cursor: pointer; padding: 4px 8px; line-height: 1;">×</button>
@@ -6745,13 +6785,15 @@ function renderPwaInstallCard(intakeDone) {
         <span style="font-size: 18px;">📱</span>
         <div style="font-size: 14px; font-weight: 700; color: var(--text); letter-spacing: -0.01em;">Add Stryxs to your home screen</div>
       </div>
-      <div style="font-size: 12px; color: var(--text-dim); line-height: 1.55; margin-bottom: 12px;">
+      <div style="font-size: 12px; color: var(--text-dim); line-height: 1.55; margin-bottom: 10px;">
         Stryxs runs great as an app, quick access from your home screen, no browser bar, works offline.
       </div>
-      <ol style="font-size: 12px; color: var(--text-dim); line-height: 1.7; margin: 0 0 14px 18px; padding: 0;">
-        <li>Open your browser's <strong style="color: var(--text);">Share</strong> or menu button (the icon usually has an arrow or three dots)</li>
-        <li>Tap <strong style="color: var(--text);">Add to Home Screen</strong> or <strong style="color: var(--text);">Install app</strong></li>
-        <li>Confirm, Stryxs will appear on your home screen as an icon</li>
+      <div style="font-size: 11px; color: var(--text-mute); margin-bottom: 7px;">Pick your browser:</div>
+      <div id="a2hsChips" class="obd-chips" style="justify-content: flex-start; margin-bottom: 12px;">
+        ${Object.keys(A2HS_GUIDE).map(k => `<button class="obd-chip${k === detected ? ' sel' : ''}" data-a2hs="${k}" onclick="selectA2hsBrowser('${k}')" style="font-size:12px;padding:6px 11px;">${A2HS_GUIDE[k].label}</button>`).join('')}
+      </div>
+      <ol id="a2hsSteps" style="font-size: 12px; color: var(--text-dim); line-height: 1.7; margin: 0 0 14px 18px; padding: 0;">
+        ${_a2hsStepsHtml(detected)}
       </ol>
       <div style="display: flex; gap: 8px; flex-wrap: wrap;">
         ${installButton}
@@ -8139,8 +8181,8 @@ async function startSpotlightTour() {
   if (typeof isInTrial === 'function' && isInTrial()) {
     steps.push({
       target: '#trialBannerCard',
-      title: "You're on a 7-day Pro trial",
-      desc: 'Full Pro access for a week. After day 7 you keep your data on Free tier, upgrade anytime.',
+      title: "You're on a 14-day Pro trial",
+      desc: 'Full Pro access for 2 weeks. After day 14 you keep your data on the Free tier, upgrade anytime.',
       nextLabel: 'Got it',
       noOverlay: true,
       allowScroll: true,
@@ -16833,11 +16875,19 @@ const OBD_RACEEXP = { beginner: 'first_time', intermediate: '1_to_2', advanced: 
 const OBD_VOL = { 'Just starting (0–2h)': 2, 'A few hours (3–4h)': 4, '5–8 hours': 7, '8+ hours': 10 };
 
 let _obdA = {};
+// Back-navigation history for the conversational intake. Each entry snapshots the
+// chat HTML + answers + progress at the moment a question was presented, so the
+// user can step back and change an answer (e.g. a mis-tapped sport).
+let _obdNav = [];
+let _obdProgStep = 0;
 function _obdInjectStyles() {
   if (document.getElementById('obdStyles')) return;
   const s = document.createElement('style'); s.id = 'obdStyles';
   s.textContent = `
   .obd-wrap{max-width:520px;margin:0 auto;display:flex;flex-direction:column;min-height:62vh;padding:6px 2px 0;}
+  .obd-backrow{height:20px;margin:0 0 2px;}
+  .obd-back{background:none;border:none;color:var(--text-mute);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;padding:2px 4px;display:none;align-items:center;gap:4px;}
+  .obd-back:hover{color:var(--accent);}
   .obd-prog{display:flex;gap:6px;justify-content:center;margin:4px 0 16px;}
   .obd-prog i{height:4px;width:24px;border-radius:99px;background:var(--bg-3);transition:background .3s;}
   .obd-prog i.on{background:var(--accent);}
@@ -16859,7 +16909,7 @@ function _obdInjectStyles() {
   .obd-chip{background:var(--bg-3);border:1px solid var(--border-light);color:var(--text);font-size:14px;font-weight:600;border-radius:999px;padding:10px 15px;cursor:pointer;font-family:inherit;transition:all .14s;}
   .obd-chip:hover{border-color:var(--accent);color:var(--accent);background:rgba(0,229,160,.08);}
   .obd-chip.sel{background:rgba(0,229,160,.16);border-color:var(--accent);color:var(--accent);}
-  .obd-chip.ghost{background:transparent;color:var(--text-dim);border-style:dashed;}
+  .obd-chip.ghost{background:rgba(255,255,255,.04);color:var(--text);border-style:solid;border-color:var(--border-light);}
   .obd-typerow{display:flex;gap:8px;}
   .obd-typerow input{flex:1;background:var(--bg-2);border:1px solid var(--border-light);color:var(--text);border-radius:12px;padding:12px 14px;font-size:14.5px;font-family:inherit;outline:none;}
   .obd-typerow input:focus{border-color:var(--accent);}
@@ -16870,15 +16920,42 @@ function _obdInjectStyles() {
 }
 function _obdScroll() { try { window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' }); } catch (_) {} try { const de = document.scrollingElement; if (de) de.scrollTop = de.scrollHeight; } catch (_) {} }
 function _obdSetProg(step) {
+  _obdProgStep = step;
   const p = document.getElementById('obdProg'); if (!p) return;
   p.innerHTML = ''; for (let i = 0; i < 6; i++) { const x = document.createElement('i'); if (i < step) x.className = 'on'; p.appendChild(x); }
+}
+// Records a back-point: the chat + answers + progress as they are right when a new
+// question is about to be presented (coach prompt shown, no answer given yet).
+function _obdRecord(fn) {
+  const chat = document.getElementById('obdChat');
+  _obdNav.push({ render: fn, chat: chat ? chat.innerHTML : '', A: JSON.parse(JSON.stringify(_obdA)), prog: _obdProgStep });
+  _obdRenderBack();
+}
+function _obdRenderBack() {
+  const b = document.getElementById('obdBack');
+  if (b) b.style.display = _obdNav.length > 1 ? 'inline-flex' : 'none';
+}
+// Steps back one question: drop the current step, restore the previous snapshot,
+// and re-render that question's options. Answers given after it are discarded so
+// the user genuinely re-answers from there.
+function _obdBack() {
+  if (_obdNav.length < 2) return;
+  _obdNav.pop();
+  const prev = _obdNav[_obdNav.length - 1];
+  _obdA = JSON.parse(JSON.stringify(prev.A));
+  const chat = document.getElementById('obdChat');
+  if (chat) chat.innerHTML = prev.chat;
+  _obdClearDock();
+  _obdSetProg(prev.prog);
+  _obdRenderBack();
+  try { if (typeof prev.render === 'function') prev.render(); } catch (_) {}
 }
 function _obdCoachSay(html, cb) {
   const chat = document.getElementById('obdChat'); if (!chat) return;
   const t = document.createElement('div'); t.className = 'obd-row coach';
   t.innerHTML = `<div class="obd-av">${OBD_SPARKLE}</div><div class="obd-bub"><div class="obd-typing"><span></span><span></span><span></span></div></div>`;
   chat.appendChild(t); _obdScroll();
-  setTimeout(() => { const b = t.querySelector('.obd-bub'); if (b) b.innerHTML = html; _obdScroll(); if (cb) cb(); }, 460);
+  setTimeout(() => { const b = t.querySelector('.obd-bub'); if (b) b.innerHTML = html; _obdScroll(); if (cb) { _obdRecord(cb); cb(); } }, 460);
 }
 function _obdUserSay(text) {
   const chat = document.getElementById('obdChat'); if (!chat) return;
@@ -16908,8 +16985,9 @@ function renderChatOnboarding(el, existingIntake) {
   document.documentElement.classList.remove('coach-html-lock');
   _obdInjectStyles();
   _obdA = {};
+  _obdNav = [];
   if (existingIntake && existingIntake.unit_preference) _obdA.unit_preference = existingIntake.unit_preference;
-  el.innerHTML = `<div class="obd-wrap"><div class="obd-prog" id="obdProg"></div><div class="obd-chat" id="obdChat"></div><div class="obd-dock" id="obdDock"></div><div class="obd-note">Setting you up · about a minute · scripted, no AI tokens spent until your plan builds</div></div>`;
+  el.innerHTML = `<div class="obd-wrap"><div class="obd-backrow"><button class="obd-back" id="obdBack" onclick="_obdBack()">← Back</button></div><div class="obd-prog" id="obdProg"></div><div class="obd-chat" id="obdChat"></div><div class="obd-dock" id="obdDock"></div><div class="obd-note">Setting you up · about a minute · scripted, no AI tokens spent until your plan builds</div></div>`;
   _obdSetProg(0);
   _obdCoachSay(`Hey 👋 I'm your coach. I'll get you set up in about a minute.<br><br>Are you starting fresh, or do you already follow a plan you'd like to bring in?`, _obdAskStart);
 }
@@ -18028,6 +18106,9 @@ async function completeIntake() {
     </div>
     <div class="loading" style="align-items: flex-start; gap: 14px;"><div class="spinner"></div><div style="font-size: 14px; color: var(--text);">Saving your profile…</div></div>
   `;
+  // Reset scroll so the build screen starts at the top, not wherever the intake
+  // was scrolled to (otherwise the header/warning sits hidden under the browser bar).
+  try { window.scrollTo(0, 0); el.scrollTop = 0; } catch (_) {}
 
   // Convert weight/height to metric for storage if needed
   const isImperial = intakeAnswers.unit_preference === 'imperial';
@@ -18355,6 +18436,10 @@ async function completeIntake() {
     trackEvent('plan_generated', { goal_event: payload.goal_event });
     toast('Plan ready!');
     renderCoach();
+    // Land the user at the START of Coach's welcome message, not scrolled to the
+    // bottom (renderCoach's anchorBottom would otherwise drop them mid-message).
+    // 650ms beats anchorBottom's last timer (500ms) so this wins.
+    setTimeout(() => { try { const c = document.getElementById('chatMessages'); if (c) c.scrollTop = 0; window.scrollTo(0, 0); } catch (_) {} }, 650);
     // If Coach flagged feasibility issues, show them now, non-blocking but
     // the athlete needs to see them before they look at the plan as gospel.
     if (feasibilityWarnings && feasibilityWarnings.length > 0) {
@@ -20532,6 +20617,49 @@ function closeConfirmModal() {
 // Build a "starter week", covers today through next Sunday, BEFORE the periodized plan starts on Monday
 // Used to avoid the awkwardness of the periodized plan starting mid-week or 2 days in the past
 // Returns either: LTHR test schedule (if missingLthr), or light easy starter days (if LTHR known)
+// Picks the single sport to use for client-side starter sessions, honoring the
+// athlete's actual choice (race event OR the general-fitness sport pick) instead
+// of defaulting to bike. Mirrors the backend's sport routing.
+function _starterSport(intake) {
+  const ge = (intake?.goal_event || '').toLowerCase();
+  if (ge && ge !== 'general') {
+    if (ge.includes('marathon') || ge === '5k' || ge === '10k' || ge === 'half_marathon' || ge.includes('run') || ge.includes('mile')) return 'run';
+    if (ge.includes('cycl') || ge.includes('gran') || ge.includes('century') || ge.includes('ftp') || ge.includes('bike')) return 'bike';
+    if (ge.includes('swim') || ge.includes('css')) return 'swim';
+    // Triathlon goals are handled by the Friel assessment branch; default run.
+    return 'run';
+  }
+  // General fitness: use their first picked sport.
+  const fh = Array.isArray(intake?.fh_primary_sports) ? intake.fh_primary_sports : [];
+  const first = fh.find(s => s && s !== 'mixed');
+  const map = { run: 'run', bike: 'bike', swim: 'swim', gym: 'strength', strength: 'strength' };
+  return map[first] || 'run';
+}
+// An easy intro session for any sport, written in the same ### Warm-up / Main set /
+// Cool-down format as the rest of the plan so every card (incl. the starter week)
+// has the prep section.
+function _starterEasySession(sport, dateStr) {
+  const verb = { run: 'jog', bike: 'ride', swim: 'swim', strength: 'move' }[sport] || 'session';
+  const base = {
+    scheduled_date: dateStr,
+    sport,
+    workout_type: 'easy',
+    duration_minutes: sport === 'strength' ? 30 : 35,
+    distance_km: null,
+    intensity_target: sport === 'strength' ? 'Light, RPE 4-5/10' : 'Easy, RPE 3-4/10, can hold a conversation',
+  };
+  if (sport === 'strength') {
+    base.description = `### Warm-up\n2-3 min easy cardio, then squats x10, glute bridges x10, scapular push-ups x8 to wake everything up.\n\n### Main set\nA light full-body circuit, 2-3 easy rounds (bodyweight squats, push-ups, rows, a plank). Nothing heavy, this is just an intro before your real plan starts Monday.\n\n### Cool-down\nA few minutes of easy stretching for the muscles you used.`;
+    return base;
+  }
+  const moves = {
+    run: 'leg swings x10/side and ankle circles, then start easy and let the first 5-10 min be your warm-up',
+    bike: 'spin easy in a low gear and build your cadence over the first 5-10 min',
+    swim: '100m easy plus a few stroke drills to feel the water',
+  }[sport] || 'start easy and let the first 5-10 min be your warm-up';
+  base.description = `### Warm-up\n${moves} (relaxed, you can hold a conversation).\n\n### Main set\nAbout 25-30 min of easy ${verb}ing at a conversational pace (RPE 3-4). A light intro to keep moving before your real plan starts Monday.\n\n### Cool-down\nLast few minutes very easy, then some light stretching if you like.`;
+  return base;
+}
 function buildStarterWeek(today, missingLthr, isFrielPersona, intake) {
   const startDayOfWeek = today.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
   // If today is Monday, no starter week needed, the actual plan starts today
@@ -20632,48 +20760,39 @@ function buildStarterWeek(today, missingLthr, isFrielPersona, intake) {
       starterDays.push(workout);
     });
   } else {
-    // LTHR ALREADY KNOWN: Light starter days through Sunday
+    // LTHR ALREADY KNOWN (or non-Friel sport): light starter days through Sunday,
+    // honoring the athlete's chosen sport and chosen training days. Today is always
+    // an easy "welcome / rest" day; the rest of the bridge only schedules a light
+    // session on days the user actually picked, rest on the others.
+    const sport = _starterSport(intake);
+    const DOW = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
+    const avail = Array.isArray(intake?.available_days) && intake.available_days.length
+      ? new Set(intake.available_days.map(d => DOW[(d || '').toLowerCase()]).filter(n => n != null))
+      : null;
+    const restDay = (dateStr) => ({
+      scheduled_date: dateStr, sport: 'rest', workout_type: 'rest',
+      duration_minutes: 0, distance_km: 0,
+      description: 'Rest day, your real plan starts Monday.', intensity_target: 'Rest',
+    });
     for (let i = 0; i < daysUntilMonday; i++) {
       const d = new Date(today);
       d.setDate(today.getDate() + i);
       const dateStr = toLocalYMD(d);
       const dow = d.getDay();
-      // Mon=1...Sun=0. Make weekend slightly more substantial, weekdays lighter
-      const isWeekend = dow === 0 || dow === 6;
       let workout;
       if (i === 0) {
-        // Today
+        // Today: ease in, get familiar with the app.
         workout = {
-          scheduled_date: dateStr,
-          sport: 'rest',
-          workout_type: 'rest',
-          duration_minutes: 0,
-          distance_km: 0,
+          scheduled_date: dateStr, sport: 'rest', workout_type: 'rest',
+          duration_minutes: 0, distance_km: 0,
           description: 'Welcome day, get familiar with the app and your plan. Your real plan starts Monday.',
           intensity_target: 'Rest',
         };
-      } else if (isWeekend) {
-        workout = {
-          sport: intake?.goal_event?.includes('marathon') || intake?.goal_event === '5k' || intake?.goal_event === '10k' || intake?.goal_event === 'half_marathon' ? 'run' : 'bike',
-          scheduled_date: dateStr,
-          workout_type: 'easy',
-          duration_minutes: 45,
-          distance_km: null,
-          description: 'Easy aerobic session, conversational pace. Light start before the real plan begins Monday.',
-          intensity_target: 'Easy, RPE 3-4/10',
-        };
       } else {
-        workout = {
-          scheduled_date: dateStr,
-          sport: i % 2 === 0 ? 'rest' : 'run',
-          workout_type: i % 2 === 0 ? 'rest' : 'easy',
-          duration_minutes: i % 2 === 0 ? 0 : 30,
-          distance_km: 0,
-          description: i % 2 === 0
-            ? 'Rest day, your real plan starts Monday.'
-            : 'Easy aerobic run, conversational pace. Light intro before the real plan starts Monday.',
-          intensity_target: i % 2 === 0 ? 'Rest' : 'Easy, RPE 3-4/10',
-        };
+        // Schedule a light session ONLY on a chosen training day. If the user didn't
+        // specify days, fall back to a gentle every-other-day pattern.
+        const isTrainDay = avail ? avail.has(dow) : (i % 2 !== 0);
+        workout = isTrainDay ? _starterEasySession(sport, dateStr) : restDay(dateStr);
       }
       starterDays.push(workout);
     }
