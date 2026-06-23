@@ -20184,11 +20184,19 @@ async function sendChatMsg() {
     // Coach may emit a structured "log this workout" block when it reads a
     // workout photo that didn't sync. Strip it from the visible text and offer
     // a one-tap "Add this workout" button (the user confirms before it's saved).
-    let displayReply = reply;
+    // The agentic coach appends [[stryxs:plan_changed]] when it edited the plan
+    // via a write tool. Strip it (never display or save it) and flag a refresh.
+    let planChanged = false;
+    let reply2 = reply;
+    if (reply2.includes('[[stryxs:plan_changed]]')) {
+      planChanged = true;
+      reply2 = reply2.replace(/\[\[stryxs:plan_changed\]\]/g, '').trim();
+    }
+    let displayReply = reply2;
     let logWorkoutJson = null;
-    const logMatch = reply.match(/```stryxs:log_workout\s*([\s\S]*?)```/);
+    const logMatch = reply2.match(/```stryxs:log_workout\s*([\s\S]*?)```/);
     if (logMatch) {
-      displayReply = reply.replace(logMatch[0], '').trim();
+      displayReply = reply2.replace(logMatch[0], '').trim();
       try { logWorkoutJson = JSON.parse(logMatch[1].trim()); } catch (_) { logWorkoutJson = null; }
     }
 
@@ -20212,10 +20220,17 @@ async function sendChatMsg() {
 
     // (Read-from-the-start scroll happens inside _revealCoachMsg.)
 
-    // Save coach msg
+    // Save coach msg (the sentinel-free version)
     await sb.from('coach_messages').insert({
-      user_id: state.user.id, role: 'coach', content: reply, context_type: 'general_chat',
+      user_id: state.user.id, role: 'coach', content: reply2, context_type: 'general_chat',
     });
+
+    // If the coach edited the plan via a write tool, refresh so the change shows.
+    if (planChanged) {
+      try { toast('Plan updated ✓'); } catch (_) {}
+      try { if (typeof loadWorkouts === 'function') await loadWorkouts(); } catch (_) {}
+      try { if (document.getElementById('page-plan')?.classList.contains('active') && typeof renderPlan === 'function') renderPlan(); } catch (_) {}
+    }
 
     // ═══ CHAT-BASED PROFILE CORRECTION ═══
     // If the user is correcting something about their imported plan ("Wednesday is bike not run"),
