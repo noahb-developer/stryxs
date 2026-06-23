@@ -18415,7 +18415,10 @@ async function completeIntake() {
         totalWeeks: totalWeeksForIntro,
         starterWeek: needsStarterWeek ? {
           plan_starts_date: planStartStr,
-          missing_lthr: missingLthr,
+          // Only tell the intro message about LTHR tests when the starter week
+          // ACTUALLY contains them (Friel/tri assessment mode). Otherwise a runner
+          // would be told about a bike LTHR test that isn't in their plan.
+          missing_lthr: missingLthr && isFrielPersona,
           starter_days_count: starterDays?.length || 0,
         } : null,
       }, { timeoutMs: 30000 });
