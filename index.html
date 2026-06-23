@@ -19718,7 +19718,11 @@ function formatMarkdown(text) {
     if (hm) { flushList(); flushPara(); html += `<div class="md-h">${inline(hm[2])}</div>`; }
     else if (bul) { flushPara(); if (listType !== 'ul') { flushList(); listType = 'ul'; } listItems.push(`<li>${inline(bul[1])}</li>`); }
     else if (num) { flushPara(); if (listType !== 'ol') { flushList(); listType = 'ol'; } listItems.push(`<li>${inline(num[1])}</li>`); }
-    else { flushList(); para.push(inline(line)); }
+    // Each non-empty prose line becomes its OWN spaced paragraph. Models often
+    // separate paragraphs with a single newline (not a blank line); the old
+    // behavior joined those with <br> into one cramped block ("wall of text").
+    // Per-line <p> gives clean separation regardless of how the model spaced it.
+    else { flushList(); flushPara(); html += `<p>${inline(line)}</p>`; }
   }
   flushList(); flushPara();
   return html;
