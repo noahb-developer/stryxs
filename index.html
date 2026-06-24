@@ -11735,21 +11735,23 @@ const STRYXS_TILE_PROVIDERS = {
     subdomains: 'abcd',
     maxZoom: 19,
   },
-  color: {
-    // Classic OpenStreetMap — much more saturated than Carto Voyager,
-    // easy to read roads/parks/water at a glance.
-    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    subdomains: 'abc',
-    maxZoom: 19,
+  light: {
+    // CARTO Positron — clean, minimal light basemap (Strava-style). Its muted
+    // greyscale palette makes the green route pop instead of blending into the
+    // saturated greens/blues of a full-colour street map, while roads, water
+    // and labels stay perfectly readable for orientation.
+    url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    subdomains: 'abcd',
+    maxZoom: 20,
   },
 };
 function getStryxsMapStyle() {
-  try { return localStorage.getItem('stryxs_map_style') || 'dark'; }
+  try { const v = localStorage.getItem('stryxs_map_style'); return v === 'color' ? 'light' : (v || 'dark'); }
   catch (_) { return 'dark'; }
 }
 function setStryxsMapStyle(style) {
-  if (style !== 'dark' && style !== 'color') return;
+  if (style !== 'dark' && style !== 'light') return;
   try { localStorage.setItem('stryxs_map_style', style); } catch (_) {}
   // Live-swap tiles on every mounted map. We attached the leaflet map + tile
   // layer onto the div as expando props so we can reach them without a
@@ -11763,12 +11765,28 @@ function setStryxsMapStyle(style) {
       const cfg = STRYXS_TILE_PROVIDERS[style];
       const newTile = L.tileLayer(cfg.url, cfg).addTo(map);
       el._stryxsTileLayer = newTile;
+      // Keep the route readable on whichever basemap is now showing: a darker
+      // casing pops the green line on the light map, and is invisible on dark.
+      _stryxsRestyleRoute(el, style);
     } catch (err) { console.warn('[Stryxs map] tile swap failed', err); }
     const btn = el.querySelector('.stryxs-map-style-btn');
-    if (btn) btn.textContent = style === 'dark' ? '🌙 Dark' : '🗺 Color';
+    if (btn) btn.textContent = style === 'dark' ? '🌙 Dark' : '☀️ Light';
   });
 }
 window.setStryxsMapStyle = setStryxsMapStyle;
+
+// Tune the route's dark "casing" halo to the active basemap so the green line
+// always reads clearly: a soft dark halo on the light map (where a bare green
+// line blended into parks/fields), and none on the dark map (the line already
+// stands out there, so the halo just muddied it).
+function _stryxsRestyleRoute(el, style) {
+  const casing = el && el._stryxsCasing;
+  if (!casing) return;
+  try {
+    if (style === 'light') casing.setStyle({ color: '#0a0e1a', opacity: 0.32, weight: 7 });
+    else casing.setStyle({ opacity: 0 });
+  } catch (_) {}
+}
 
 // Mounts a Leaflet map into the placeholder div if Leaflet is loaded and
 // the div is in the DOM. Idempotent: safe to call multiple times.
@@ -11797,18 +11815,22 @@ function mountStryxsMap(mapId) {
     el._stryxsLeafletMap = map;
     el._stryxsTileLayer = tile;
     el.dataset.stryxsMapMounted = '1';
-    // Draw the polyline route
+    // Drop the "Leaflet" prefix from the attribution so only the required OSM +
+    // CARTO credit shows — keeps the bottom corner uncluttered.
+    try { if (map.attributionControl) map.attributionControl.setPrefix(''); } catch (_) {}
+    // Draw the route as a casing + line: a darker halo underneath makes the green
+    // line pop on the light basemap (where a thin green line used to blend), and
+    // the brand-green route on top. _stryxsRestyleRoute tunes the halo per theme.
     const latlngs = coords.map(c => [c[0], c[1]]);
-    const route = L.polyline(latlngs, {
-      color: '#00e5a0',
-      weight: 3,
-      opacity: 0.95,
-      lineJoin: 'round',
-    }).addTo(map);
+    const casing = L.polyline(latlngs, { color: '#0a0e1a', weight: 7, opacity: 0.3, lineJoin: 'round', lineCap: 'round' }).addTo(map);
+    const route = L.polyline(latlngs, { color: '#00e5a0', weight: 4, opacity: 1, lineJoin: 'round', lineCap: 'round' }).addTo(map);
+    el._stryxsRoute = route;
+    el._stryxsCasing = casing;
+    _stryxsRestyleRoute(el, style);
     // Start (green dot) + end (white-with-green-border)
-    L.circleMarker(latlngs[0], { radius: 6, color: '#00e5a0', weight: 2, fillColor: '#00e5a0', fillOpacity: 1 }).addTo(map).bindTooltip('Start');
+    L.circleMarker(latlngs[0], { radius: 6, color: '#ffffff', weight: 2, fillColor: '#00e5a0', fillOpacity: 1 }).addTo(map).bindTooltip('Start');
     L.circleMarker(latlngs[latlngs.length - 1], { radius: 6, color: '#00e5a0', weight: 2, fillColor: '#ffffff', fillOpacity: 1 }).addTo(map).bindTooltip('End');
-    map.fitBounds(route.getBounds(), { padding: [12, 12] });
+    map.fitBounds(route.getBounds(), { padding: [14, 14] });
     // Floating dark/color toggle button (top-right corner of the map div).
     // Sits above Leaflet zoom controls; uses stopPropagation so map drag
     // doesn't fire when the user clicks it.
@@ -11816,12 +11838,12 @@ function mountStryxsMap(mapId) {
     btn.className = 'stryxs-map-style-btn';
     btn.type = 'button';
     btn.style.cssText = 'position: absolute; top: 10px; right: 10px; z-index: 1000; background: rgba(20, 24, 38, 0.85); color: #fff; border: 1px solid rgba(255,255,255,0.18); padding: 5px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); letter-spacing: 0.3px;';
-    btn.textContent = style === 'dark' ? '🌙 Dark' : '🗺 Color';
+    btn.textContent = style === 'dark' ? '🌙 Dark' : '☀️ Light';
     btn.title = 'Toggle map style';
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       e.preventDefault();
-      setStryxsMapStyle(getStryxsMapStyle() === 'dark' ? 'color' : 'dark');
+      setStryxsMapStyle(getStryxsMapStyle() === 'dark' ? 'light' : 'dark');
     });
     // Block Leaflet from hijacking pointer/wheel events on the button
     if (L.DomEvent) {
@@ -12648,32 +12670,58 @@ function renderSwimLapsTable(laps, poolLength) {
   `;
 }
 
-// Per-lap pace chart for swims. Pool swims are DISCRETE intervals of varying
-// distance (e.g. 200/400/200/100) with rests between, so a smoothed line is
-// misleading (it invents a continuous curve from a few points and spaces
-// unequal laps equally). We use one bar per WORK lap instead, each labelled
-// with its distance and pace. Bar height: lower pacePer100m = faster = taller.
-// Pure CSS flex bars (no stretched-SVG distortion); native title tooltips.
-function renderSwimPaceChart(laps) {
+// Pace-over-time chart for swims. Pool swims have no GPS velocity stream, so the
+// only pace data is per-lap (e.g. 11 laps). Plotting those few points directly
+// gave a sparse, over-smoothed blob on a short "L1..L11" axis. Instead we expand
+// the laps into a DENSE series sampled on the real TIME axis: each lap's pace is
+// anchored at its centre-time and linearly interpolated between laps, so the
+// curve is spaced by actual elapsed seconds and reads as precisely as the
+// HR-over-time chart it sits next to (and shares the same x-axis with).
+function renderSwimPaceChart(laps, a) {
   if (!Array.isArray(laps)) return '';
-  const valid = laps.filter(l => !l.isRest && l.distanceM > 0 && typeof l.pacePer100m === 'number' && l.pacePer100m > 0);
-  if (valid.length < 4) return ''; // a line needs a few points; short sets show the laps table instead
-  const paces = valid.map(l => l.pacePer100m);
+  // Walk every lap in order to build a real time axis; anchor work laps at their
+  // centre time with their pace. Rests still consume time (so spacing is honest)
+  // but contribute no pace point.
+  let tCursor = 0;
+  const anchors = []; // { t: centre-time sec, pace: sec/100m }
+  for (const l of laps) {
+    const dur = (typeof l.elapsedSec === 'number' && l.elapsedSec > 0) ? l.elapsedSec : 0;
+    if (!l.isRest && l.distanceM > 0 && typeof l.pacePer100m === 'number' && l.pacePer100m > 0) {
+      anchors.push({ t: tCursor + dur / 2, pace: l.pacePer100m });
+    }
+    tCursor += dur;
+  }
+  if (anchors.length < 4) return ''; // too few laps for a line; the laps table covers it
+  const totalSec = tCursor > 0 ? tCursor : (a ? _stryxsWorkoutSeconds(a) : 0);
+  if (totalSec <= 0) return '';
+  // Dense, evenly-time-spaced samples (~200 pts) interpolated between lap centres.
+  const SAMPLES = 200;
+  const series = [];
+  let ai = 0;
+  for (let s = 0; s < SAMPLES; s++) {
+    const t = (s / (SAMPLES - 1)) * totalSec;
+    while (ai < anchors.length - 1 && anchors[ai + 1].t < t) ai++;
+    let pace;
+    if (t <= anchors[0].t) pace = anchors[0].pace;
+    else if (t >= anchors[anchors.length - 1].t) pace = anchors[anchors.length - 1].pace;
+    else {
+      const lo = anchors[ai], hi = anchors[ai + 1];
+      pace = lo.pace + (hi.pace - lo.pace) * ((t - lo.t) / (hi.t - lo.t));
+    }
+    series.push(pace);
+  }
   const fmtPace = sec => { let m = Math.floor(sec / 60); let s = Math.round(sec % 60); if (s >= 60) { m += 1; s -= 60; } return `${m}:${String(s).padStart(2, '0')}`; }; // carry so 359.6 → 6:00, not 5:60
-  // X labels at start / middle / end (lap number), like the over-time charts — no
-  // per-point text, so nothing crowds/overlaps on a phone.
-  const n = valid.length, midI = Math.floor((n - 1) / 2);
-  const xLabels = valid.map((l, i) => (i === 0 || i === n - 1 || i === midI) ? `L${l.lap}` : '');
   if (typeof renderStryxsLineChart !== 'function') return '';
+  const xLabels = _stryxsTimeAxisLabels(totalSec, 5);
   // invertA so a FASTER (lower) pace plots HIGHER; pace formatter keeps it m:ss /100m.
   const chart = renderStryxsLineChart({
-    title: 'Pace per lap',
-    seriesA: paces,
+    title: 'Pace over time',
+    seriesA: series,
     labelA: 'Pace', unitA: '/100m', colorA: '#00e5a0',
     invertA: true,
     formatterA: sec => `${fmtPace(sec)} /100m`,
     tickFormatterA: sec => fmtPace(sec),
-    xAxisLabels: xLabels, xAxisTitle: 'Lap',
+    xAxisLabels: xLabels, xAxisTitle: 'Time',
   });
   return chart ? `<div style="margin-top:14px;">${chart}</div>` : '';
 }
@@ -13277,7 +13325,7 @@ function renderSummaryWorkout(a) {
         ${a.sport === 'bike' ? renderPowerStats(a) : ''}
         ${renderSplitsTable(a.splits, a.sport)}
         ${a.sport === 'swim' ? renderSwimLapsTable(a.swim_laps, a.pool_length) : ''}
-        ${a.sport === 'swim' ? renderSwimPaceChart(a.swim_laps) : ''}
+        ${a.sport === 'swim' ? renderSwimPaceChart(a.swim_laps, a) : ''}
         <!-- Over-time stream charts (HR / pace / speed / power / cadence / elevation).
              Each renders only if its series has data, so swims show HR (and pace if
              open-water), runs/bikes show the full set, and stream-less Strava summary
@@ -13285,7 +13333,7 @@ function renderSummaryWorkout(a) {
              above covers split-by-split, so no duplicate per-split chart here. -->
         ${(() => { const xt = _stryxsTimeAxisLabels(_stryxsWorkoutSeconds(a), 5); return `
         ${renderTimeSeriesChart(a.hrSeries, 'Heart Rate over time', 'bpm', '#ef4444', xt, 'Time')}
-        ${a.sport === 'bike' ? renderTimeSeriesChart(a.speedSeries, 'Speed over time', 'km/h', '#00e5a0', xt, 'Time') : renderTimeSeriesChart(a.paceSeries, 'Pace over time', 'min/km', '#00e5a0', xt, 'Time', true)}
+        ${a.sport === 'bike' ? renderTimeSeriesChart(a.speedSeries, 'Speed over time', 'km/h', '#00e5a0', xt, 'Time') : a.sport === 'swim' ? '' : renderTimeSeriesChart(a.paceSeries, 'Pace over time', 'min/km', '#00e5a0', xt, 'Time', true)}
         ${renderTimeSeriesChart(a.powerSeries, 'Power over time', 'w', '#fbbf24', xt, 'Time')}
         ${renderTimeSeriesChart(_cadDispSeries(a), 'Cadence over time', a.sport === 'bike' ? 'rpm' : 'spm', '#5082ff', xt, 'Time')}
         ${renderTimeSeriesChart(a.elevationSeries, 'Elevation profile', 'm', '#a78bfa', xt, 'Time')}
