@@ -11281,6 +11281,9 @@ function buildWorkoutFromStream(parsed) {
   if (elevationSeries) w.elevationSeries = elevationSeries;
   if (sport === 'bike') { const sp = _dsSpeedKmh(); if (sp) w.speedSeries = sp; }
   else if (sport === 'run') { const sp = _dsSpeedKmh(); if (sp) w.paceSeries = sp.map(k => k > 0 ? Math.round((60 / k) * 100) / 100 : 0); }
+  // Swim: dense pace in sec/100m from the distance stream (sec/100m = 360 / km/h),
+  // so uploaded swims get the same precise pace curve as Strava-synced ones.
+  else if (sport === 'swim') { const sp = _dsSpeedKmh(); if (sp) w.swimPaceSeries = sp.map(k => k > 0 ? Math.round(360 / k) : 0); }
 
   if (!avgHr) w._no_hr_data = true;
   return w;
@@ -12672,17 +12675,37 @@ function renderSwimLapsTable(laps, poolLength) {
   `;
 }
 
-// Pace-over-time chart for swims. Pool swims have no GPS velocity stream, so the
-// only pace data is per-lap (e.g. 11 laps). Plotting those few points directly
-// gave a sparse, over-smoothed blob on a short "L1..L11" axis. Instead we expand
-// the laps into a DENSE series sampled on the real TIME axis: each lap's pace is
-// anchored at its centre-time and linearly interpolated between laps, so the
-// curve is spaced by actual elapsed seconds and reads as precisely as the
-// HR-over-time chart it sits next to (and shares the same x-axis with).
+// Pace-over-time chart for swims. The PRECISE version uses a.swimPaceSeries — a
+// dense (~80-point) series the Strava/file enrichment derives from the per-second
+// distance stream, exactly like Strava's own swim pace graph. When that isn't
+// present (older syncs, or no distance stream), we fall back to a per-lap step
+// curve: each lap's pace held across its real time window so the line still moves
+// at every lap. Both share the HR chart's TIME x-axis.
 function renderSwimPaceChart(laps, a) {
+  const fmtPace = sec => { let m = Math.floor(sec / 60); let s = Math.round(sec % 60); if (s >= 60) { m += 1; s -= 60; } return `${m}:${String(s).padStart(2, '0')}`; }; // carry so 359.6 → 6:00, not 5:60
+  if (typeof renderStryxsLineChart !== 'function') return '';
+  const buildChart = (series, totalSec) => {
+    const xLabels = totalSec > 0 ? _stryxsTimeAxisLabels(totalSec, 5) : ['start', 'middle', 'end'];
+    // invertA so a FASTER (lower) pace plots HIGHER; pace formatter keeps it m:ss /100m.
+    const chart = renderStryxsLineChart({
+      title: 'Pace over time',
+      seriesA: series,
+      labelA: 'Pace', unitA: '/100m', colorA: '#00e5a0',
+      invertA: true,
+      formatterA: sec => `${fmtPace(sec)} /100m`,
+      tickFormatterA: sec => fmtPace(sec),
+      xAxisLabels: xLabels, xAxisTitle: 'Time',
+    });
+    return chart ? `<div style="margin-top:14px;">${chart}</div>` : '';
+  };
+
+  // 1) Precise path: dense per-second-derived series (Strava-quality).
+  if (a && Array.isArray(a.swimPaceSeries) && a.swimPaceSeries.filter(v => typeof v === 'number' && v > 0).length >= 6) {
+    return buildChart(a.swimPaceSeries, a ? _stryxsWorkoutSeconds(a) : 0);
+  }
+
+  // 2) Fallback: per-lap step curve from the pool laps.
   if (!Array.isArray(laps)) return '';
-  // Map each WORK lap to its real time window [s, e]; rests consume time but hold
-  // the previous lap's pace so the line stays continuous and steps at lap edges.
   let tCursor = 0;
   const segs = []; // { s, e, pace }
   for (const l of laps) {
@@ -12695,11 +12718,6 @@ function renderSwimPaceChart(laps, a) {
   if (segs.length < 4) return ''; // too few laps for a line; the laps table covers it
   const totalSec = tCursor > 0 ? tCursor : (a ? _stryxsWorkoutSeconds(a) : 0);
   if (totalSec <= 0) return '';
-  // Dense samples — each takes the pace of the lap ACTIVE at that time (holding the
-  // previous lap through any rest). This plots every lap as its own level, so the
-  // line moves at every lap instead of averaging the whole set into one ramp. The
-  // chart's spline rounds the steps into a precise, lively curve. (Pool swims have
-  // no per-second velocity stream, so per-lap is the finest pace data that exists.)
   const SAMPLES = Math.min(360, Math.max(120, Math.round(totalSec)));
   const series = [];
   let si = 0;
@@ -12708,20 +12726,7 @@ function renderSwimPaceChart(laps, a) {
     while (si < segs.length - 1 && t >= segs[si].e) si++;
     series.push(segs[si].pace);
   }
-  const fmtPace = sec => { let m = Math.floor(sec / 60); let s = Math.round(sec % 60); if (s >= 60) { m += 1; s -= 60; } return `${m}:${String(s).padStart(2, '0')}`; }; // carry so 359.6 → 6:00, not 5:60
-  if (typeof renderStryxsLineChart !== 'function') return '';
-  const xLabels = _stryxsTimeAxisLabels(totalSec, 5);
-  // invertA so a FASTER (lower) pace plots HIGHER; pace formatter keeps it m:ss /100m.
-  const chart = renderStryxsLineChart({
-    title: 'Pace over time',
-    seriesA: series,
-    labelA: 'Pace', unitA: '/100m', colorA: '#00e5a0',
-    invertA: true,
-    formatterA: sec => `${fmtPace(sec)} /100m`,
-    tickFormatterA: sec => fmtPace(sec),
-    xAxisLabels: xLabels, xAxisTitle: 'Time',
-  });
-  return chart ? `<div style="margin-top:14px;">${chart}</div>` : '';
+  return buildChart(series, totalSec);
 }
 
 // Power stats for cyclists. Avg + max are free; normalized power is Pro.
