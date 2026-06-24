@@ -4120,7 +4120,7 @@ body.coach-chat-active .chat-msg.user .msg-bubble strong { color: var(--text); }
 .lv2-step p { color: var(--lv2-text-dim); font-size: 14px; line-height: 1.55; }
 .lv2-step-graphic {
   margin-top: 22px;
-  height: 110px;
+  height: 148px;
   background: rgba(0, 0, 0, 0.25);
   border: 1px solid rgba(255, 255, 255, 0.04);
   border-radius: 12px;
@@ -4156,94 +4156,383 @@ body.coach-chat-active .chat-msg.user .msg-bubble strong { color: var(--text); }
   to { stroke-dashoffset: 0; }
 }
 
-/* Card ii, calendar cells light up in sequence */
-.lv2-cal {
+/* ───── Card ii, a real week: day numbers + workout chips, light up in sequence ───── */
+.lv2-week {
   display: grid !important;
   grid-template-columns: repeat(7, 1fr);
-  gap: 4px;
-  padding: 14px;
+  gap: 5px;
+  padding: 12px 12px;
   align-items: stretch;
 }
-.lv2-cal-cell {
-  background: rgba(255, 255, 255, 0.04);
-  border-radius: 4px;
-  height: 18px;
-  transition: transform 0.3s ease;
+.lv2-wk-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
 }
-.lv2-cal-cell.lv2-workout { background: rgba(0, 255, 163, 0.3); }
-.lv2-cal-cell.lv2-workout.lv2-hard { background: var(--lv2-acc); }
-.lv2-cal-cell.lv2-rest { background: rgba(255, 255, 255, 0.03); }
+.lv2-wk-day {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--lv2-text-mute);
+  letter-spacing: 0.2px;
+}
+.lv2-wk-chip {
+  width: 100%;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  border-radius: 6px;
+  padding: 0 1px;
+  min-height: 60px;
+  transform-origin: center bottom;
+  /* Start collapsed; the pulse opens them in sequence */
+  opacity: 0;
+  transform: scaleY(0.2);
+}
+.lv2-wk-chip.lv2-easy  { background: rgba(0, 255, 163, 0.16); color: #8ff0cd; border: 1px solid rgba(0, 255, 163, 0.18); }
+.lv2-wk-chip.lv2-tempo { background: rgba(0, 255, 163, 0.30); color: #c9ffe9; border: 1px solid rgba(0, 255, 163, 0.30); }
+.lv2-wk-chip.lv2-hard  { background: var(--lv2-acc); color: #04261b; border: 1px solid var(--lv2-acc); }
+.lv2-wk-chip.lv2-long  { background: rgba(0, 255, 163, 0.22); color: #b6f7df; border: 1px solid rgba(0, 255, 163, 0.24); }
+.lv2-wk-chip.lv2-rest  { background: rgba(255, 255, 255, 0.04); color: var(--lv2-text-mute); border: 1px solid rgba(255, 255, 255, 0.05); }
+.lv2-wk-day { opacity: 0; transform: translateY(-4px); }
 
-.lv2-step:hover .lv2-cal .lv2-cal-cell,
-.lv2-step.lv2-anim-active .lv2-cal .lv2-cal-cell {
-  animation: lv2-cellPulse 1.4s ease forwards;
+.lv2-step:hover .lv2-week .lv2-wk-day,
+.lv2-step.lv2-anim-active .lv2-week .lv2-wk-day { animation: lv2-dayIn 0.5s ease forwards; }
+.lv2-step:hover .lv2-week .lv2-wk-chip,
+.lv2-step.lv2-anim-active .lv2-week .lv2-wk-chip { animation: lv2-chipIn 0.7s cubic-bezier(0.2, 0.9, 0.2, 1.1) forwards; }
+.lv2-step:hover .lv2-week .lv2-wk-col:nth-child(1) *, .lv2-step.lv2-anim-active .lv2-week .lv2-wk-col:nth-child(1) * { animation-delay: 0s; }
+.lv2-step:hover .lv2-week .lv2-wk-col:nth-child(2) *, .lv2-step.lv2-anim-active .lv2-week .lv2-wk-col:nth-child(2) * { animation-delay: 0.07s; }
+.lv2-step:hover .lv2-week .lv2-wk-col:nth-child(3) *, .lv2-step.lv2-anim-active .lv2-week .lv2-wk-col:nth-child(3) * { animation-delay: 0.14s; }
+.lv2-step:hover .lv2-week .lv2-wk-col:nth-child(4) *, .lv2-step.lv2-anim-active .lv2-week .lv2-wk-col:nth-child(4) * { animation-delay: 0.21s; }
+.lv2-step:hover .lv2-week .lv2-wk-col:nth-child(5) *, .lv2-step.lv2-anim-active .lv2-week .lv2-wk-col:nth-child(5) * { animation-delay: 0.28s; }
+.lv2-step:hover .lv2-week .lv2-wk-col:nth-child(6) *, .lv2-step.lv2-anim-active .lv2-week .lv2-wk-col:nth-child(6) * { animation-delay: 0.35s; }
+.lv2-step:hover .lv2-week .lv2-wk-col:nth-child(7) *, .lv2-step.lv2-anim-active .lv2-week .lv2-wk-col:nth-child(7) * { animation-delay: 0.42s; }
+@keyframes lv2-dayIn {
+  to { opacity: 1; transform: translateY(0); }
 }
-.lv2-step:hover .lv2-cal .lv2-cal-cell:nth-child(1),
-.lv2-step.lv2-anim-active .lv2-cal .lv2-cal-cell:nth-child(1) { animation-delay: 0s; }
-.lv2-step:hover .lv2-cal .lv2-cal-cell:nth-child(2),
-.lv2-step.lv2-anim-active .lv2-cal .lv2-cal-cell:nth-child(2) { animation-delay: 0.08s; }
-.lv2-step:hover .lv2-cal .lv2-cal-cell:nth-child(3),
-.lv2-step.lv2-anim-active .lv2-cal .lv2-cal-cell:nth-child(3) { animation-delay: 0.16s; }
-.lv2-step:hover .lv2-cal .lv2-cal-cell:nth-child(4),
-.lv2-step.lv2-anim-active .lv2-cal .lv2-cal-cell:nth-child(4) { animation-delay: 0.24s; }
-.lv2-step:hover .lv2-cal .lv2-cal-cell:nth-child(5),
-.lv2-step.lv2-anim-active .lv2-cal .lv2-cal-cell:nth-child(5) { animation-delay: 0.32s; }
-.lv2-step:hover .lv2-cal .lv2-cal-cell:nth-child(6),
-.lv2-step.lv2-anim-active .lv2-cal .lv2-cal-cell:nth-child(6) { animation-delay: 0.40s; }
-.lv2-step:hover .lv2-cal .lv2-cal-cell:nth-child(7),
-.lv2-step.lv2-anim-active .lv2-cal .lv2-cal-cell:nth-child(7) { animation-delay: 0.48s; }
-@keyframes lv2-cellPulse {
-  0%   { transform: scaleY(1); filter: brightness(1); }
-  40%  { transform: scaleY(1.4); filter: brightness(1.6); }
-  100% { transform: scaleY(1); filter: brightness(1); }
+@keyframes lv2-chipIn {
+  0%   { opacity: 0; transform: scaleY(0.2); }
+  70%  { opacity: 1; transform: scaleY(1.06); }
+  100% { opacity: 1; transform: scaleY(1); }
 }
 
-/* Card i, chat bubbles type in, alternating */
-.lv2-chat {
+/* ───── Card i, an athlete profile that fills in field by field ───── */
+.lv2-profile {
   flex-direction: column !important;
   align-items: stretch !important;
-  padding: 14px;
-  gap: 6px;
-  justify-content: flex-end !important;
+  justify-content: flex-start !important;
+  padding: 13px 14px;
+  gap: 9px;
 }
-.lv2-chat-line {
-  height: 8px;
-  border-radius: 4px;
+.lv2-pf-head { display: flex; align-items: center; gap: 9px; }
+.lv2-pf-avatar {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--lv2-acc), var(--lv2-acc-deep));
+  color: #04261b;
+  font-size: 13px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  opacity: 0; transform: scale(0.5);
+}
+.lv2-pf-name { font-size: 12px; font-weight: 600; color: var(--lv2-text); line-height: 1.2; opacity: 0; }
+.lv2-pf-sub  { font-size: 10px; color: var(--lv2-text-mute); line-height: 1.3; opacity: 0; }
+.lv2-pf-rows { display: flex; flex-direction: column; gap: 6px; }
+.lv2-pf-row {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 10.5px;
+  opacity: 0; transform: translateX(-6px);
+}
+.lv2-pf-tick {
+  width: 13px; height: 13px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.18);
+  flex-shrink: 0;
+  position: relative;
+  transition: background 0.3s, border-color 0.3s;
+}
+.lv2-pf-label { color: var(--lv2-text-mute); width: 34px; flex-shrink: 0; }
+.lv2-pf-val  { color: var(--lv2-text-dim); font-weight: 600; }
+.lv2-pf-bar {
+  height: 4px; border-radius: 3px;
   background: rgba(255, 255, 255, 0.06);
-  width: 70%;
-  transform-origin: left center;
+  overflow: hidden;
+  margin-top: 1px;
 }
-.lv2-chat-line.lv2-user {
-  background: rgba(0, 255, 163, 0.3);
-  align-self: flex-end;
-  width: 50%;
-  transform-origin: right center;
-}
-.lv2-chat-line.lv2-bot {
-  background: rgba(255, 255, 255, 0.08);
-  width: 80%;
+.lv2-pf-bar > span {
+  display: block; height: 100%;
+  width: 0;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--lv2-acc-deep), var(--lv2-acc));
 }
 
-.lv2-step:hover .lv2-chat .lv2-chat-line,
-.lv2-step.lv2-anim-active .lv2-chat .lv2-chat-line {
-  animation: lv2-chatType 1.6s ease forwards;
+/* Avatar + name appear first */
+.lv2-step:hover .lv2-pf-avatar, .lv2-step.lv2-anim-active .lv2-pf-avatar { animation: lv2-pfPop 0.5s cubic-bezier(0.2, 0.9, 0.2, 1.2) forwards; }
+.lv2-step:hover .lv2-pf-name,   .lv2-step.lv2-anim-active .lv2-pf-name   { animation: lv2-fadeIn 0.4s ease 0.1s forwards; }
+.lv2-step:hover .lv2-pf-sub,    .lv2-step.lv2-anim-active .lv2-pf-sub    { animation: lv2-fadeIn 0.4s ease 0.2s forwards; }
+/* Rows check off one by one */
+.lv2-step:hover .lv2-pf-row, .lv2-step.lv2-anim-active .lv2-pf-row { animation: lv2-rowIn 0.45s ease forwards; }
+.lv2-step:hover .lv2-pf-row:nth-child(1), .lv2-step.lv2-anim-active .lv2-pf-row:nth-child(1) { animation-delay: 0.35s; }
+.lv2-step:hover .lv2-pf-row:nth-child(2), .lv2-step.lv2-anim-active .lv2-pf-row:nth-child(2) { animation-delay: 0.6s; }
+.lv2-step:hover .lv2-pf-row:nth-child(3), .lv2-step.lv2-anim-active .lv2-pf-row:nth-child(3) { animation-delay: 0.85s; }
+.lv2-step:hover .lv2-pf-row:nth-child(1) .lv2-pf-tick, .lv2-step.lv2-anim-active .lv2-pf-row:nth-child(1) .lv2-pf-tick { animation: lv2-tick 0.4s ease 0.55s forwards; }
+.lv2-step:hover .lv2-pf-row:nth-child(2) .lv2-pf-tick, .lv2-step.lv2-anim-active .lv2-pf-row:nth-child(2) .lv2-pf-tick { animation: lv2-tick 0.4s ease 0.8s forwards; }
+.lv2-step:hover .lv2-pf-row:nth-child(3) .lv2-pf-tick, .lv2-step.lv2-anim-active .lv2-pf-row:nth-child(3) .lv2-pf-tick { animation: lv2-tick 0.4s ease 1.05s forwards; }
+/* Progress bar fills as the fields complete */
+.lv2-step:hover .lv2-pf-bar > span, .lv2-step.lv2-anim-active .lv2-pf-bar > span { animation: lv2-fill 1.2s cubic-bezier(0.4, 0, 0.2, 1) 0.35s forwards; }
+
+@keyframes lv2-pfPop { to { opacity: 1; transform: scale(1); } }
+@keyframes lv2-fadeIn { to { opacity: 1; } }
+@keyframes lv2-rowIn { to { opacity: 1; transform: translateX(0); } }
+@keyframes lv2-tick {
+  to { background: var(--lv2-acc); border-color: var(--lv2-acc); box-shadow: 0 0 8px rgba(0, 255, 163, 0.5); }
 }
-.lv2-step:hover .lv2-chat .lv2-chat-line:nth-child(1),
-.lv2-step.lv2-anim-active .lv2-chat .lv2-chat-line:nth-child(1) { animation-delay: 0s; }
-.lv2-step:hover .lv2-chat .lv2-chat-line:nth-child(2),
-.lv2-step.lv2-anim-active .lv2-chat .lv2-chat-line:nth-child(2) { animation-delay: 0.35s; }
-.lv2-step:hover .lv2-chat .lv2-chat-line:nth-child(3),
-.lv2-step.lv2-anim-active .lv2-chat .lv2-chat-line:nth-child(3) { animation-delay: 0.7s; }
-.lv2-step:hover .lv2-chat .lv2-chat-line:nth-child(4),
-.lv2-step.lv2-anim-active .lv2-chat .lv2-chat-line:nth-child(4) { animation-delay: 1.05s; }
-@keyframes lv2-chatType {
-  0%   { transform: scaleX(0.05); opacity: 0.3; }
-  60%  { transform: scaleX(1.05); opacity: 1; }
-  100% { transform: scaleX(1); opacity: 1; }
+@keyframes lv2-fill { to { width: 100%; } }
+/* Green check mark inside the tick once it fills */
+.lv2-pf-tick::after {
+  content: '';
+  position: absolute;
+  left: 3.5px; top: 1px;
+  width: 3px; height: 6px;
+  border: solid #04261b;
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg) scale(0);
+  transition: transform 0.2s ease;
 }
+.lv2-step:hover .lv2-pf-row:nth-child(1) .lv2-pf-tick::after, .lv2-step.lv2-anim-active .lv2-pf-row:nth-child(1) .lv2-pf-tick::after { animation: lv2-checkPop 0.3s ease 0.75s forwards; }
+.lv2-step:hover .lv2-pf-row:nth-child(2) .lv2-pf-tick::after, .lv2-step.lv2-anim-active .lv2-pf-row:nth-child(2) .lv2-pf-tick::after { animation: lv2-checkPop 0.3s ease 1.0s forwards; }
+.lv2-step:hover .lv2-pf-row:nth-child(3) .lv2-pf-tick::after, .lv2-step.lv2-anim-active .lv2-pf-row:nth-child(3) .lv2-pf-tick::after { animation: lv2-checkPop 0.3s ease 1.25s forwards; }
+@keyframes lv2-checkPop { to { transform: rotate(45deg) scale(1); } }
 
 @media (max-width: 800px) {
   .lv2-steps { grid-template-columns: 1fr; }
+}
+
+/* ═════════════════════════════════════════════════════════════════
+   INSIDE THE APP — phone mockup with floating cards. Floats are
+   absolutely positioned around the phone on desktop, then hidden on
+   tablet/mobile where the phone alone carries the section. Everything
+   scales off the same dark theme + green accent as the rest of v2.
+   ═════════════════════════════════════════════════════════════════ */
+.lv2-showcase { overflow: hidden; }
+.lv2-stage {
+  position: relative;
+  max-width: 1100px;
+  margin: 50px auto 0;
+  min-height: 620px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Phone frame */
+.lv2-phone {
+  position: relative;
+  z-index: 3;
+  width: 300px;
+  height: 600px;
+  border-radius: 44px;
+  padding: 11px;
+  background: linear-gradient(160deg, #1c2436, #0a0f1a);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.6), 0 30px 70px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.05);
+  animation: lv2-bob 7s ease-in-out infinite;
+}
+.lv2-phone-island {
+  position: absolute;
+  top: 20px; left: 50%; transform: translateX(-50%);
+  width: 92px; height: 26px;
+  background: #05080f;
+  border-radius: 14px;
+  z-index: 5;
+}
+.lv2-phone-screen {
+  position: relative;
+  width: 100%; height: 100%;
+  border-radius: 34px;
+  background: var(--lv2-bg);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid rgba(255,255,255,0.04);
+}
+
+/* App top bar */
+.lv2-app-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 38px 18px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  flex-shrink: 0;
+}
+.lv2-app-word {
+  font-family: 'Instrument Serif', serif !important;
+  font-size: 20px; letter-spacing: 0.3px; color: var(--lv2-text);
+}
+.lv2-app-ico { color: var(--lv2-text-mute); font-size: 15px; }
+
+/* Chat body */
+.lv2-app-body {
+  flex: 1;
+  padding: 14px 13px 10px;
+  display: flex; flex-direction: column; gap: 11px;
+  overflow: hidden;
+}
+.lv2-app-day {
+  text-align: center;
+  font-size: 10px; color: var(--lv2-text-mute);
+  letter-spacing: 0.4px; text-transform: uppercase;
+  margin-bottom: 1px;
+}
+.lv2-msg { display: flex; gap: 7px; align-items: flex-end; }
+.lv2-msg-av {
+  width: 22px; height: 22px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--lv2-acc), var(--lv2-acc-deep));
+  color: #04261b; font-size: 11px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.lv2-msg-bub {
+  font-size: 11.5px; line-height: 1.45;
+  padding: 9px 11px; border-radius: 14px;
+  max-width: 80%;
+}
+.lv2-msg-coach .lv2-msg-bub {
+  background: var(--lv2-bg-3);
+  color: var(--lv2-text);
+  border: 1px solid rgba(255,255,255,0.05);
+  border-bottom-left-radius: 5px;
+}
+.lv2-msg-coach .lv2-msg-bub strong { color: var(--lv2-acc); font-weight: 600; }
+.lv2-msg-user { justify-content: flex-end; }
+.lv2-msg-user .lv2-msg-bub {
+  background: rgba(0, 255, 163, 0.14);
+  color: #d7ffef;
+  border: 1px solid rgba(0, 255, 163, 0.22);
+  border-bottom-right-radius: 5px;
+}
+
+/* In-chat workout card */
+.lv2-wcard {
+  background: var(--lv2-bg-2);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 14px;
+  padding: 11px 12px;
+  margin-left: 29px;
+}
+.lv2-wcard-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 9px; }
+.lv2-wcard-title { font-size: 12px; font-weight: 600; color: var(--lv2-text); }
+.lv2-wcard-tag {
+  font-size: 9px; font-weight: 600; letter-spacing: 0.3px;
+  color: var(--lv2-acc);
+  background: rgba(0, 255, 163, 0.12);
+  border: 1px solid rgba(0, 255, 163, 0.22);
+  padding: 2px 7px; border-radius: 20px;
+}
+.lv2-wcard-bars, .lv2-float-bars {
+  display: flex; align-items: flex-end; gap: 3px; height: 38px; margin-bottom: 9px;
+}
+.lv2-wcard-bars span, .lv2-float-bars span {
+  flex: 1; border-radius: 2px 2px 0 0;
+  background: rgba(255,255,255,0.12);
+}
+.lv2-wcard-bars span.lv2-bar-hi, .lv2-float-bars span.lv2-bar-hi { background: var(--lv2-acc); }
+.lv2-wcard-meta { display: flex; gap: 12px; }
+.lv2-wcard-meta span { font-size: 10px; color: var(--lv2-text-dim); }
+.lv2-wcard-meta span:last-child { margin-left: auto; color: var(--lv2-acc); font-weight: 600; }
+
+/* Bottom tab bar */
+.lv2-app-tabs {
+  display: flex; border-top: 1px solid rgba(255,255,255,0.06);
+  padding: 9px 8px 16px; flex-shrink: 0; background: var(--lv2-bg-2);
+}
+.lv2-tab {
+  flex: 1; text-align: center;
+  font-size: 9px; color: var(--lv2-text-mute);
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+}
+.lv2-tab span { font-size: 15px; filter: grayscale(1) opacity(0.6); }
+.lv2-tab-on { color: var(--lv2-acc); }
+.lv2-tab-on span { filter: none; }
+
+/* Floating cards */
+.lv2-float {
+  position: absolute;
+  z-index: 2;
+  background: linear-gradient(180deg, rgba(20, 28, 46, 0.85), rgba(13, 19, 32, 0.92));
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 16px;
+  padding: 14px;
+  box-shadow: 0 20px 45px rgba(0,0,0,0.4);
+}
+.lv2-float-head {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 11px; font-weight: 600; color: var(--lv2-text);
+  margin-bottom: 11px;
+}
+.lv2-float-icn { font-size: 13px; }
+.lv2-float-av {
+  width: 18px; height: 18px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--lv2-acc), var(--lv2-acc-deep));
+  color: #04261b; font-size: 9px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+}
+.lv2-float-sub { font-size: 10px; color: var(--lv2-text-mute); margin-top: 10px; }
+
+/* float: this week */
+.lv2-float-week { width: 188px; top: 60px; left: 0; }
+.lv2-float-week-row { display: flex; gap: 5px; }
+.lv2-fw-dot { flex: 1; height: 26px; border-radius: 5px; }
+.lv2-fw-dot.lv2-easy  { background: rgba(0, 255, 163, 0.16); }
+.lv2-fw-dot.lv2-tempo { background: rgba(0, 255, 163, 0.30); }
+.lv2-fw-dot.lv2-hard  { background: var(--lv2-acc); }
+.lv2-fw-dot.lv2-long  { background: rgba(0, 255, 163, 0.22); }
+.lv2-fw-dot.lv2-rest  { background: rgba(255, 255, 255, 0.05); }
+.lv2-fw-dot.lv2-on { box-shadow: 0 0 0 2px rgba(0,255,163,0.4); }
+
+/* float: workout review */
+.lv2-float-review { width: 210px; bottom: 40px; left: 18px; }
+.lv2-float-wtitle { font-size: 11.5px; font-weight: 600; color: var(--lv2-text); margin-bottom: 10px; }
+.lv2-float-via { font-size: 9px; color: var(--lv2-text-mute); font-weight: 400; margin-left: 4px; }
+.lv2-float-bars { height: 44px; }
+.lv2-float-stats { display: flex; gap: 14px; }
+.lv2-float-stats div {
+  font-size: 9px; color: var(--lv2-text-mute);
+  display: flex; flex-direction: column; gap: 1px;
+}
+.lv2-float-stats div span { font-size: 13px; font-weight: 700; color: var(--lv2-text); }
+
+/* float: coach insight */
+.lv2-float-insight { width: 210px; top: 70px; right: 0; }
+.lv2-float-itext { font-size: 11px; line-height: 1.5; color: var(--lv2-text-dim); }
+
+/* float: stat */
+.lv2-float-stat { width: 168px; bottom: 64px; right: 16px; }
+.lv2-float-stat-num { font-size: 30px; font-weight: 700; color: var(--lv2-acc); line-height: 1; }
+.lv2-float-stat-num span { font-size: 12px; font-weight: 600; color: var(--lv2-text-mute); margin-left: 4px; }
+.lv2-float-stat-lbl { font-size: 10px; color: var(--lv2-text-dim); margin: 7px 0 9px; }
+.lv2-float-stat-bar { height: 5px; border-radius: 3px; background: rgba(255,255,255,0.08); overflow: hidden; }
+.lv2-float-stat-bar > span { display: block; height: 100%; width: 78%; border-radius: 3px; background: linear-gradient(90deg, var(--lv2-acc-deep), var(--lv2-acc)); }
+
+/* Gentle staggered drift so the floats feel alive next to the phone */
+.lv2-float-week    { animation: lv2-bob 8s ease-in-out infinite 0.3s; }
+.lv2-float-review  { animation: lv2-bob 9s ease-in-out infinite 0.8s; }
+.lv2-float-insight { animation: lv2-bob 8.5s ease-in-out infinite 0.5s; }
+.lv2-float-stat    { animation: lv2-bob 9.5s ease-in-out infinite 1s; }
+@keyframes lv2-bob {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-10px); }
+}
+
+/* Responsive: tablet drops the side floats, mobile shrinks the phone */
+@media (max-width: 1040px) {
+  .lv2-stage { min-height: 0; }
+  .lv2-float-week, .lv2-float-review, .lv2-float-insight, .lv2-float-stat { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lv2-phone, .lv2-float { animation: none !important; }
 }
 
 /* MARQUEE */
@@ -4881,25 +5170,34 @@ body.on-auth .container {
           <div class="lv2-step-num">i</div>
           <h3>Tell Coach about you</h3>
           <p>Quick intake. Your goal, your time, your level. Coach uses this to design a plan calibrated to your life, not a generic template.</p>
-          <div class="lv2-step-graphic lv2-chat">
-            <div class="lv2-chat-line lv2-bot"></div>
-            <div class="lv2-chat-line lv2-user"></div>
-            <div class="lv2-chat-line lv2-bot"></div>
-            <div class="lv2-chat-line lv2-user"></div>
+          <div class="lv2-step-graphic lv2-profile">
+            <div class="lv2-pf-head">
+              <div class="lv2-pf-avatar">A</div>
+              <div class="lv2-pf-id">
+                <div class="lv2-pf-name">Alex M.</div>
+                <div class="lv2-pf-sub">Intermediate runner</div>
+              </div>
+            </div>
+            <div class="lv2-pf-rows">
+              <div class="lv2-pf-row"><span class="lv2-pf-tick"></span><span class="lv2-pf-label">Goal</span><span class="lv2-pf-val">Sub-40 10K</span></div>
+              <div class="lv2-pf-row"><span class="lv2-pf-tick"></span><span class="lv2-pf-label">Time</span><span class="lv2-pf-val">5 h / week</span></div>
+              <div class="lv2-pf-row"><span class="lv2-pf-tick"></span><span class="lv2-pf-label">LTHR</span><span class="lv2-pf-val">171 bpm</span></div>
+            </div>
+            <div class="lv2-pf-bar"><span></span></div>
           </div>
         </div>
         <div class="lv2-step lv2-reveal">
           <div class="lv2-step-num">ii</div>
           <h3>Get your plan</h3>
           <p>Periodized training built on proven endurance frameworks, your LTHR zones, and 80/20 distribution. Loaded into a calendar you can actually use.</p>
-          <div class="lv2-step-graphic lv2-cal">
-            <div class="lv2-cal-cell lv2-workout"></div>
-            <div class="lv2-cal-cell lv2-rest"></div>
-            <div class="lv2-cal-cell lv2-workout lv2-hard"></div>
-            <div class="lv2-cal-cell lv2-workout"></div>
-            <div class="lv2-cal-cell lv2-rest"></div>
-            <div class="lv2-cal-cell lv2-workout"></div>
-            <div class="lv2-cal-cell lv2-workout lv2-hard"></div>
+          <div class="lv2-step-graphic lv2-week">
+            <div class="lv2-wk-col"><span class="lv2-wk-day">12</span><span class="lv2-wk-chip lv2-easy">Easy</span></div>
+            <div class="lv2-wk-col"><span class="lv2-wk-day">13</span><span class="lv2-wk-chip lv2-hard">VO2</span></div>
+            <div class="lv2-wk-col"><span class="lv2-wk-day">14</span><span class="lv2-wk-chip lv2-rest">Rest</span></div>
+            <div class="lv2-wk-col"><span class="lv2-wk-day">15</span><span class="lv2-wk-chip lv2-tempo">Tempo</span></div>
+            <div class="lv2-wk-col"><span class="lv2-wk-day">16</span><span class="lv2-wk-chip lv2-easy">Easy</span></div>
+            <div class="lv2-wk-col"><span class="lv2-wk-day">17</span><span class="lv2-wk-chip lv2-rest">Rest</span></div>
+            <div class="lv2-wk-col"><span class="lv2-wk-day">18</span><span class="lv2-wk-chip lv2-long">Long</span></div>
           </div>
         </div>
         <div class="lv2-step lv2-reveal">
@@ -4911,6 +5209,105 @@ body.on-auth .container {
               <path d="M0, 80 L20, 75 L40, 72 L50, 40 L60, 72 L80, 68 L100, 30 L120, 68 L140, 65 L160, 20 L180, 65 L200, 60"/>
             </svg>
           </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- INSIDE THE APP -->
+    <section class="lv2-section lv2-showcase">
+      <div class="lv2-section-tag">Inside the app</div>
+      <h2 class="lv2-section-h">Your coach, <em>in your pocket</em></h2>
+      <p class="lv2-section-sub">Chat, calendar, and every workout in one clean place. Built to feel like it belongs on your phone.</p>
+
+      <div class="lv2-stage">
+        <!-- floating card: this week -->
+        <div class="lv2-float lv2-float-week lv2-reveal">
+          <div class="lv2-float-head"><span class="lv2-float-icn">&#x1f4c5;</span> This week</div>
+          <div class="lv2-float-week-row">
+            <span class="lv2-fw-dot lv2-easy"></span>
+            <span class="lv2-fw-dot lv2-hard"></span>
+            <span class="lv2-fw-dot lv2-rest"></span>
+            <span class="lv2-fw-dot lv2-tempo lv2-on"></span>
+            <span class="lv2-fw-dot lv2-easy"></span>
+            <span class="lv2-fw-dot lv2-rest"></span>
+            <span class="lv2-fw-dot lv2-long"></span>
+          </div>
+          <div class="lv2-float-sub">4 sessions &middot; 32 km &middot; 5h 10m</div>
+        </div>
+
+        <!-- floating card: workout review with bars -->
+        <div class="lv2-float lv2-float-review lv2-reveal">
+          <div class="lv2-float-wtitle">Tempo 8 km <span class="lv2-float-via">via Strava</span></div>
+          <div class="lv2-float-bars">
+            <span style="height:38%"></span><span style="height:55%"></span><span style="height:72%"></span>
+            <span style="height:70%"></span><span style="height:88%" class="lv2-bar-hi"></span><span style="height:84%" class="lv2-bar-hi"></span>
+            <span style="height:60%"></span><span style="height:46%"></span><span style="height:34%"></span>
+          </div>
+          <div class="lv2-float-stats">
+            <div><span>41m</span>Time</div><div><span>162</span>Avg HR</div><div><span>74</span>Load</div>
+          </div>
+        </div>
+
+        <!-- the phone -->
+        <div class="lv2-phone lv2-reveal">
+          <div class="lv2-phone-island"></div>
+          <div class="lv2-phone-screen">
+            <div class="lv2-app-bar">
+              <span class="lv2-app-ico">&#9776;</span>
+              <span class="lv2-app-word">Stryxs</span>
+              <span class="lv2-app-ico">&#9881;</span>
+            </div>
+            <div class="lv2-app-body">
+              <div class="lv2-app-day">Today &middot; Thu 15</div>
+
+              <div class="lv2-msg lv2-msg-coach">
+                <div class="lv2-msg-av">C</div>
+                <div class="lv2-msg-bub">Today is <strong>5 &times; 1 km @ threshold</strong>. Your LTHR is dialed in, so hold 168&ndash;172 bpm on the reps and float the recoveries.</div>
+              </div>
+
+              <div class="lv2-wcard">
+                <div class="lv2-wcard-top">
+                  <span class="lv2-wcard-title">Threshold 5&times;1km</span>
+                  <span class="lv2-wcard-tag">Threshold</span>
+                </div>
+                <div class="lv2-wcard-bars">
+                  <span style="height:30%"></span><span style="height:85%" class="lv2-bar-hi"></span><span style="height:30%"></span>
+                  <span style="height:88%" class="lv2-bar-hi"></span><span style="height:30%"></span><span style="height:90%" class="lv2-bar-hi"></span>
+                  <span style="height:30%"></span><span style="height:92%" class="lv2-bar-hi"></span><span style="height:30%"></span><span style="height:94%" class="lv2-bar-hi"></span>
+                </div>
+                <div class="lv2-wcard-meta">
+                  <span>52 min</span><span>8.4 km</span><span>Z4</span>
+                </div>
+              </div>
+
+              <div class="lv2-msg lv2-msg-user">
+                <div class="lv2-msg-bub">Felt strong, legs a touch heavy though.</div>
+              </div>
+
+              <div class="lv2-msg lv2-msg-coach">
+                <div class="lv2-msg-av">C</div>
+                <div class="lv2-msg-bub">Noted. 4.1% cardiac drift is excellent. Tomorrow stays easy so you absorb it.</div>
+              </div>
+            </div>
+            <div class="lv2-app-tabs">
+              <div class="lv2-tab"><span>&#128197;</span>Calendar</div>
+              <div class="lv2-tab lv2-tab-on"><span>&#128172;</span>Chat</div>
+              <div class="lv2-tab"><span>&#128100;</span>Profile</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- floating card: coach insight -->
+        <div class="lv2-float lv2-float-insight lv2-reveal">
+          <div class="lv2-float-head"><span class="lv2-float-av">C</span> Coach insight</div>
+          <div class="lv2-float-itext">Your aerobic base is trending up. Cardiac drift is down 1.8% over the last three weeks at the same pace.</div>
+        </div>
+
+        <!-- floating card: stat -->
+        <div class="lv2-float lv2-float-stat lv2-reveal">
+          <div class="lv2-float-stat-num">171<span>bpm</span></div>
+          <div class="lv2-float-stat-lbl">Lactate threshold HR</div>
+          <div class="lv2-float-stat-bar"><span></span></div>
         </div>
       </div>
     </section>
