@@ -11736,11 +11736,11 @@ const STRYXS_TILE_PROVIDERS = {
     maxZoom: 19,
   },
   light: {
-    // CARTO Positron — clean, minimal light basemap (Strava-style). Its muted
-    // greyscale palette makes the green route pop instead of blending into the
-    // saturated greens/blues of a full-colour street map, while roads, water
-    // and labels stay perfectly readable for orientation.
-    url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+    // CARTO Voyager — the colourful but MUTED Strava/Komoot-style basemap: soft
+    // green parks, blue water, readable roads and labels. Far richer than the
+    // near-white Positron, while staying muted enough that the green route (with
+    // its dark casing) still reads clearly against it.
+    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
     subdomains: 'abcd',
     maxZoom: 20,
@@ -11783,7 +11783,9 @@ function _stryxsRestyleRoute(el, style) {
   const casing = el && el._stryxsCasing;
   if (!casing) return;
   try {
-    if (style === 'light') casing.setStyle({ color: '#0a0e1a', opacity: 0.32, weight: 7 });
+    // Stronger, slightly wider dark halo on the colourful light map so the green
+    // route never blends into green parks/fields; none on the dark map.
+    if (style === 'light') casing.setStyle({ color: '#0a0e1a', opacity: 0.55, weight: 8 });
     else casing.setStyle({ opacity: 0 });
   } catch (_) {}
 }
@@ -12679,36 +12681,32 @@ function renderSwimLapsTable(laps, poolLength) {
 // HR-over-time chart it sits next to (and shares the same x-axis with).
 function renderSwimPaceChart(laps, a) {
   if (!Array.isArray(laps)) return '';
-  // Walk every lap in order to build a real time axis; anchor work laps at their
-  // centre time with their pace. Rests still consume time (so spacing is honest)
-  // but contribute no pace point.
+  // Map each WORK lap to its real time window [s, e]; rests consume time but hold
+  // the previous lap's pace so the line stays continuous and steps at lap edges.
   let tCursor = 0;
-  const anchors = []; // { t: centre-time sec, pace: sec/100m }
+  const segs = []; // { s, e, pace }
   for (const l of laps) {
     const dur = (typeof l.elapsedSec === 'number' && l.elapsedSec > 0) ? l.elapsedSec : 0;
     if (!l.isRest && l.distanceM > 0 && typeof l.pacePer100m === 'number' && l.pacePer100m > 0) {
-      anchors.push({ t: tCursor + dur / 2, pace: l.pacePer100m });
+      segs.push({ s: tCursor, e: tCursor + dur, pace: l.pacePer100m });
     }
     tCursor += dur;
   }
-  if (anchors.length < 4) return ''; // too few laps for a line; the laps table covers it
+  if (segs.length < 4) return ''; // too few laps for a line; the laps table covers it
   const totalSec = tCursor > 0 ? tCursor : (a ? _stryxsWorkoutSeconds(a) : 0);
   if (totalSec <= 0) return '';
-  // Dense, evenly-time-spaced samples (~200 pts) interpolated between lap centres.
-  const SAMPLES = 200;
+  // Dense samples — each takes the pace of the lap ACTIVE at that time (holding the
+  // previous lap through any rest). This plots every lap as its own level, so the
+  // line moves at every lap instead of averaging the whole set into one ramp. The
+  // chart's spline rounds the steps into a precise, lively curve. (Pool swims have
+  // no per-second velocity stream, so per-lap is the finest pace data that exists.)
+  const SAMPLES = Math.min(360, Math.max(120, Math.round(totalSec)));
   const series = [];
-  let ai = 0;
-  for (let s = 0; s < SAMPLES; s++) {
-    const t = (s / (SAMPLES - 1)) * totalSec;
-    while (ai < anchors.length - 1 && anchors[ai + 1].t < t) ai++;
-    let pace;
-    if (t <= anchors[0].t) pace = anchors[0].pace;
-    else if (t >= anchors[anchors.length - 1].t) pace = anchors[anchors.length - 1].pace;
-    else {
-      const lo = anchors[ai], hi = anchors[ai + 1];
-      pace = lo.pace + (hi.pace - lo.pace) * ((t - lo.t) / (hi.t - lo.t));
-    }
-    series.push(pace);
+  let si = 0;
+  for (let k = 0; k < SAMPLES; k++) {
+    const t = (k / (SAMPLES - 1)) * totalSec;
+    while (si < segs.length - 1 && t >= segs[si].e) si++;
+    series.push(segs[si].pace);
   }
   const fmtPace = sec => { let m = Math.floor(sec / 60); let s = Math.round(sec % 60); if (s >= 60) { m += 1; s -= 60; } return `${m}:${String(s).padStart(2, '0')}`; }; // carry so 359.6 → 6:00, not 5:60
   if (typeof renderStryxsLineChart !== 'function') return '';
