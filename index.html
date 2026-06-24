@@ -4354,8 +4354,8 @@ body.coach-chat-active .chat-msg.user .msg-bubble strong { color: var(--text); }
 .lv2-stage.lv2-in .lv2-phone { opacity: 1; transform: translateY(0); }
 .lv2-phone-island {
   position: absolute;
-  top: 13px; left: 50%; transform: translateX(-50%);
-  width: 84px; height: 27px;
+  top: 15px; left: 50%; transform: translateX(-50%);
+  width: 98px; height: 23px;
   background: #000;
   border-radius: 16px;
   z-index: 8;
@@ -4391,29 +4391,32 @@ body.coach-chat-active .chat-msg.user .msg-bubble strong { color: var(--text); }
   flex-shrink: 0;
   height: 42px;
   display: flex; align-items: center; justify-content: space-between;
-  padding: 0 21px 0 25px;
+  padding: 0 15px 0 25px;
   color: #ecf0f8;
 }
 .lv2-sb-time { font-size: 11px; font-weight: 600; letter-spacing: 0.4px; }
-.lv2-sb-right { display: flex; align-items: center; gap: 5px; }
-.lv2-sb-right svg { display: block; transform: scale(0.92); }
+.lv2-sb-right { display: flex; align-items: center; gap: 4px; }
+.lv2-sb-right svg { display: block; transform: scale(0.78); transform-origin: right center; }
 
-/* App top bar — back chevron + Stryxs wordmark, exactly like the real app nav */
+/* App top bar — back chevron pinned left, Stryxs wordmark centred (real app nav) */
 .lv2-app-bar {
-  display: flex; align-items: center; gap: 3px;
+  display: grid; align-items: center;
+  grid-template-columns: 1fr auto 1fr;
   padding: 3px 12px 10px;
   border-bottom: 1px solid #1e2844;
   flex-shrink: 0;
 }
 .lv2-app-back {
-  width: 32px; height: 32px; flex-shrink: 0;
+  grid-column: 1; justify-self: start;
+  width: 30px; height: 30px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
   color: #ecf0f8; border-radius: 9px;
 }
-.lv2-app-back svg { width: 21px; height: 21px; }
+.lv2-app-back svg { width: 20px; height: 20px; }
 .lv2-app-word {
+  grid-column: 2; justify-self: center;
   font-family: 'Instrument Serif', serif !important;
-  font-weight: 400; font-size: 25px; line-height: 1; letter-spacing: -0.4px; color: #ecf0f8;
+  font-weight: 400; font-size: 22px; line-height: 1; letter-spacing: -0.4px; color: #ecf0f8;
 }
 .lv2-app-word em { font-style: italic; color: #00e5a0; font-family: 'Instrument Serif', serif !important; }
 
@@ -4555,9 +4558,12 @@ body.coach-chat-active .chat-msg.user .msg-bubble strong { color: var(--text); }
   flex: 1; min-width: 0;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
   height: 44px; border-radius: 8px;
-  font-size: 7.5px; font-weight: 600; letter-spacing: 0.1px;
 }
 .lv2-fw-dot b { font-size: 9.5px; font-weight: 700; line-height: 1; }
+.lv2-fw-dot i {
+  font-style: normal; font-weight: 600; font-size: 7px; line-height: 1;
+  letter-spacing: -0.2px; white-space: nowrap;
+}
 .lv2-fw-dot.lv2-easy  { background: rgba(0, 229, 160, 0.14); color: #8ff0cd; }
 .lv2-fw-dot.lv2-tempo { background: rgba(0, 229, 160, 0.30); color: #c9ffe9; }
 .lv2-fw-dot.lv2-hard  { background: #00e5a0; color: #04261b; }
@@ -4592,11 +4598,15 @@ body.coach-chat-active .chat-msg.user .msg-bubble strong { color: var(--text); }
   .lv2-float { padding: 12px 13px; box-shadow: 0 16px 36px rgba(0,0,0,0.55); }
   .lv2-float-insight { display: none; }
   /* All three sit over the phone's corners and stay clear of the floating tab
-     bar at the bottom — no card hangs off the device. */
+     bar at the bottom — no card hangs off the device. The stat card MUST clear
+     its desktop `bottom` or it stretches between top+bottom. */
   .lv2-float-week   { width: 166px; top: 40px;    margin-left: -178px; }
-  .lv2-float-stat   { width: 150px; top: 252px;   margin-left: 34px; }
+  .lv2-float-stat   { width: 150px; top: 250px; bottom: auto; margin-left: 34px; }
   .lv2-float-review { width: 174px; bottom: 86px; margin-left: -184px; }
-  .lv2-fw-dot { height: 38px; }
+  /* Word labels don't fit the tiny boxes here — show day letters only (colour
+     still encodes the workout type). */
+  .lv2-fw-dot { height: 34px; }
+  .lv2-fw-dot i { display: none; }
   .lv2-float-bars { height: 38px; }
   .lv2-float-stat-num { font-size: 26px; }
 }
@@ -5293,13 +5303,13 @@ body.on-auth .container {
         <div class="lv2-float lv2-float-week lv2-from-left">
           <div class="lv2-float-head">This week</div>
           <div class="lv2-float-week-row">
-            <span class="lv2-fw-dot lv2-easy"><b>M</b>Easy</span>
-            <span class="lv2-fw-dot lv2-hard"><b>T</b>VO2</span>
-            <span class="lv2-fw-dot lv2-rest"><b>W</b>Rest</span>
-            <span class="lv2-fw-dot lv2-tempo lv2-on"><b>T</b>Tempo</span>
-            <span class="lv2-fw-dot lv2-easy"><b>F</b>Easy</span>
-            <span class="lv2-fw-dot lv2-rest"><b>S</b>Rest</span>
-            <span class="lv2-fw-dot lv2-long"><b>S</b>Long</span>
+            <span class="lv2-fw-dot lv2-easy"><b>M</b><i>Easy</i></span>
+            <span class="lv2-fw-dot lv2-hard"><b>T</b><i>VO2</i></span>
+            <span class="lv2-fw-dot lv2-rest"><b>W</b><i>Rest</i></span>
+            <span class="lv2-fw-dot lv2-tempo lv2-on"><b>T</b><i>Tempo</i></span>
+            <span class="lv2-fw-dot lv2-easy"><b>F</b><i>Easy</i></span>
+            <span class="lv2-fw-dot lv2-rest"><b>S</b><i>Rest</i></span>
+            <span class="lv2-fw-dot lv2-long"><b>S</b><i>Long</i></span>
           </div>
           <div class="lv2-float-sub">4 sessions &middot; 32 km &middot; 5h 10m</div>
         </div>
