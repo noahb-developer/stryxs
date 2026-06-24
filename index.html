@@ -12675,58 +12675,62 @@ function renderSwimLapsTable(laps, poolLength) {
   `;
 }
 
-// Pace-over-time chart for swims. The PRECISE version uses a.swimPaceSeries — a
-// dense (~80-point) series the Strava/file enrichment derives from the per-second
-// distance stream, exactly like Strava's own swim pace graph. When that isn't
-// present (older syncs, or no distance stream), we fall back to a per-lap step
-// curve: each lap's pace held across its real time window so the line still moves
-// at every lap. Both share the HR chart's TIME x-axis.
+// Pace-over-DISTANCE chart for swims (x-axis = distance, exactly like Strava's own
+// swim pace graph). The PRECISE version uses a.swimPaceSeries — a dense (~80-point)
+// series the Strava/file enrichment samples by equal distance bins from the
+// per-second distance stream. When that's absent (older syncs, no distance stream)
+// we fall back to a per-lap step curve, also laid out along distance.
 function renderSwimPaceChart(laps, a) {
   const fmtPace = sec => { let m = Math.floor(sec / 60); let s = Math.round(sec % 60); if (s >= 60) { m += 1; s -= 60; } return `${m}:${String(s).padStart(2, '0')}`; }; // carry so 359.6 → 6:00, not 5:60
   if (typeof renderStryxsLineChart !== 'function') return '';
-  const buildChart = (series, totalSec) => {
-    const xLabels = totalSec > 0 ? _stryxsTimeAxisLabels(totalSec, 5) : ['start', 'middle', 'end'];
+  // 5 evenly-spaced distance ticks from 0 to total (m, or km past 1500m).
+  const distLabels = totalM => {
+    if (!(totalM > 0)) return ['start', 'middle', 'end'];
+    const fmt = m => m >= 1500 ? `${+(m / 1000).toFixed(2)} km` : `${Math.round(m / 10) * 10} m`;
+    const out = []; for (let i = 0; i < 5; i++) out.push(fmt((i / 4) * totalM)); return out;
+  };
+  const buildChart = (series, totalM) => {
     // invertA so a FASTER (lower) pace plots HIGHER; pace formatter keeps it m:ss /100m.
     const chart = renderStryxsLineChart({
-      title: 'Pace over time',
+      title: 'Pace over distance',
       seriesA: series,
       labelA: 'Pace', unitA: '/100m', colorA: '#00e5a0',
       invertA: true,
       formatterA: sec => `${fmtPace(sec)} /100m`,
       tickFormatterA: sec => fmtPace(sec),
-      xAxisLabels: xLabels, xAxisTitle: 'Time',
+      xAxisLabels: distLabels(totalM), xAxisTitle: 'Distance',
     });
     return chart ? `<div style="margin-top:14px;">${chart}</div>` : '';
   };
+  const totalM = (a && typeof a.distance === 'number' && a.distance > 0) ? a.distance * 1000 : 0;
 
-  // 1) Precise path: dense per-second-derived series (Strava-quality).
+  // 1) Precise path: dense distance-binned series (Strava-quality).
   if (a && Array.isArray(a.swimPaceSeries) && a.swimPaceSeries.filter(v => typeof v === 'number' && v > 0).length >= 6) {
-    return buildChart(a.swimPaceSeries, a ? _stryxsWorkoutSeconds(a) : 0);
+    return buildChart(a.swimPaceSeries, totalM);
   }
 
-  // 2) Fallback: per-lap step curve from the pool laps.
+  // 2) Fallback: per-lap step curve, laid out along cumulative DISTANCE.
   if (!Array.isArray(laps)) return '';
-  let tCursor = 0;
-  const segs = []; // { s, e, pace }
+  let dCursor = 0;
+  const segs = []; // { s, e, pace } in metres
   for (const l of laps) {
-    const dur = (typeof l.elapsedSec === 'number' && l.elapsedSec > 0) ? l.elapsedSec : 0;
     if (!l.isRest && l.distanceM > 0 && typeof l.pacePer100m === 'number' && l.pacePer100m > 0) {
-      segs.push({ s: tCursor, e: tCursor + dur, pace: l.pacePer100m });
+      segs.push({ s: dCursor, e: dCursor + l.distanceM, pace: l.pacePer100m });
+      dCursor += l.distanceM;
     }
-    tCursor += dur;
   }
   if (segs.length < 4) return ''; // too few laps for a line; the laps table covers it
-  const totalSec = tCursor > 0 ? tCursor : (a ? _stryxsWorkoutSeconds(a) : 0);
-  if (totalSec <= 0) return '';
-  const SAMPLES = Math.min(360, Math.max(120, Math.round(totalSec)));
+  const totalDist = dCursor;
+  if (totalDist <= 0) return '';
+  const SAMPLES = 240;
   const series = [];
   let si = 0;
   for (let k = 0; k < SAMPLES; k++) {
-    const t = (k / (SAMPLES - 1)) * totalSec;
-    while (si < segs.length - 1 && t >= segs[si].e) si++;
+    const d = (k / (SAMPLES - 1)) * totalDist;
+    while (si < segs.length - 1 && d >= segs[si].e) si++;
     series.push(segs[si].pace);
   }
-  return buildChart(series, totalSec);
+  return buildChart(series, totalM > 0 ? totalM : totalDist);
 }
 
 // Power stats for cyclists. Avg + max are free; normalized power is Pro.
