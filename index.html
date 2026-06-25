@@ -680,6 +680,30 @@ body.has-tabbar #page-profile.active {
 .prof-best-chip { flex: 1; min-width: 88px; background: linear-gradient(135deg, rgba(0,229,160,0.07), transparent); border: 1px solid var(--accent-border); border-radius: 12px; padding: 10px 13px; }
 .prof-best-chip span { display: block; font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 3px; }
 .prof-best-chip b { font-size: 18px; font-weight: 800; letter-spacing: -0.3px; }
+.prof-best-chip.tap { cursor: pointer; transition: border-color 0.15s, background 0.15s; -webkit-tap-highlight-color: transparent; }
+.prof-best-chip.tap:active { border-color: var(--accent); background: linear-gradient(135deg, rgba(0,229,160,0.14), transparent); }
+/* "Best efforts" header row with the + Add button */
+.prof-best-headrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 4px 0 10px; }
+.prof-best-headrow .prof-best-head { margin: 0; }
+.bench-add-btn { font-size: 12px; font-weight: 700; color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent-border); border-radius: 999px; padding: 5px 13px; cursor: pointer; font-family: inherit; -webkit-tap-highlight-color: transparent; transition: background 0.15s; }
+.bench-add-btn:active { background: rgba(0,229,160,0.18); }
+.prof-best-empty { font-size: 12px; color: var(--text-mute); margin-bottom: 16px; }
+/* Add-benchmark sheet (reuses .prof-edit-sheet chrome) */
+.bench-tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+.bench-tab { flex: 1; padding: 9px 4px; font-size: 13px; font-weight: 700; color: var(--text-dim); background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; cursor: pointer; font-family: inherit; -webkit-tap-highlight-color: transparent; transition: all 0.15s; }
+.bench-tab.on { color: var(--accent); background: rgba(0,229,160,0.10); border-color: var(--accent-border); }
+.bench-hint { font-size: 11.5px; color: var(--text-mute); margin-bottom: 10px; }
+.bench-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(86px, 1fr)); gap: 7px; }
+.bench-dist { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 50px; padding: 7px 4px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 11px; cursor: pointer; font-family: inherit; -webkit-tap-highlight-color: transparent; transition: all 0.15s; }
+.bench-dist .bd-l { font-size: 12.5px; font-weight: 700; color: var(--text); }
+.bench-dist .bd-v { font-size: 11px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
+.bench-dist.has { border-color: var(--accent-border); background: linear-gradient(135deg, rgba(0,229,160,0.06), var(--bg-3)); }
+.bench-dist.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.bench-editor { margin-top: 14px; padding: 14px; background: var(--bg-3); border: 1px solid var(--accent-border); border-radius: 12px; }
+.bench-editor-h { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 10px; }
+.bench-unit { display: inline-flex; gap: 4px; margin-bottom: 10px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 9px; padding: 3px; }
+.bench-unit button { font-size: 12px; font-weight: 700; color: var(--text-dim); background: transparent; border: none; border-radius: 7px; padding: 6px 14px; cursor: pointer; font-family: inherit; -webkit-tap-highlight-color: transparent; }
+.bench-unit button.on { color: var(--accent); background: rgba(0,229,160,0.12); }
 /* Strava-style stat sections: section header + label/value rows */
 .prof-rowsec { margin-bottom: 18px; }
 .prof-rowsec-h { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.9px; color: var(--text-mute); margin-bottom: 2px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
@@ -27534,6 +27558,9 @@ async function renderProfile() {
   const workouts = wkRes.data || [];
   const intake = intakeRes.data || {};
   const p = state.profile || {};
+  // The coach/projections still read the 4 legacy run PB columns; surface them to
+  // the new benchmark UI so existing PBs show as chips and can be edited there.
+  window._benchLegacyRun = { '5k': intake.pb_5k || '', '10k': intake.pb_10k || '', 'half': intake.pb_half || '', 'marathon': intake.pb_marathon || '' };
 
   // ── lifetime totals + daily-activity streak ──
   let totalDist = 0, totalMin = 0;
@@ -27578,12 +27605,23 @@ async function renderProfile() {
   const sec = (title, rows) => `<div class="prof-rowsec"><div class="prof-rowsec-h">${title}</div>${rows}</div>`;
   const sportPane = (s) => {
     const S = stat[s]; const lab = sportMeta[s].label;
-    const best = s === 'run'
-      ? (runPBs.length ? `<div class="prof-best">${runPBs.map(([d, t]) => `<div class="prof-best-chip"><span>${d}</span><b>${escapeHtml(t)}</b></div>`).join('')}</div>` : '')
-      : s === 'bike'
-        ? (ftp ? `<div class="prof-best"><div class="prof-best-chip"><span>FTP</span><b>${ftp} W</b></div></div>` : '')
-        : (css ? `<div class="prof-best"><div class="prof-best-chip"><span>CSS</span><b>${escapeHtml(String(css))} /100m</b></div></div>` : '');
-    const bestBlock = best ? `<div class="prof-best-head">Best efforts</div>${best}` : '';
+    const _benchChip = (label, val, oc) => `<div class="prof-best-chip${oc ? ' tap' : ''}"${oc ? ` onclick="${oc}"` : ''}><span>${escapeHtml(label)}</span><b>${escapeHtml(val)}</b></div>`;
+    const _store = _pbAll()[s] || {};
+    const chips = [];
+    if (s === 'run') {
+      const legacy = window._benchLegacyRun || {};
+      for (const d of BENCHMARK_DISTANCES.run) {
+        const v = _store[d.k] ? _pbDisplay(_store[d.k]) : (legacy[d.k] || '');
+        if (v) chips.push(_benchChip(d.l, v, `openBenchmarkSheet('run','${d.k}')`));
+      }
+    } else if (s === 'bike') {
+      if (ftp) chips.push(_benchChip('FTP', ftp + ' W', `navigate('settings')`));
+      for (const d of BENCHMARK_DISTANCES.bike) if (_store[d.k]) chips.push(_benchChip(d.l, _pbDisplay(_store[d.k]), `openBenchmarkSheet('bike','${d.k}')`));
+    } else {
+      if (css) chips.push(_benchChip('CSS', String(css) + ' /100m', `navigate('settings')`));
+      for (const d of BENCHMARK_DISTANCES.swim) if (_store[d.k]) chips.push(_benchChip(d.l, _pbDisplay(_store[d.k]), `openBenchmarkSheet('swim','${d.k}')`));
+    }
+    const bestBlock = `<div class="prof-best-headrow"><span class="prof-best-head">Best efforts</span><button class="bench-add-btn" onclick="openBenchmarkSheet('${s}')">+ Add</button></div>${chips.length ? `<div class="prof-best">${chips.join('')}</div>` : `<div class="prof-best-empty">No ${lab.toLowerCase()} benchmarks yet. Tap <b>+ Add</b>.</div>`}`;
     if (S.n === 0) {
       return `<div class="prof-sport-pane" data-sport="${s}" style="${s === 'run' ? '' : 'display:none;'}"><div class="prof-empty">No ${lab.toLowerCase()} activities logged yet.</div>${bestBlock}</div>`;
     }
@@ -27667,24 +27705,6 @@ async function openProfileEditModal() {
         <div class="field"><label>Primary sport</label>${renderCustomSelect('pe_sport', p.primarySport || '', sportOpts.map(([v, l]) => ({ value: v, label: l })))}</div>
         <div class="field"><label>Description</label><textarea id="pe_bio" maxlength="280" placeholder="A short bio, your goals, your story" style="${taStyle}" oninput="{const c=document.getElementById('pe_bio_count');if(c)c.textContent=this.value.length+'/280';}">${escapeHtml(p.bio || '')}</textarea><div id="pe_bio_count" style="font-size:11px;color:var(--text-mute);text-align:right;margin-top:3px;">${(p.bio || '').length}/280</div></div>
 
-        <div class="prof-edit-divider">Benchmarks &middot; power your pace projections</div>
-        <div style="display:flex;gap:10px;">
-          <div class="field" style="flex:1;"><label>5K PB</label><input id="pe_pb5k" value="${escapeHtml(ik.pb_5k || '')}" placeholder="19:30" /></div>
-          <div class="field" style="flex:1;"><label>10K PB</label><input id="pe_pb10k" value="${escapeHtml(ik.pb_10k || '')}" placeholder="41:00" /></div>
-        </div>
-        <div style="display:flex;gap:10px;">
-          <div class="field" style="flex:1;"><label>Half PB</label><input id="pe_pbhalf" value="${escapeHtml(ik.pb_half || '')}" placeholder="1:30:00" /></div>
-          <div class="field" style="flex:1;"><label>Marathon PB</label><input id="pe_pbmar" value="${escapeHtml(ik.pb_marathon || '')}" placeholder="3:15:00" /></div>
-        </div>
-        <div style="display:flex;gap:10px;">
-          <div class="field" style="flex:1;"><label>Bike FTP (W)</label><input type="number" id="pe_ftp" value="${p.bikeFtp || ''}" placeholder="240" /></div>
-          <div class="field" style="flex:1;"><label>Swim CSS /100m</label><input id="pe_css" value="${escapeHtml(String(css))}" placeholder="1:45" /></div>
-        </div>
-        <div style="display:flex;gap:10px;">
-          <div class="field" style="flex:1;"><label>Run LTHR</label><input type="number" id="pe_runlthr" value="${p.runLthr || ''}" placeholder="178" /></div>
-          <div class="field" style="flex:1;"><label>Bike LTHR</label><input type="number" id="pe_bikelthr" value="${p.bikeLthr || ''}" placeholder="165" /></div>
-        </div>
-
         <div class="prof-edit-divider">Private &middot; used by Coach, not shown on your profile</div>
         <div class="field"><label>Birth date</label><input type="date" id="pe_dob" value="${ik.birth_date || ''}" style="color-scheme:dark;" /></div>
         <div class="field"><label>Gender</label>${renderCustomSelect('pe_sex', ik.sex || '', [{ value: '', label: 'Prefer not to say' }, { value: 'male', label: 'Male' }, { value: 'female', label: 'Female' }])}</div>
@@ -27738,43 +27758,31 @@ async function saveProfileEdits() {
   const name = val('pe_name'), bio = val('pe_bio'), loc = val('pe_loc'), sport = val('pe_sport');
   const dob = val('pe_dob') || null, sex = val('pe_sex') || null;
   const wt = num('pe_wt'), ht = num('pe_ht');
-  const css = val('pe_css'), ftp = val('pe_ftp') ? parseInt(val('pe_ftp')) : null;
-  const runLthr = val('pe_runlthr') ? parseInt(val('pe_runlthr')) : null;
-  const bikeLthr = val('pe_bikelthr') ? parseInt(val('pe_bikelthr')) : null;
   try {
-    // profiles: identity + FTP + LTHR + swim CSS (merged into training_zones).
-    // .select() so we can CONFIRM the row actually updated (a silent 0-row update
-    // is what made edits "vanish" after leaving the app).
-    const tz = { ...(state.profile?.trainingZones || {}) };
-    if (css) tz.swim_css_per_100m = css; else delete tz.swim_css_per_100m;
+    // profiles: identity only now. Benchmarks/zones (FTP, CSS, LTHR, PBs) moved out
+    // of this form — they live in Settings -> Benchmarks & zones and the bottom-of-
+    // profile Add-benchmark flow, so this save never touches them. .select() confirms
+    // the row actually updated (a silent 0-row update used to make edits "vanish").
     const { data: pRows, error: pErr } = await sb.from('profiles').update({
       name: name || null, display_name: name || null, bio, location: loc || null, primary_sport: sport || null,
-      bike_ftp: ftp, run_lthr: runLthr, bike_lthr: bikeLthr, training_zones: tz,
     }).eq('id', state.user.id).select('id');
     if (pErr) throw new Error('profile: ' + pErr.message);
     if (!pRows || !pRows.length) throw new Error('profile row did not update (auth/session issue?)');
 
-    // athlete_intake: PBs + LTHR mirror + private body fields + derived age.
-    // UPSERT (keyed on user_id) so it still saves even if the intake row is missing.
+    // athlete_intake: private body fields + derived age (PBs/LTHR edited elsewhere now).
     let age = null;
     if (dob) {
       const b = new Date(dob + 'T12:00:00'); const t = new Date();
       age = t.getFullYear() - b.getFullYear() - ((t.getMonth() < b.getMonth() || (t.getMonth() === b.getMonth() && t.getDate() < b.getDate())) ? 1 : 0);
       if (age < 0 || age > 120) age = null;
     }
-    const intakeUpd = {
-      user_id: state.user.id,
-      birth_date: dob, sex, weight_kg: wt, height_cm: ht,
-      pb_5k: val('pe_pb5k') || null, pb_10k: val('pe_pb10k') || null,
-      pb_half: val('pe_pbhalf') || null, pb_marathon: val('pe_pbmar') || null,
-      run_lthr: runLthr, bike_lthr: bikeLthr,
-    };
+    const intakeUpd = { user_id: state.user.id, birth_date: dob, sex, weight_kg: wt, height_cm: ht };
     if (age) intakeUpd.age = age;
     const { error: iErr } = await sb.from('athlete_intake').upsert(intakeUpd, { onConflict: 'user_id' });
-    if (iErr) throw new Error('benchmarks: ' + iErr.message);
+    if (iErr) throw new Error('details: ' + iErr.message);
 
     if (name) state.user.name = name;
-    state.profile = { ...state.profile, bio, location: loc || null, primarySport: sport || null, displayName: name || null, bikeFtp: ftp, runLthr, bikeLthr, trainingZones: tz };
+    state.profile = { ...state.profile, bio, location: loc || null, primarySport: sport || null, displayName: name || null };
     _projectionsCache = null; _projectionsCacheTime = 0;
     try { localStorage.removeItem('stryxs_projections_cache'); } catch (_) {}
     closeProfileEditModal();
@@ -27786,6 +27794,136 @@ async function saveProfileEdits() {
     toast('Could not save: ' + (e.message || 'try again'), 5000);
     if (btn) { btn.disabled = false; btn.textContent = 'Save'; }
   }
+}
+
+// ═══ PERSONAL-BEST BENCHMARKS ═══════════════════════════════════════════════
+// Distance-based PBs for run/bike/swim, shown as chips at the bottom of the
+// profile and added/edited via openBenchmarkSheet. Stored in
+// profiles.training_zones.personal_bests (sport -> distanceKey -> {t} time, or
+// {w} watts for a bike power benchmark). The 4 run distances the coach/projections
+// read (5k/10k/half/marathon) are mirrored to the legacy athlete_intake.pb_*
+// columns so nothing downstream breaks.
+const BENCHMARK_DISTANCES = {
+  run: [
+    { k: '50m', l: '50 m' }, { k: '100m', l: '100 m' }, { k: '200m', l: '200 m' }, { k: '400m', l: '400 m' }, { k: '800m', l: '800 m' },
+    { k: '1k', l: '1 K' }, { k: '1mile', l: '1 Mile' }, { k: '5k', l: '5 K' }, { k: '10k', l: '10 K' },
+    { k: 'half', l: 'Half' }, { k: 'marathon', l: 'Marathon' }, { k: '50k', l: '50 K' }, { k: '100k', l: '100 K' }, { k: '200k', l: '200 K' },
+  ],
+  bike: [
+    { k: '1k', l: '1 K' }, { k: '5k', l: '5 K' }, { k: '10k', l: '10 K' }, { k: '40k', l: '40 K' }, { k: '100k', l: '100 K' }, { k: '200k', l: '200 K' },
+  ],
+  swim: [
+    { k: '25m', l: '25 m' }, { k: '50m', l: '50 m' }, { k: '100m', l: '100 m' }, { k: '200m', l: '200 m' }, { k: '400m', l: '400 m' },
+    { k: '800m', l: '800 m' }, { k: '1500m', l: '1500 m' }, { k: '1.9k', l: '1.9 K' }, { k: '3.8k', l: '3.8 K' },
+  ],
+};
+const _BENCH_LEGACY_RUN = { '5k': 'pb_5k', '10k': 'pb_10k', 'half': 'pb_half', 'marathon': 'pb_marathon' };
+function _pbAll() { const tz = (state.profile && state.profile.trainingZones) || {}; return (tz.personal_bests && typeof tz.personal_bests === 'object') ? tz.personal_bests : {}; }
+function _pbLabel(sport, k) { const d = (BENCHMARK_DISTANCES[sport] || []).find(x => x.k === k); return d ? d.l : k; }
+function _pbDisplay(entry) { if (!entry) return ''; if (entry.w) return entry.w + ' W'; return entry.t || ''; }
+
+let _benchState = null;
+function openBenchmarkSheet(sport, prePick) {
+  sport = ['run', 'bike', 'swim'].includes(sport) ? sport : 'run';
+  const existing = (_pbAll()[sport] || {})[prePick];
+  _benchState = { sport, pick: prePick || null, unit: (existing && existing.w) ? 'power' : 'time' };
+  let m = document.getElementById('benchSheet');
+  if (!m) {
+    m = document.createElement('div');
+    m.id = 'benchSheet';
+    m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:99999;display:flex;flex-direction:column;justify-content:flex-end;';
+    m.innerHTML = `<div class="prof-edit-sheet"><div class="prof-edit-handle"></div><div class="prof-edit-scroll"><div class="prof-edit-title">Benchmarks</div><div id="benchBody"></div></div><div class="prof-edit-footer"><button class="btn" style="flex:1;" onclick="closeBenchmarkSheet()">Done</button></div></div>`;
+    document.body.appendChild(m);
+    document.documentElement.classList.add('prof-modal-open');
+    m.addEventListener('click', e => { if (e.target === m) closeBenchmarkSheet(); });
+  }
+  _benchRender();
+}
+function closeBenchmarkSheet() { document.documentElement.classList.remove('prof-modal-open'); document.getElementById('benchSheet')?.remove(); _benchState = null; }
+function _benchSetSport(s) { if (!_benchState) return; _benchState.sport = s; _benchState.pick = null; _benchRender(); }
+function _benchPick(k) { if (!_benchState) return; _benchState.pick = k; const e = (_pbAll()[_benchState.sport] || {})[k]; _benchState.unit = (e && e.w) ? 'power' : 'time'; _benchRender(); }
+function _benchSetUnit(u) { if (!_benchState) return; _benchState.unit = u; _benchRender(); }
+function _benchRender() {
+  const body = document.getElementById('benchBody'); if (!body || !_benchState) return;
+  const sp = _benchState.sport;
+  const tabLabel = { run: '🏃 Run', bike: '🚴 Bike', swim: '🏊 Swim' };
+  const tabs = ['run', 'bike', 'swim'].map(s => `<button type="button" class="bench-tab${s === sp ? ' on' : ''}" onclick="_benchSetSport('${s}')">${tabLabel[s]}</button>`).join('');
+  const store = _pbAll()[sp] || {};
+  const legacy = sp === 'run' ? (window._benchLegacyRun || {}) : {};
+  const grid = (BENCHMARK_DISTANCES[sp] || []).map(d => {
+    const v = store[d.k] ? _pbDisplay(store[d.k]) : (legacy[d.k] || '');
+    const on = _benchState.pick === d.k;
+    return `<button type="button" class="bench-dist${v ? ' has' : ''}${on ? ' on' : ''}" onclick="_benchPick('${d.k}')"><span class="bd-l">${d.l}</span>${v ? `<span class="bd-v">${escapeHtml(v)}</span>` : ''}</button>`;
+  }).join('');
+  let editor = '';
+  if (_benchState.pick) {
+    const k = _benchState.pick;
+    const cur = store[k] || null;
+    const hasAny = !!(cur || legacy[k]);
+    const isPower = sp === 'bike' && _benchState.unit === 'power';
+    const curVal = cur ? (cur.w ? String(cur.w) : (cur.t || '')) : (legacy[k] || '');
+    const unitToggle = sp === 'bike' ? `<div class="bench-unit"><button type="button" class="${!isPower ? 'on' : ''}" onclick="_benchSetUnit('time')">Time</button><button type="button" class="${isPower ? 'on' : ''}" onclick="_benchSetUnit('power')">Power</button></div>` : '';
+    const ph = isPower ? '280' : (/^\d{2,3}m$/.test(k) ? '0:14' : '22:30');
+    editor = `<div class="bench-editor">
+      <div class="bench-editor-h">Your best ${_pbLabel(sp, k)}${isPower ? ' (avg power)' : ''}</div>
+      ${unitToggle}
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input id="benchVal" value="${escapeHtml(curVal)}" placeholder="${ph}" inputmode="${isPower ? 'numeric' : 'text'}" autocapitalize="off" autocorrect="off" style="flex:1;padding:12px 14px;background:var(--bg-3);color:var(--text);border:1px solid var(--border);border-radius:10px;font-size:15px;font-family:inherit;outline:none;" />
+        <span style="font-size:12px;color:var(--text-mute);min-width:30px;">${isPower ? 'W' : 'time'}</span>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        ${hasAny ? `<button type="button" class="btn ghost" style="flex:1;color:#f87171;border-color:rgba(239,68,68,0.4);" onclick="deleteBenchmark('${sp}','${k}')">Remove</button>` : ''}
+        <button type="button" class="btn" style="flex:1.6;" onclick="saveBenchmark('${sp}','${k}')">Save</button>
+      </div>
+    </div>`;
+  }
+  body.innerHTML = `<div class="bench-tabs">${tabs}</div><div class="bench-hint">Tap a distance to add or edit your best.</div><div class="bench-grid">${grid}</div>${editor}`;
+  const inp = document.getElementById('benchVal'); if (inp) setTimeout(() => { try { inp.focus(); } catch (_) {} }, 30);
+}
+async function saveBenchmark(sport, k) {
+  const inp = document.getElementById('benchVal'); if (!inp) return;
+  const raw = String(inp.value || '').trim();
+  if (!raw) { toast('Enter a value first.'); return; }
+  const isPower = sport === 'bike' && _benchState && _benchState.unit === 'power';
+  let entry;
+  if (isPower) { const w = parseInt(raw, 10); if (!w || w < 30 || w > 2000) { toast('Enter watts, e.g. 280.'); return; } entry = { w }; }
+  else { if (!/^\d{1,3}(:\d{2}){1,2}$/.test(raw)) { toast('Enter a time like 0:14, 22:30, or 1:45:00.'); return; } entry = { t: raw }; }
+  try {
+    const tz = { ...((state.profile && state.profile.trainingZones) || {}) };
+    const pb = { ...(tz.personal_bests || {}) };
+    pb[sport] = { ...(pb[sport] || {}), [k]: entry };
+    tz.personal_bests = pb;
+    const { error } = await sb.from('profiles').update({ training_zones: tz }).eq('id', state.user.id);
+    if (error) throw error;
+    state.profile = { ...state.profile, trainingZones: tz };
+    if (sport === 'run' && _BENCH_LEGACY_RUN[k] && entry.t) {
+      try { await sb.from('athlete_intake').upsert({ user_id: state.user.id, [_BENCH_LEGACY_RUN[k]]: entry.t }, { onConflict: 'user_id' }); } catch (_) {}
+      if (window._benchLegacyRun) window._benchLegacyRun[k] = entry.t;
+    }
+    _projectionsCache = null; _projectionsCacheTime = 0; try { localStorage.removeItem('stryxs_projections_cache'); } catch (_) {}
+    toast('Benchmark saved');
+    _benchState.pick = null; _benchRender();
+    if (typeof renderProfile === 'function') renderProfile();
+  } catch (e) { console.error('[Stryxs] saveBenchmark failed', e); toast('Could not save, try again.', 3500); }
+}
+async function deleteBenchmark(sport, k) {
+  try {
+    const tz = { ...((state.profile && state.profile.trainingZones) || {}) };
+    const pb = { ...(tz.personal_bests || {}) };
+    if (pb[sport]) { const sObj = { ...pb[sport] }; delete sObj[k]; pb[sport] = sObj; }
+    tz.personal_bests = pb;
+    const { error } = await sb.from('profiles').update({ training_zones: tz }).eq('id', state.user.id);
+    if (error) throw error;
+    state.profile = { ...state.profile, trainingZones: tz };
+    if (sport === 'run' && _BENCH_LEGACY_RUN[k]) {
+      try { await sb.from('athlete_intake').upsert({ user_id: state.user.id, [_BENCH_LEGACY_RUN[k]]: null }, { onConflict: 'user_id' }); } catch (_) {}
+      if (window._benchLegacyRun) window._benchLegacyRun[k] = '';
+    }
+    _projectionsCache = null; _projectionsCacheTime = 0; try { localStorage.removeItem('stryxs_projections_cache'); } catch (_) {}
+    toast('Benchmark removed');
+    _benchState.pick = null; _benchRender();
+    if (typeof renderProfile === 'function') renderProfile();
+  } catch (e) { console.error('[Stryxs] deleteBenchmark failed', e); toast('Could not remove, try again.', 3500); }
 }
 
 // ── Avatar picker → circular cropper (pan + zoom) → upload ──
