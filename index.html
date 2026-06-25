@@ -7423,6 +7423,9 @@ async function loadWorkouts() {
   try { if (typeof refreshNotifBadge === 'function') refreshNotifBadge(); } catch (_) {}
   // Keep the public-share snapshot of completed stats current (no-op if not sharing).
   try { if (typeof refreshShareSnapshot === 'function') refreshShareSnapshot(); } catch (_) {}
+  // If a real workout now matches a Coach-logged placeholder (same day + sport),
+  // offer to merge them. Delayed so the UI settles first; self-gates against spam.
+  try { setTimeout(_maybePromptCoachLogDuplicate, 700); } catch (_) {}
 }
 
 // Build the cross-device set of workout ids Coach has already analyzed. The
@@ -7443,6 +7446,128 @@ async function loadAnalyzedWorkoutIds() {
     });
     state._analyzedWkIds = set;
   } catch (_) { /* non-fatal: falls back to the per-device marker */ }
+}
+
+// ── Coach-logged duplicate merge ──────────────────────────────────────────────
+// "Mark today's run done" logs a PLACEHOLDER workout (source 'coach', no real
+// data — distance 0, no analysis). If a real workout (Strava/upload/manual) later
+// lands on the SAME day + SAME sport, we likely have two cards for one session.
+// We offer to MERGE: keep the real one (all the data), drop the empty placeholder.
+// If they're genuinely separate, keep both and optionally tag the placeholder as
+// extra training. Resolved pairs are remembered so we never re-ask.
+function _dupDateKey(w) { return String((w && (w.date || w.created_at)) || '').split('T')[0]; }
+function _dupSport(w) { return (typeof normalizeSport === 'function') ? normalizeSport(w && w.sport) : String((w && w.sport) || '').toLowerCase(); }
+function _dupResolvedKey(phId, realId) { return `stryxs_dupresolved_${phId}_${realId}`; }
+function _findCoachLogDuplicate() {
+  const ws = state.workouts || [];
+  const reals = {}; // date|sport -> [real workouts]
+  for (const w of ws) {
+    if (!w.source || w.source === 'coach') continue;
+    if (w.activity_classification === 'daily_activity') continue;
+    const d = _dupDateKey(w), sp = _dupSport(w);
+    if (!d || !sp) continue;
+    (reals[`${d}|${sp}`] = reals[`${d}|${sp}`] || []).push(w);
+  }
+  for (const w of ws) {
+    if (w.source !== 'coach') continue;
+    const d = _dupDateKey(w), sp = _dupSport(w);
+    const matches = reals[`${d}|${sp}`];
+    if (!d || !sp || !matches || !matches.length) continue;
+    const real = matches[0];
+    let resolved = false;
+    try { resolved = localStorage.getItem(_dupResolvedKey(w._dbId, real._dbId)) === '1'; } catch (_) {}
+    if (resolved) continue;
+    if (state._dupShown && state._dupShown.has(`${w._dbId}|${real._dbId}`)) continue;
+    return { ph: w, real, date: d, sport: sp };
+  }
+  return null;
+}
+function _maybePromptCoachLogDuplicate() {
+  try {
+    if (!state.user) return;
+    if (document.getElementById('coachDupModal')) return;
+    if (document.body.classList.contains('coach-chat-active')) return; // don't interrupt the chat
+    const pair = _findCoachLogDuplicate();
+    if (!pair) return;
+    state._dupShown = state._dupShown || new Set();
+    state._dupShown.add(`${pair.ph._dbId}|${pair.real._dbId}`);
+    _showCoachDupModal(pair);
+  } catch (_) {}
+}
+function _dupStatsLine(w) {
+  const bits = [];
+  const dist = parseFloat(w.distance); if (dist > 0) bits.push(`${Math.round(dist * 10) / 10} km`);
+  let dur = (w.duration != null) ? parseFloat(w.duration) : null; if (dur && dur > 0) { dur = dur > 600 ? dur / 60 : dur; bits.push(`${Math.round(dur)} min`); }
+  const hr = parseInt(w.avgHr || w.avg_hr); if (hr) bits.push(`${hr} bpm`);
+  return bits.length ? bits.join(' · ') : 'full data';
+}
+function _dupSrcLabel(s) { return s === 'strava' ? 'a Strava' : s === 'file_upload' || s === 'csv_upload' ? 'an uploaded' : s === 'manual' ? 'a manually-entered' : 'a new'; }
+function _showCoachDupModal(pair) {
+  const m = document.createElement('div');
+  m.id = 'coachDupModal';
+  m.style.cssText = 'position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 99999; display:flex; align-items:center; justify-content:center; padding:16px;';
+  const sportLabel = pair.sport.charAt(0).toUpperCase() + pair.sport.slice(1);
+  const dateLabel = (() => { try { return new Date(pair.date + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }); } catch (_) { return pair.date; } })();
+  m.innerHTML = `
+    <div style="background: var(--bg-2); border:1px solid var(--border); border-radius:14px; padding:22px 20px; max-width:440px; width:100%;">
+      <div style="font-size:17px; font-weight:700; margin-bottom:8px;">Same workout?</div>
+      <div style="font-size:13px; color:var(--text-dim); line-height:1.55; margin-bottom:14px;">
+        You marked a <strong>${sportLabel}</strong> done with Coach on ${dateLabel}, and ${_dupSrcLabel(pair.real.source)} ${sportLabel.toLowerCase()} just came in for the same day:
+      </div>
+      <div style="padding:11px 13px; background:rgba(0,229,160,.06); border:1px solid rgba(0,229,160,.2); border-radius:10px; margin-bottom:16px;">
+        <div style="font-weight:600; font-size:13px; color:var(--text);">${escapeHtml(_pfPrettyTitle(pair.real) || sportLabel)}</div>
+        <div style="font-size:12px; color:var(--text-dim); margin-top:3px;">${_dupStatsLine(pair.real)}</div>
+      </div>
+      <div style="font-size:12.5px; color:var(--text-mute); line-height:1.5; margin-bottom:16px;">If it's the same session, we'll keep this one (with all the data) and remove the empty Coach-logged copy.</div>
+      <div style="display:flex; gap:8px;">
+        <button onclick="_coachDupKeepBothStep('${pair.ph._dbId}','${pair.real._dbId}')" style="flex:1; padding:12px; background:transparent; border:1px solid var(--border); border-radius:10px; color:var(--text); font-size:14px; cursor:pointer;">No, different</button>
+        <button onclick="_coachDupMerge('${pair.ph._dbId}','${pair.real._dbId}')" class="btn" style="flex:1; padding:12px; font-size:14px;">Yes, same one</button>
+      </div>
+    </div>`;
+  document.body.appendChild(m);
+}
+function _closeCoachDupModal() { const m = document.getElementById('coachDupModal'); if (m) m.remove(); }
+async function _coachDupMerge(phId, realId) {
+  try {
+    await sb.from('workouts').delete().eq('id', phId).eq('user_id', state.user.id);
+    state.workouts = (state.workouts || []).filter(w => String(w._dbId) !== String(phId));
+    try { localStorage.setItem(_dupResolvedKey(phId, realId), '1'); } catch (_) {}
+    toast('Merged. Kept the version with all your data.');
+    _dupRefreshViews();
+  } catch (e) { console.warn('[Stryxs] merge failed', e); toast('Could not merge, try again.', 3500); }
+  _closeCoachDupModal();
+}
+function _coachDupKeepBothStep(phId, realId) {
+  const m = document.getElementById('coachDupModal');
+  const card = m && m.querySelector('div');
+  if (!card) return;
+  card.innerHTML = `
+    <div style="font-size:17px; font-weight:700; margin-bottom:8px;">Keep both</div>
+    <div style="font-size:13px; color:var(--text-dim); line-height:1.55; margin-bottom:16px;">Got it, we'll keep both. Was the Coach-logged session an <strong>extra</strong> one (not the workout in your plan)?</div>
+    <div style="display:flex; gap:8px;">
+      <button onclick="_coachDupKeepBoth('${phId}','${realId}', false)" style="flex:1; padding:12px; background:transparent; border:1px solid var(--border); border-radius:10px; color:var(--text); font-size:14px; cursor:pointer;">No, leave it</button>
+      <button onclick="_coachDupKeepBoth('${phId}','${realId}', true)" class="btn" style="flex:1; padding:12px; font-size:14px;">Yes, it was extra</button>
+    </div>`;
+}
+async function _coachDupKeepBoth(phId, realId, markExtra) {
+  try {
+    if (markExtra) {
+      await sb.from('workouts').update({ activity_classification: 'extra_training' }).eq('id', phId).eq('user_id', state.user.id);
+      const w = (state.workouts || []).find(x => String(x._dbId) === String(phId));
+      if (w) w.activity_classification = 'extra_training';
+      toast('Kept both. Marked the Coach-logged one as extra training.');
+    } else {
+      toast('Kept both.');
+    }
+    try { localStorage.setItem(_dupResolvedKey(phId, realId), '1'); } catch (_) {}
+    _dupRefreshViews();
+  } catch (e) { console.warn('[Stryxs] keep-both failed', e); toast('Could not update, try again.', 3500); }
+  _closeCoachDupModal();
+}
+function _dupRefreshViews() {
+  try { if (typeof refreshNotifBadge === 'function') refreshNotifBadge(); } catch (_) {}
+  try { if (typeof renderPlan === 'function') renderPlan(); } catch (_) {}
+  try { if (typeof renderDashboard === 'function') renderDashboard(); } catch (_) {}
 }
 
 // Refresh data when the app comes back to the foreground after being
