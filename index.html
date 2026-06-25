@@ -761,6 +761,14 @@ html.prof-modal-open, html.prof-modal-open body { overflow: hidden; }
 .md-body code { background: rgba(255, 255, 255, 0.07); padding: 1px 5px; border-radius: 4px; font-size: 0.9em; }
 .md-body > *:last-child { margin-bottom: 0; }
 .pf-exp .it { font-size: 12px; color: var(--text); margin-top: 10px; padding: 9px 11px; background: rgba(0,229,160,.06); border-left: 3px solid var(--accent); border-radius: 6px; }
+/* Pre-session Activation block — sits above the workout's Warm-up/Main/Cool-down */
+.pf-activation { margin: 0 0 14px; padding: 12px 13px; background: rgba(80,130,255,.05); border: 1px solid rgba(80,130,255,.18); border-radius: 10px; }
+.pf-activation-head { display: flex; align-items: center; gap: 9px; margin-bottom: 9px; flex-wrap: wrap; }
+.pf-activation-badge { font-size: 10px; font-weight: 800; letter-spacing: .6px; text-transform: uppercase; color: #9db8ff; background: rgba(80,130,255,.14); border: 1px solid rgba(80,130,255,.3); padding: 3px 9px; border-radius: 20px; }
+.pf-activation-sub { font-size: 11px; color: var(--text-mute); }
+.pf-activation-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+.pf-activation-list li { font-size: 12.5px; color: var(--text-dim); line-height: 1.45; }
+.pf-activation-note { margin-top: 9px; font-size: 11.5px; color: var(--text-mute); font-style: italic; line-height: 1.45; }
 .pf-exp .acts { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
 .pf-exp .acts .btn { flex: 0 0 auto; min-width: 0; white-space: nowrap; font-size: 12px; padding: 8px 13px; display: inline-flex; align-items: center; gap: 6px; }
 
@@ -26168,6 +26176,100 @@ function exportWorkoutToZwift(id) {
   }
 }
 
+// Pre-session ACTIVATION (the methodology's "Prep", Part A): a short, zero-equipment
+// movement routine done BEFORE the session to wake up the muscles it will load.
+// Sport-specific and SCALED BY INTENSITY — a quick version before easy/endurance,
+// a fuller one (more dynamic drills) before hard sessions. Evidence-based content
+// from coach_methodology_reference_warmups_strength.md (RAMP / Jeffreys, McGowan).
+// Returns null for rest days. The picker is data; _pfActivationHTML renders it.
+function _pfActivationPlan(sk, key, hard) {
+  if (sk === 'run') {
+    if (hard) return { dur: '~3 min', moves: [
+      'Leg swings front-to-back x10 each side',
+      'Leg swings side-to-side x10 each side',
+      'Walking lunges x8 each side',
+      'Single-leg calf raises x10 each side',
+      'High knees x20 on the spot',
+    ], note: 'Your easy warm-up jog and strides come first inside the session.' };
+    if (key === 'endur') return { dur: '~2 min', moves: [
+      'Leg swings front-to-back x10 each side',
+      'Leg swings side-to-side x10 each side',
+      'Single-leg calf raises x10 each side',
+      'Bodyweight squats x10',
+    ] };
+    return { dur: '~90 sec', moves: [
+      'Leg swings front-to-back x10 each side',
+      'Leg swings side-to-side x10 each side',
+      'Bodyweight squats x10',
+    ] };
+  }
+  if (sk === 'bike') {
+    if (hard) return { dur: '~3 min', moves: [
+      'Leg swings front-to-back x10 each side',
+      'Bodyweight squats x10',
+      'Lunge with torso rotation x5 each side',
+      'Cat-cow x6',
+      'Glute bridges x10',
+    ], note: 'Then start the ride easy and build in the fast-cadence spins during your warm-up.' };
+    return { dur: '~90 sec', moves: [
+      'Leg swings front-to-back x10 each side',
+      'Bodyweight squats x10',
+      'Glute bridges x10',
+    ] };
+  }
+  if (sk === 'swim') {
+    if (hard) return { dur: '~3 min', moves: [
+      'Arm circles x10 forward and x10 back, each arm',
+      'Scapular push-ups x8 (against a wall is fine)',
+      'Trunk rotations x10 each side',
+      'Wall slides x8',
+    ], note: 'Then ease into your in-water warm-up before the main set.' };
+    return { dur: '~90 sec', moves: [
+      'Arm circles x10 forward and x10 back, each arm',
+      'Scapular push-ups x8 (against a wall is fine)',
+      'Trunk rotations x10 each side',
+    ] };
+  }
+  if (sk === 'strength') {
+    return { dur: '~4 min', moves: [
+      '2 min easy cardio (march or jog on the spot, or an easy spin)',
+      'Bodyweight squats x10',
+      'Glute bridges x10',
+      'Scapular push-ups x8',
+      'Leg swings front-to-back x10 each side',
+    ], note: 'Then ramp up the first lift: 1x8 at ~50%, 1x5 at ~70%, before your working sets.' };
+  }
+  // mobility / cross-training / other: a gentle full-body wake-up
+  return { dur: '~90 sec', moves: [
+    'March on the spot 1 min',
+    'Cat-cow x6',
+    'Hip circles x8 each side',
+    'Arm circles x10 each direction',
+  ] };
+}
+
+function _pfActivationHTML(w) {
+  if (!w || w.sport === 'rest') return '';
+  // Don't double up: gym sessions (and any workout) that already spell out their
+  // own Activation/Prep keep theirs — we never render a second one.
+  if (/\bactivation\b|\bprep\b/i.test(String(w.description || ''))) return '';
+  const sk = _pfSportKey(w.sport);
+  const key = _pfTagFor(w).key;
+  const hard = key === 'vo2' || key === 'thr' || key === 'tempo' || key === 'str';
+  const A = _pfActivationPlan(sk, key, hard);
+  if (!A || !A.moves || !A.moves.length) return '';
+  const items = A.moves.map(m => `<li>${escapeHtml(m)}</li>`).join('');
+  return `
+    <div class="pf-activation">
+      <div class="pf-activation-head">
+        <span class="pf-activation-badge">Activation</span>
+        <span class="pf-activation-sub">${A.dur} · before you start, no equipment</span>
+      </div>
+      <ul class="pf-activation-list">${items}</ul>
+      ${A.note ? `<div class="pf-activation-note">${escapeHtml(A.note)}</div>` : ''}
+    </div>`;
+}
+
 function _pfCardHTML(w) {
   const sk = _pfSportKey(w.sport);
   if (w.sport === 'rest') {
@@ -26217,6 +26319,7 @@ function _pfCardHTML(w) {
       <div class="pf-chev">›</div>
     </div>
     <div class="pf-exp" id="${eid}" style="display:none">
+      ${_pfActivationHTML(w)}
       ${w.description ? `<div class="desc md-body">${typeof formatMarkdown === 'function' ? formatMarkdown(w.description) : escapeHtml(w.description)}</div>` : ''}
       ${w.intensity_target ? `<div class="it"><strong>Target:</strong> ${escapeHtml(w.intensity_target)}</div>` : ''}
       <div class="acts">
