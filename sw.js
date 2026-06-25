@@ -2,7 +2,7 @@
 // Handles incoming Web Push messages and notification interactions.
 // Lives at /sw.js (must be served from the root for full-scope control).
 
-const CACHE_NAME = 'stryxs-sw-v6';
+const CACHE_NAME = 'stryxs-sw-v7';
 
 // Install + activate quickly — we don't precache anything since the
 // SPA reloads on each visit and we don't need offline support yet.
@@ -35,7 +35,14 @@ self.addEventListener('fetch', (event) => {
 });
 
 // Push event — fired when our backend sends a Web Push to this device.
-// Payload is a JSON object: { title, body, url, icon, badge }.
+// Payload (JSON): { title, body, url, icon, badge, image, tag, actions,
+// actionUrls, vibrate, renotify, requireInteraction, timestamp }.
+//   - actions: [{ action, title, icon? }] rich buttons (Android/desktop; iOS
+//     ignores them and shows only the body — so the body tap must always work).
+//   - actionUrls: { <action>: "/deep/link" } where each button routes on click.
+//   - image: a large banner shown under the body (Android/desktop).
+// Anything the payload omits falls back to a sensible default, so old-style
+// payloads keep working unchanged.
 self.addEventListener('push', (event) => {
   let data = {};
   try {
@@ -51,28 +58,55 @@ self.addEventListener('push', (event) => {
     icon: data.icon || '/web-app-manifest-192x192.png',
     badge: data.badge || '/web-app-manifest-192x192.png',
     tag: data.tag || 'stryxs-notification',
-    // Reuse same tag so a 2nd workout reminder replaces the 1st instead
-    // of stacking. Users hate stacked notifications.
-    renotify: false,
-    data: { url: data.url || '/' },
+    // Same tag => a fresh reminder REPLACES the old one instead of stacking.
+    // renotify lets an important update buzz again on replace (payload opt-in).
+    renotify: !!data.renotify,
+    requireInteraction: !!data.requireInteraction,
+    timestamp: typeof data.timestamp === 'number' ? data.timestamp : Date.now(),
+    // Gentle double-tap buzz by default (ignored on iOS, which has no vibrate).
+    vibrate: Array.isArray(data.vibrate) ? data.vibrate : [80, 40, 80],
+    silent: false,
+    data: { url: data.url || '/', actions: data.actionUrls || {} },
   };
+  // Large banner image (Android/desktop only) — only set if provided.
+  if (data.image) options.image = data.image;
+  // Up to 2 action buttons (Android/desktop). iOS drops them gracefully.
+  if (Array.isArray(data.actions) && data.actions.length) {
+    options.actions = data.actions.slice(0, 2);
+  }
 
   event.waitUntil(self.registration.showNotification(title, options));
 });
 
-// Click — open or focus the Stryxs tab. If the user already has it open,
-// focus that tab instead of opening a new one.
+// Derive the in-app page from a deep-link path so an ALREADY-OPEN app can route
+// instantly via postMessage (client.navigate alone won't re-run the SPA router).
+function _stryxsRouteFor(targetUrl) {
+  let page = null, goToday = false;
+  try {
+    const u = new URL(targetUrl, self.location.origin);
+    const seg = u.pathname.split('/').filter(Boolean)[0];
+    const allowed = ['plan', 'coach', 'history', 'trends', 'race', 'settings', 'upgrade', 'dashboard'];
+    if (allowed.includes(seg)) page = seg;
+    goToday = u.searchParams.get('go') === 'today';
+  } catch (_) {
+    if (/[?&]go=today/.test(targetUrl)) goToday = true;
+    if (/\/plan\b/.test(targetUrl)) page = 'plan';
+  }
+  return { page, goToday };
+}
+
+// Click — route the tapped notification (or its action button) into the app.
+// If a button was pressed, follow that button's deep link; otherwise the body's.
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const targetUrl = event.notification.data?.url || '/';
-  // Derive the in-app destination so an ALREADY-OPEN app can route instantly via
-  // postMessage (client.navigate alone won't re-run the SPA's router). A cold start
-  // falls back to opening targetUrl, which the app's startup router reads.
-  const goToday = /[?&]go=today/.test(targetUrl);
-  const page = /\/plan\b/.test(targetUrl) ? 'plan' : null;
+  const d = event.notification.data || {};
+  if (event.action === 'dismiss') return; // explicit dismiss button: just close
+  const actionUrl = (event.action && d.actions && d.actions[event.action]) || null;
+  const targetUrl = actionUrl || d.url || '/';
+  const { page, goToday } = _stryxsRouteFor(targetUrl);
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      // Try to focus an existing Stryxs tab and tell it where to go
+      // Focus an existing Stryxs tab and tell it where to go
       for (const client of clientList) {
         if (client.url.includes(self.location.host) && 'focus' in client) {
           try { client.postMessage({ type: 'stryxs-open', page, goToday }); } catch (_) {}
