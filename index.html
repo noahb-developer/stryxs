@@ -25823,7 +25823,7 @@ async function renderPlan() {
               ${isImportedPlan ? `<button onclick="openEditCurrentWeekModal(${currentWeekIndex}, ${importedTotalWeeks || 'null'})" title="Adjust the current week if it's wrong" style="background: var(--bg-3); border: 1px solid var(--border); border-radius: 6px; padding: 2px 8px; color: var(--text-dim); cursor: pointer; font-size: 11px; font-family: inherit; line-height: 1; height: 22px; display: inline-flex; align-items: center; gap: 4px;">✏️ <span>Edit</span></button>` : ''}
             </div>
             <div style="font-size: 13px; color: var(--text-dim); line-height: 1.5;">${currentWeekInfo.focus || ''}</div>
-            ${isImportedPlan && (() => {
+            ${isImportedPlan ? (() => {
               // If we have weeks_overview, show how many upcoming weeks are queued
               const profile = activePlan?.plan_data?._plan_profile;
               const weeksOverview = profile?.weeks_overview;
@@ -25834,7 +25834,7 @@ async function renderPlan() {
                 }
               }
               return '';
-            })()}
+            })() : ''}
           </div>
           ${currentWeekInfo.target_volume_hours ? `
             <div style="flex-shrink: 0; display: flex; flex-direction: column; align-items: center; min-width: 60px;">
