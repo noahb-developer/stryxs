@@ -5774,7 +5774,7 @@ body.on-auth .container {
 <!-- TRENDS -->
 <div class="page" id="page-trends">
   <div class="section-title" data-i18n="trends.title">Training Trends</div>
-  <p class="section-sub" data-i18n="trends.subtitle">Patterns across your recent training. The bigger picture Strava and Garmin don't show.</p>
+  <p class="section-sub" data-i18n="trends.subtitle">Patterns across your recent training, the bigger picture behind your numbers.</p>
   <div id="trendsContent"></div>
 </div>
 
@@ -6107,7 +6107,7 @@ const I18N = {
     'history.title': 'Workout History',
     'history.subtitle': "Every workout you've analyzed",
     'trends.title': 'Training Trends',
-    'trends.subtitle': "Patterns across your recent training. The bigger picture Strava and Garmin don't show.",
+    'trends.subtitle': "Patterns across your recent training, the bigger picture behind your numbers.",
     'help.title': 'Help & FAQ',
     'help.subtitle': 'Tap any question to expand. Search to find what you need fast.',
 
@@ -8891,8 +8891,8 @@ function showTourOfferModal() {
   overlay.innerHTML = `
     <div class="onb-modal" style="max-width: 440px;">
       <div class="onb-emoji">✨</div>
-      <div class="onb-title">${first ? `You're all set, ${escapeHtml(first)}.` : "You're all set."}</div>
-      <div class="onb-sub">Stryxs adapts to you. Your AI coach knows your plan, your history, and your goals, so you can ask it anything, anytime. That's the best place to start, try asking what to do today.</div>
+      <div class="onb-title">${first ? `Welcome, ${escapeHtml(first)}.` : "Welcome to Stryxs."}</div>
+      <div class="onb-sub">Your training plan is built, you'll find it on the Plan tab. Your AI coach knows that plan, your history, and your goals, so the easiest way to start is to ask it what to do today.</div>
       <div class="onb-actions" style="flex-direction: column; gap: 8px; margin-top: 6px;">
         <button class="btn" style="width: 100%;" onclick="acceptTourOffer()">💬 Ask my coach</button>
         <button class="btn ghost" style="width: 100%;" onclick="declineTourOffer()">I'll explore on my own</button>
@@ -14725,7 +14725,7 @@ function showLoadInfo() {
     : ' Logging more HR + power keeps it sharp.';
   const body = `
     <p style="margin:0 0 12px; line-height:1.6;"><strong style="color:var(--text);">Fitness</strong> is the base you've built over weeks. <strong style="color:var(--text);">Tiredness</strong> is how hard the last few days were. <strong style="color:var(--text);">Freshness</strong> = fitness minus tiredness (positive = rested, negative = fatigued).</p>
-    <p style="margin:0; line-height:1.6;">These are estimates from your logged training. Watch the trend and your freshness state more than the exact numbers — they're not on the same scale as Garmin.${sharpen}</p>`;
+    <p style="margin:0; line-height:1.6;">These are estimates from your logged training. Watch the trend and your freshness state more than the exact numbers — they're not directly comparable to your watch's own estimates.${sharpen}</p>`;
   const mo = document.createElement('div');
   mo.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;';
   mo.innerHTML = `<div style="background:var(--bg-2);border:1px solid var(--border);border-radius:16px;padding:20px;max-width:380px;width:100%;font-size:13px;color:var(--text-dim);">
@@ -15637,7 +15637,7 @@ function renderTrends() {
   if (!isUserPro()) {
     el.innerHTML = renderUpgradeCard({
       featureName: 'Training Trends',
-      description: 'Unlock weekly pattern analysis, drift trends, intensity distribution, volume changes, adherence patterns. The bigger picture Strava and Garmin don\'t show.',
+      description: 'Unlock weekly pattern analysis, drift trends, intensity distribution, volume changes, adherence patterns. The bigger picture behind your training.',
       icon: '📈',
     });
     return;
@@ -15787,7 +15787,7 @@ function renderTrends() {
           <div style="font-size: 18px; font-weight: 800; color: var(--text); letter-spacing: -0.2px;">💡 Insights</div>
           <div style="font-size: 12px; color: var(--text-dim);">Patterns Coach has noticed in your training</div>
         </div>
-        <button class="btn ghost" style="padding: 6px 12px; font-size: 12px;" onclick="refreshInsights()" id="refreshInsightsBtn">↻ Refresh</button>
+        <span style="font-size: 11px; color: var(--text-mute);">Refreshes weekly</span>
       </div>
       <div id="insightsList">
         <div class="loading"><div class="spinner"></div>Loading insights…</div>
@@ -22334,7 +22334,7 @@ function renderProjGate(container, intake) {
           </div>
           ${unclassifiedNudge}
           <div style="margin-top: 4px; padding: 8px 0 0; font-size: 11px; color: var(--text-mute); line-height: 1.5;">
-            Coach projects times from your actual training. Only confirmed plan or extra-training workouts count. Once you've logged enough, projections appear automatically and refresh weekly. <a style="color: var(--accent); cursor: pointer; text-decoration: underline;" onclick="refreshProjectionsView()">Refresh now</a>
+            Coach projects times from your actual training. Only confirmed plan or extra-training workouts count. Once you've logged enough, projections appear automatically and refresh weekly.
           </div>
         </div>
       </div>
@@ -22422,7 +22422,7 @@ function renderProjectionsFromData(container, intake, recentWorkouts, proj) {
       ${paces && Object.keys(paces).length > 0 ? renderRaceDayPlan(intake, paces) : ''}
 
       <div style="margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); text-align: center;">
-        <div style="font-size: 11px; color: var(--text-mute); line-height: 1.5;">🔄 Updates automatically each week · <a style="color: var(--accent); cursor: pointer; text-decoration: underline;" onclick="refreshProjectionsView()">Refresh now</a></div>
+        <div style="font-size: 11px; color: var(--text-mute); line-height: 1.5;">🔄 Updates automatically each week.</div>
         <div style="font-size: 11px; color: var(--text-mute); line-height: 1.5; margin-top: 4px;">These get more accurate as you log more workouts and add a recent race or benchmark time.</div>
       </div>
     </div>
@@ -28983,15 +28983,6 @@ async function renderNotifSettings() {
           <div style="font-size: 11px; color: var(--text-mute); margin-top: 6px;">Applies to all your devices.</div>
         </div>
       ` : ''}
-      ${isReceivingHere ? `
-        <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);">
-          <button onclick="sendTestNotification(this)" class="btn ghost" style="width: 100%; font-size: 13px;">🔔 Send a test notification</button>
-          <div style="font-size: 11px; color: var(--text-mute); margin-top: 6px; text-align: center;">Confirms reminders actually reach this device.</div>
-        </div>
-      ` : ''}
-    </div>
-    <div style="text-align: center; margin-top: 10px;">
-      <button onclick="runNotifDiagnostic()" style="background: none; border: none; color: var(--text-mute); font-size: 11px; text-decoration: underline; cursor: pointer; font-family: inherit;">Run notification diagnostic</button>
     </div>
   `;
 }
