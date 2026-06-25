@@ -26375,9 +26375,10 @@ function _pfActivationPlan(sk, key, hard) {
 
 function _pfActivationHTML(w) {
   if (!w || w.sport === 'rest') return '';
-  // Don't double up: gym sessions (and any workout) that already spell out their
-  // own Activation/Prep keep theirs — we never render a second one.
-  if (/\bactivation\b|\bprep\b/i.test(String(w.description || ''))) return '';
+  // The Activation ALWAYS renders here in one consistent format. Any inline
+  // Activation/Prep (and prep-disguised warm-ups) is stripped from the workout's
+  // description by _stripRedundantActivation, so it never shows twice or in a
+  // different style.
   const sk = _pfSportKey(w.sport);
   const key = _pfTagFor(w).key;
   const hard = key === 'vo2' || key === 'thr' || key === 'tempo' || key === 'str';
@@ -26393,6 +26394,42 @@ function _pfActivationHTML(w) {
       <ul class="pf-activation-list">${items}</ul>
       ${A.note ? `<div class="pf-activation-note">${escapeHtml(A.note)}</div>` : ''}
     </div>`;
+}
+
+// Normalize a workout description so the ACTIVATION always lives in the standard
+// blue box (rendered separately), never inline and never in two styles. Strips:
+//  - any inline "Activation"/"Prep" section, and
+//  - any "Warm-up"/"Cool-down" section that is actually prep (bodyweight drills /
+//    light mobility) rather than a REAL in-session warm-up or cool-down.
+// Real cardio warm-ups/cool-downs (easy spin/jog/swim) are kept untouched.
+function _stripRedundantActivation(desc) {
+  if (!desc || typeof desc !== 'string' || !/#{1,4}\s/.test(desc)) return desc;
+  // Prep-movement signature: discrete bodyweight drills / light mobility. These
+  // mark a "warm-up" or "cool-down" that is really activation, not real cardio.
+  const PREP_RE = /(bodyweight squat|glute bridge|scapular|leg swing|clamshell|dead ?bug|cat[\s-]?cow|arm circle|trunk rotation|hip abduction|wall slide|light (hip )?mobility|light movement|hip circle|ankle circle)/i;
+  const sections = desc.split(/\n(?=#{1,4}\s)/);
+  const kept = sections.filter(sec => {
+    const hm = sec.match(/^\s*#{1,4}\s*(.+?)\s*$/m);
+    if (!hm) return true; // pre-heading text, keep
+    const heading = hm[1].toLowerCase();
+    const body = sec.slice(hm.index + hm[0].length);
+    if (/^(activation|prep)\b/.test(heading)) return false;          // inline activation -> drop (box covers it)
+    if (/(warm[\s-]?up|cool[\s-]?down)/.test(heading) && PREP_RE.test(body)) return false; // prep-disguised -> drop
+    return true;
+  });
+  return kept.join('\n').trim();
+}
+
+// Collapse rest days: a day with any real workout is NOT a rest day (drop stray
+// rest rows left over from a plan change), and an all-rest day shows ONE rest
+// card, never several. Render-time so it fixes display without touching the DB.
+function _pfDedupeRest(items) {
+  if (!Array.isArray(items) || items.length <= 1) return items;
+  const isRest = w => w && (w.sport === 'rest' || (typeof _pfTagFor === 'function' && _pfTagFor(w).key === 'rest'));
+  const nonRest = items.filter(w => !isRest(w));
+  if (nonRest.length) return nonRest;          // real work present -> not a rest day
+  const rest = items.filter(isRest);
+  return rest.length ? [rest[0]] : items;      // all rest -> a single rest card
 }
 
 function _pfCardHTML(w) {
@@ -26422,7 +26459,7 @@ function _pfCardHTML(w) {
         <div class="pf-stat"><div class="v">${hr}</div><div class="l">Avg HR</div></div>
       </div>
       <div class="pf-exp" id="${eid}" style="display:none">
-        ${w.description ? `<div class="desc md-body">${typeof formatMarkdown === 'function' ? formatMarkdown(w.description) : escapeHtml(w.description)}</div>` : ''}
+        ${(() => { const _d = _stripRedundantActivation(w.description); return _d ? `<div class="desc md-body">${typeof formatMarkdown === 'function' ? formatMarkdown(_d) : escapeHtml(_d)}</div>` : ''; })()}
         <div class="acts">
           <button class="btn" onclick="event.stopPropagation(); viewHistoryDetail('${act._dbId}')">📊 Review</button>
           ${_isWorkoutAnalyzed(act._dbId)
@@ -26445,7 +26482,7 @@ function _pfCardHTML(w) {
     </div>
     <div class="pf-exp" id="${eid}" style="display:none">
       ${_pfActivationHTML(w)}
-      ${w.description ? `<div class="desc md-body">${typeof formatMarkdown === 'function' ? formatMarkdown(w.description) : escapeHtml(w.description)}</div>` : ''}
+      ${(() => { const _d = _stripRedundantActivation(w.description); return _d ? `<div class="desc md-body">${typeof formatMarkdown === 'function' ? formatMarkdown(_d) : escapeHtml(_d)}</div>` : ''; })()}
       ${w.intensity_target ? `<div class="it"><strong>Target:</strong> ${escapeHtml(w.intensity_target)}</div>` : ''}
       <div class="acts">
         <button class="btn" onclick="event.stopPropagation(); askCoachAboutWorkout('${w.id}')">💬 Ask Coach</button>
@@ -26518,7 +26555,7 @@ function renderPlanDayList(plannedWorkouts) {
       const dd = toDate(ds);
       html += `<div class="pf-day${isToday ? ' today' : ''}"${isToday ? ' id="pf-today"' : ''}>
         <div class="pf-rail"><div class="pf-chip"><div class="dow">${dd.toLocaleDateString('en-US', { weekday: 'short' })}</div><div class="num">${dd.getDate()}</div></div><div class="pf-railline"></div></div>
-        <div class="pf-col">${items.map(_pfCardHTML).join('')}</div>
+        <div class="pf-col">${_pfDedupeRest(items).map(_pfCardHTML).join('')}</div>
       </div>`;
     }
     cur.setDate(cur.getDate() + 1);
