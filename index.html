@@ -659,15 +659,15 @@ body.has-tabbar #page-profile.active {
 .prof-sub { font-size: 13px; color: var(--text-dim); margin-top: 5px; }
 .prof-bio { padding: 14px 16px 0; font-size: 14px; color: var(--text-dim); line-height: 1.55; }
 /* Edit pill — sits on its own right-aligned row, just above the sport switch. */
-.prof-edit-row { display: flex; justify-content: flex-end; padding: 16px 16px 0; }
+.prof-edit-row { display: flex; justify-content: flex-start; padding: 14px 16px 0; }
 .prof-edit-mini { padding: 7px 18px; font-size: 13px; font-weight: 700; color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent-border); border-radius: 999px; cursor: pointer; font-family: inherit; -webkit-tap-highlight-color: transparent; transition: background 0.15s; }
 .prof-edit-mini:active { background: rgba(0,229,160,0.18); }
 /* Totals — three clean stats in a soft frame; label on top, number below. */
 .prof-totals { display: flex; align-items: stretch; margin: 20px 16px 0; padding: 18px 6px; background: rgba(255,255,255,0.025); border: 1px solid var(--border); border-radius: 16px; }
-.prof-total { flex: 1; text-align: center; padding: 0 4px; }
+.prof-total { flex: 1; min-width: 0; text-align: center; padding: 0 4px; overflow: hidden; }
 .prof-total + .prof-total { border-left: 1px solid var(--border); }
 .prof-total-l { font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
-.prof-total-n { font-size: 23px; font-weight: 800; letter-spacing: -0.4px; white-space: nowrap; }
+.prof-total-n { font-size: clamp(15px, 4.4vw, 23px); font-weight: 800; letter-spacing: -0.4px; white-space: nowrap; }
 /* Segmented sport switch */
 .prof-sport-tabs { display: flex; gap: 4px; margin: 22px 16px 16px; padding: 4px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 14px; }
 .prof-sport-tab { flex: 1; display: flex; align-items: center; justify-content: center; gap: 7px; padding: 9px 6px; border: none; background: transparent; color: var(--text-dim); border-radius: 10px; font-size: 13px; font-weight: 700; font-family: inherit; cursor: pointer; transition: background 0.15s, color 0.15s; -webkit-tap-highlight-color: transparent; }
@@ -3041,7 +3041,7 @@ body.coach-chat-active .chat-msg.user .msg-bubble {
 }
 body.coach-chat-active .chat-msg.user .msg-bubble strong { color: var(--text); }
 @media (max-width: 720px) {
-  body.coach-chat-active .chat-messages { padding: calc(var(--coach-nav-h, 56px) + 10px) 14px 22px; gap: 20px; }
+  body.coach-chat-active .chat-messages { padding: calc(var(--safe-top) + 64px) 14px 22px; gap: 20px; }
   body.coach-chat-active .chat-input-row { padding: 8px 12px max(12px, var(--safe-bottom)); }
   body.coach-chat-active .chat-msg.user { max-width: 80% !important; }
 }
@@ -25888,38 +25888,36 @@ async function renderPlan() {
         ` : ''}
       </div>
     ` : hasPlan && currentWeekInfo ? `
-      <div style="background: linear-gradient(135deg, rgba(0, 255, 163, 0.06), rgba(80, 130, 255, 0.03)); border: 1px solid rgba(0, 255, 163, 0.2); border-radius: 14px; padding: 16px 20px; margin-bottom: 18px;">
+      <div style="background: linear-gradient(135deg, rgba(0, 255, 163, 0.07), rgba(80, 130, 255, 0.04)); border: 1px solid rgba(0, 255, 163, 0.22); border-radius: 16px; padding: 16px 18px; margin-bottom: 18px;">
         ${isImportedPlan ? `
-          <div style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: rgba(80, 130, 255, 0.12); border: 1px solid rgba(80, 130, 255, 0.3); border-radius: 999px; font-size: 11px; color: #82a4ff; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px;">📥 Imported plan</div>
+          <div style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: rgba(80, 130, 255, 0.12); border: 1px solid rgba(80, 130, 255, 0.3); border-radius: 999px; font-size: 11px; color: #82a4ff; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px;">📥 Imported plan</div>
         ` : ''}
-        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
-          <div>
-            <div style="font-size: 11px; color: var(--accent); text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; margin-bottom: 4px;">You are here</div>
-            <div style="font-size: 18px; font-weight: 700; color: var(--text); margin-bottom: 2px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-              <span>Week ${currentWeekIndex}${isImportedPlan && importedTotalWeeks ? ` of ${importedTotalWeeks}` : (totalWeeks ? ` of ${totalWeeks}` : '')} · ${(currentWeekInfo.phase || '').replace(/_/g, ' ')}${currentWeekInfo.is_deload ? ' · DELOAD' : ''}</span>
-              ${isImportedPlan ? `<button onclick="openEditCurrentWeekModal(${currentWeekIndex}, ${importedTotalWeeks || 'null'})" title="Adjust the current week if it's wrong" style="background: var(--bg-3); border: 1px solid var(--border); border-radius: 6px; padding: 2px 8px; color: var(--text-dim); cursor: pointer; font-size: 11px; font-family: inherit; line-height: 1; height: 22px; display: inline-flex; align-items: center; gap: 4px;">✏️ <span>Edit</span></button>` : ''}
-            </div>
-            <div style="font-size: 13px; color: var(--text-dim); line-height: 1.5;">${currentWeekInfo.focus || ''}</div>
-            ${isImportedPlan ? (() => {
-              // If we have weeks_overview, show how many upcoming weeks are queued
-              const profile = activePlan?.plan_data?._plan_profile;
-              const weeksOverview = profile?.weeks_overview;
-              if (Array.isArray(weeksOverview) && weeksOverview.length > 0) {
-                const upcoming = weeksOverview.filter(w => w.week_number && w.week_number > currentWeekIndex).length;
-                if (upcoming > 0) {
-                  return `<div style="font-size: 12px; color: var(--text-mute); margin-top: 6px;">${upcoming} more week${upcoming === 1 ? '' : 's'} queued, auto-builds as we get to them</div>`;
-                }
-              }
-              return '';
-            })() : ''}
-          </div>
-          ${currentWeekInfo.target_volume_hours ? `
-            <div style="flex-shrink: 0; display: flex; flex-direction: column; align-items: center; min-width: 60px;">
-              <div style="font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1.2px; font-weight: 700; margin-bottom: 4px; text-align: center;">Target</div>
-              <div style="font-size: 22px; font-weight: 800; color: var(--text); font-family: 'JetBrains Mono', monospace; line-height: 1; text-align: center;">${currentWeekInfo.target_volume_hours}h</div>
-            </div>
-          ` : ''}
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+          <div style="font-size: 11px; color: var(--accent); text-transform: uppercase; letter-spacing: 1.5px; font-weight: 800;">You are here</div>
+          ${(currentWeekInfo.phase || currentWeekInfo.is_deload) ? `<div style="flex-shrink: 0; font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: ${currentWeekInfo.is_deload ? '#ffd166' : 'var(--accent)'}; border: 1px solid ${currentWeekInfo.is_deload ? 'rgba(255,209,102,0.4)' : 'rgba(0,255,163,0.35)'}; border-radius: 999px; padding: 3px 10px; white-space: nowrap;">${currentWeekInfo.is_deload ? 'Deload' : (currentWeekInfo.phase || '').replace(/_/g, ' ')}</div>` : ''}
         </div>
+        <div style="font-size: 22px; font-weight: 800; color: var(--text); letter-spacing: -0.3px; margin-top: 6px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+          <span>Week ${currentWeekIndex}${(isImportedPlan && importedTotalWeeks) ? `<span style="color: var(--text-mute); font-weight: 600; font-size: 16px;"> of ${importedTotalWeeks}</span>` : (totalWeeks ? `<span style="color: var(--text-mute); font-weight: 600; font-size: 16px;"> of ${totalWeeks}</span>` : '')}</span>
+          ${isImportedPlan ? `<button onclick="openEditCurrentWeekModal(${currentWeekIndex}, ${importedTotalWeeks || 'null'})" title="Adjust the current week if it's wrong" style="background: var(--bg-3); border: 1px solid var(--border); border-radius: 6px; padding: 2px 8px; color: var(--text-dim); cursor: pointer; font-size: 11px; font-family: inherit; line-height: 1; height: 22px; display: inline-flex; align-items: center; gap: 4px;">✏️ <span>Edit</span></button>` : ''}
+        </div>
+        ${currentWeekInfo.focus ? `<div style="font-size: 13px; color: var(--text-dim); line-height: 1.5; margin-top: 4px;">${currentWeekInfo.focus}</div>` : ''}
+        ${isImportedPlan ? (() => {
+          // If we have weeks_overview, show how many upcoming weeks are queued
+          const profile = activePlan?.plan_data?._plan_profile;
+          const weeksOverview = profile?.weeks_overview;
+          if (Array.isArray(weeksOverview) && weeksOverview.length > 0) {
+            const upcoming = weeksOverview.filter(w => w.week_number && w.week_number > currentWeekIndex).length;
+            if (upcoming > 0) {
+              return `<div style="font-size: 12px; color: var(--text-mute); margin-top: 6px;">${upcoming} more week${upcoming === 1 ? '' : 's'} queued, auto-builds as we get to them</div>`;
+            }
+          }
+          return '';
+        })() : ''}
+        ${currentWeekInfo.target_volume_hours ? `
+          <div style="display: flex; align-items: center; gap: 8px; margin-top: 12px; padding: 9px 12px; background: rgba(0,0,0,0.18); border-radius: 10px; font-size: 13px; color: var(--text-dim);">
+            <span>🎯</span><span>This week's target: <b style="color: var(--text); font-family: 'JetBrains Mono', monospace;">${Math.round(currentWeekInfo.target_volume_hours)}h</b></span>
+          </div>
+        ` : ''}
       </div>
     ` : hasPlan ? `
       <div style="background: var(--bg-2); border: 1px solid var(--border); border-radius: 14px; padding: 14px 18px; margin-bottom: 18px; display: flex; align-items: center; gap: 12px;">
@@ -27012,16 +27010,29 @@ function openPlanWorkout(dateStr) {
   // navigate to the feed, scroll to today's card, and expand its inline dropdown.
   navigate('plan');
   let tries = 0;
-  const tryOpen = () => {
+  // Expand today's first collapsed card (planned or completed). Returns true once
+  // today's group exists in the DOM.
+  const expandTodayIfCollapsed = () => {
     const todayDay = document.getElementById('pf-today');
-    if (todayDay) {
-      // Expand the first expandable card in today's group (planned or completed).
-      const crow = todayDay.querySelector('.pf-crow');
-      const exp = todayDay.querySelector('.pf-exp');
-      if (crow && exp && exp.style.display === 'none') {
-        try { togglePlanCard(exp.id, crow); } catch (_) {}
-      }
+    if (!todayDay) return false;
+    const crow = todayDay.querySelector('.pf-crow');
+    const exp = todayDay.querySelector('.pf-exp');
+    if (crow && exp && exp.style.display === 'none') {
+      try { togglePlanCard(exp.id, crow); } catch (_) {}
+    }
+    return true;
+  };
+  const tryOpen = () => {
+    if (expandTodayIfCollapsed()) {
       try { scrollToTodayWorkout(); } catch (_) {}
+      // A late re-render (after workouts finish loading) can rebuild the feed and
+      // collapse the card we just opened. Hold it open for a short window by
+      // re-expanding it if a re-render leaves it collapsed again.
+      let holds = 0;
+      const holder = setInterval(() => {
+        try { expandTodayIfCollapsed(); } catch (_) {}
+        if (++holds >= 9) clearInterval(holder); // ~1.8s
+      }, 200);
       return;
     }
     if (tries++ < 30) setTimeout(tryOpen, 100);
@@ -27623,9 +27634,13 @@ async function renderProfile() {
     totalMin += _profMinutes(w.workout_data);
     dayset.add(toLocalYMD(new Date(w.created_at)));
   });
-  let streak = 0; const cur = new Date();
-  if (!dayset.has(toLocalYMD(cur))) cur.setDate(cur.getDate() - 1);
-  while (dayset.has(toLocalYMD(cur))) { streak++; cur.setDate(cur.getDate() - 1); }
+  // Weekly streak: consecutive weeks (Mon-Sun) with at least one workout, counting
+  // back from this week (or last week if nothing's been logged yet this week).
+  const _mondayKey = (dt) => { const x = new Date(dt); const dow = (x.getDay() + 6) % 7; x.setDate(x.getDate() - dow); return toLocalYMD(x); };
+  const weekset = new Set(); workouts.forEach(w => weekset.add(_mondayKey(new Date(w.created_at))));
+  let streak = 0; const _wk = new Date();
+  if (!weekset.has(_mondayKey(_wk))) _wk.setDate(_wk.getDate() - 7);
+  while (weekset.has(_mondayKey(_wk))) { streak++; _wk.setDate(_wk.getDate() - 7); }
 
   const name = state.user.name || p.displayName || 'Athlete';
   const initial = (name[0] || 'A').toUpperCase();
@@ -27715,13 +27730,13 @@ async function renderProfile() {
     </div>
     ${p.bio ? `<div class="prof-bio">${escapeHtml(p.bio)}</div>` : ''}
 
+    <div class="prof-edit-row"><button class="prof-edit-mini" onclick="openProfileEditModal()">✎ Edit</button></div>
+
     <div class="prof-totals">
       <div class="prof-total"><div class="prof-total-l">Activities</div><div class="prof-total-n">${workouts.length}</div></div>
       <div class="prof-total"><div class="prof-total-l">Distance</div><div class="prof-total-n">${formatDistance(totalDist, 0)}</div></div>
-      <div class="prof-total"><div class="prof-total-l">Day streak</div><div class="prof-total-n">🔥 ${streak}</div></div>
+      <div class="prof-total"><div class="prof-total-l">Week streak</div><div class="prof-total-n">🔥 ${streak}</div></div>
     </div>
-
-    <div class="prof-edit-row"><button class="prof-edit-mini" onclick="openProfileEditModal()">✎ Edit</button></div>
 
     ${renderRacesCard(intake)}
 
