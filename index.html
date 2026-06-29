@@ -27723,12 +27723,163 @@ async function renderProfile() {
 
     <div class="prof-edit-row"><button class="prof-edit-mini" onclick="openProfileEditModal()">✎ Edit</button></div>
 
+    ${renderRacesCard(intake)}
+
     <div class="prof-sport-tabs">
       ${sports.map(s => `<button class="prof-sport-tab${s === 'run' ? ' active' : ''}" data-sport="${s}" onclick="_profSelectSport('${s}')"><span class="prof-sport-emoji">${sportMeta[s].emoji}</span><span>${sportMeta[s].label}</span></button>`).join('')}
     </div>
     ${sports.map(sportPane).join('')}
     <div style="height: 8px;"></div>
   `;
+}
+
+// ── Multi-race "Your races" card (Profile) ──────────────────────────────────
+// Viewing / adding / removing races is a cheap DB write that also re-mirrors the
+// A-race target into the legacy goal_event/race_date columns. It does NOT rebuild
+// the plan and spends NO Coach tokens. Only the explicit "Rebuild plan" button
+// runs a single generate_plan call.
+function _raceLabel(ev) {
+  const map = { '5k': '5K', '10k': '10K', half_marathon: 'Half Marathon', half: 'Half Marathon', marathon: 'Marathon', sprint_tri: 'Sprint Triathlon', olympic_tri: 'Olympic Triathlon', '70_3': 'Ironman 70.3', ironman: 'Ironman', general: 'General fitness' };
+  if (!ev) return 'Race';
+  return map[String(ev).toLowerCase()] || String(ev).replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+function _racesForDisplay(intake) {
+  let races = Array.isArray(intake?.races) ? intake.races.slice() : [];
+  // Existing single-race users have an empty races[] but a real race_date — surface it as the A race.
+  if (!races.length && intake?.race_date) {
+    races = [{ id: '_legacyA', date: intake.race_date, event: intake.goal_event || 'Race', goal_time: intake.goal_time || null, priority: 'A' }];
+  }
+  return races.filter(r => r && r.date).sort((a, b) => String(a.date).localeCompare(String(b.date)));
+}
+function _clientRaceTargetPatch(races) {
+  const today = toLocalYMD(new Date());
+  const sorted = (Array.isArray(races) ? races : []).filter(r => r && r.date).sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  if (!sorted.length) return {};
+  const upcoming = sorted.filter(r => String(r.date) >= today);
+  const target = upcoming.find(r => String(r.priority || 'A').toUpperCase() === 'A') || upcoming[0] || sorted[sorted.length - 1];
+  return target ? { goal_event: target.event || null, race_date: target.date || null, goal_time: target.goal_time || null } : {};
+}
+async function _clientSaveRaces(races) {
+  const patch = Object.assign({ races }, _clientRaceTargetPatch(races));
+  const { error } = await sb.from('athlete_intake').update(patch).eq('user_id', state.user.id);
+  if (error) throw error;
+}
+function renderRacesCard(intake) {
+  const races = _racesForDisplay(intake);
+  window._lastRaces = races;
+  const today = toLocalYMD(new Date());
+  const badge = (p) => {
+    const pr = String(p || 'A').toUpperCase();
+    const col = pr === 'A' ? 'var(--accent)' : 'var(--text-mute)';
+    return `<span style="display:inline-block;margin-left:8px;font-size:10px;font-weight:800;letter-spacing:0.5px;color:${col};border:1px solid ${col};border-radius:5px;padding:1px 5px;vertical-align:middle;">${pr}</span>`;
+  };
+  const rowHtml = (r) => {
+    const d = new Date(r.date + 'T12:00:00');
+    const dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    const days = Math.round((d.getTime() - new Date(today + 'T12:00:00').getTime()) / 86400000);
+    const when = days > 0 ? `in ${days} day${days === 1 ? '' : 's'}` : (days === 0 ? 'today' : `${-days} day${days === -1 ? '' : 's'} ago`);
+    const sub = `${dateStr} &middot; ${when}${r.goal_time ? ' &middot; ' + escapeHtml(r.goal_time) : ''}`;
+    const rm = r.id === '_legacyA' ? '' : `<button onclick="_removeRaceUI('${r.id}')" aria-label="Remove race" style="background:none;border:none;color:var(--text-mute);font-size:18px;cursor:pointer;padding:4px 8px;line-height:1;">&times;</button>`;
+    return `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 0;border-top:1px solid var(--border);">
+      <div style="min-width:0;"><div style="font-weight:700;font-size:14px;">${escapeHtml(_raceLabel(r.event))}${badge(r.priority)}</div><div style="font-size:12px;color:var(--text-dim);margin-top:2px;">${sub}</div></div>
+      ${rm}</div>`;
+  };
+  const list = races.length
+    ? races.map(rowHtml).join('')
+    : `<div style="font-size:13px;color:var(--text-mute);padding:12px 0;border-top:1px solid var(--border);">No races yet. Add the race you're training for, plus any tune-up races along the way.</div>`;
+  const rebuildBtn = races.length
+    ? `<button class="btn" style="width:100%;margin-top:12px;" onclick="_rebuildPlanForRaces(this)">Rebuild plan around my races</button>`
+    : '';
+  return `<div style="background:var(--bg-2);border:1px solid var(--border);border-radius:16px;padding:16px 16px 14px;margin:14px 0;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+      <div style="font-size:15px;font-weight:800;">Your races</div>
+      <button class="bench-add-btn" onclick="openAddRaceModal()">+ Add race</button>
+    </div>
+    <div style="font-size:11.5px;color:var(--text-mute);margin-bottom:8px;">A = main goal your plan builds toward &middot; B/C = tune-up races</div>
+    ${list}
+    ${rebuildBtn}
+  </div>`;
+}
+function openAddRaceModal() {
+  if (document.getElementById('addRaceModal')) return;
+  const todayStr = toLocalYMD(new Date());
+  const opts = [['5k', '5K'], ['10k', '10K'], ['half_marathon', 'Half Marathon'], ['marathon', 'Marathon'], ['sprint_tri', 'Sprint Triathlon'], ['olympic_tri', 'Olympic Triathlon'], ['70_3', 'Ironman 70.3'], ['ironman', 'Ironman'], ['other', 'Other']];
+  const hasA = (window._lastRaces || []).some(r => String(r.priority || 'A').toUpperCase() === 'A');
+  const defPri = hasA ? 'B' : 'A';
+  const selStyle = 'width:100%;padding:13px 14px;box-sizing:border-box;background:var(--bg-3);color:var(--text);border:1px solid var(--border);border-radius:10px;font-size:15px;font-family:inherit;';
+  const m = document.createElement('div');
+  m.id = 'addRaceModal';
+  m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:99999;display:flex;align-items:center;justify-content:center;padding:18px;';
+  m.innerHTML = `<div style="background:var(--bg-2);border:1px solid var(--border);border-radius:16px;padding:22px 20px;max-width:420px;width:100%;max-height:88vh;overflow-y:auto;">
+    <div style="font-size:18px;font-weight:800;margin-bottom:14px;">Add a race</div>
+    <div class="field"><label>Race</label><select id="ar_event" style="${selStyle}">${opts.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select></div>
+    <div class="field"><label>Race date</label><input type="date" id="ar_date" min="${todayStr}" style="color-scheme:dark;" /></div>
+    <div class="field"><label>Priority</label><select id="ar_priority" style="${selStyle}">${[['A', 'A — main goal'], ['B', 'B — tune-up'], ['C', 'C — tune-up']].map(([v, l]) => `<option value="${v}"${v === defPri ? ' selected' : ''}>${l}</option>`).join('')}</select></div>
+    <div class="field"><label>Goal time <span style="color:var(--text-mute);font-weight:400;font-size:11px;">optional</span></label><input type="text" id="ar_time" placeholder="e.g. sub-45, finish strong" /></div>
+    <div style="display:flex;gap:10px;margin-top:8px;">
+      <button class="btn ghost" style="flex:1;" onclick="document.getElementById('addRaceModal').remove()">Cancel</button>
+      <button class="btn" style="flex:1.4;" id="arSaveBtn" onclick="_addRaceFromUI(this)">Add race</button>
+    </div>
+  </div>`;
+  document.body.appendChild(m);
+  m.addEventListener('click', e => { if (e.target === m) m.remove(); });
+}
+async function _addRaceFromUI(btn) {
+  const ev = document.getElementById('ar_event')?.value || '';
+  const date = document.getElementById('ar_date')?.value || '';
+  let priority = (document.getElementById('ar_priority')?.value || 'A').toUpperCase();
+  const goalTime = (document.getElementById('ar_time')?.value || '').trim();
+  if (!date) { toast('Pick a race date'); return; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Adding…'; }
+  try {
+    const { data: row } = await sb.from('athlete_intake').select('races, goal_event, race_date, goal_time').eq('user_id', state.user.id).single();
+    let races = Array.isArray(row?.races) ? row.races : [];
+    // Backfill the existing single goal as the A race so a new race doesn't clobber it.
+    if (!races.length && row?.race_date) {
+      races = [{ id: 'r' + Date.now().toString(36) + '0', date: row.race_date, event: row.goal_event || 'race', goal_time: row.goal_time || null, priority: 'A' }];
+    }
+    if (!['A', 'B', 'C'].includes(priority)) priority = races.some(r => String(r.priority || 'A').toUpperCase() === 'A') ? 'B' : 'A';
+    const id = 'r' + Date.now().toString(36);
+    const next = races.filter(r => !(String(r.date) === date && String(r.event || '').toLowerCase() === String(ev).toLowerCase()));
+    next.push({ id, date, event: ev || 'race', goal_time: goalTime || null, priority });
+    await _clientSaveRaces(next);
+    document.getElementById('addRaceModal')?.remove();
+    toast('Race added. Tap "Rebuild plan" to apply it.');
+    renderProfile();
+  } catch (e) {
+    console.error('[Stryxs] add race failed:', e);
+    toast('Could not add the race, try again.');
+    if (btn) { btn.disabled = false; btn.textContent = 'Add race'; }
+  }
+}
+async function _removeRaceUI(id) {
+  if (!confirm('Remove this race?')) return;
+  try {
+    const { data: row } = await sb.from('athlete_intake').select('races').eq('user_id', state.user.id).single();
+    const races = Array.isArray(row?.races) ? row.races : [];
+    const next = races.filter(r => String(r.id) !== String(id));
+    const patch = Object.assign({ races: next }, _clientRaceTargetPatch(next));
+    if (!next.length) patch.race_date = null;
+    const { error } = await sb.from('athlete_intake').update(patch).eq('user_id', state.user.id);
+    if (error) throw error;
+    toast('Race removed. Tap "Rebuild plan" to apply.');
+    renderProfile();
+  } catch (e) {
+    console.error('[Stryxs] remove race failed:', e);
+    toast('Could not remove that race, try again.');
+  }
+}
+async function _rebuildPlanForRaces(btn) {
+  if (btn) { btn.disabled = true; btn.textContent = 'Rebuilding…'; }
+  try {
+    const { data: intake } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).single();
+    if (!intake) { toast('No profile found'); if (btn) { btn.disabled = false; btn.textContent = 'Rebuild plan around my races'; } return; }
+    await _rebuildPlanInPlace(intake, { skipIntro: true, heroSub: 'Rebuilding your plan around your races.', doneMsg: '✓ Your plan is rebuilt around your races. Head to the Plan tab to see it.', toast: 'Plan rebuilt!' });
+  } catch (e) {
+    console.error('[Stryxs] race rebuild failed:', e);
+    toast('Rebuild failed, try again.');
+    if (btn) { btn.disabled = false; btn.textContent = 'Rebuild plan around my races'; }
+  }
 }
 
 function _profSelectSport(s) {
