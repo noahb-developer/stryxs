@@ -1385,7 +1385,7 @@ h1.hero-h .grad {
   color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;
 }
 .field input {
-  width: 100%; padding: 13px 14px;
+  width: 100%; padding: 13px 14px; box-sizing: border-box;
   background: var(--bg-3); color: var(--text);
   border: 1px solid var(--border); border-radius: 10px;
   font-size: 15px; font-family: inherit; outline: none;
@@ -1393,6 +1393,8 @@ h1.hero-h .grad {
 }
 .field input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .field input::placeholder { color: var(--text-mute); }
+/* iOS date inputs carry an intrinsic min-width that overflows the .field box; neutralize it. */
+.field input[type="date"] { -webkit-appearance: none; appearance: none; min-width: 0; max-width: 100%; }
 
 /* Onboarding welcome modal */
 .onb-overlay {
@@ -20583,26 +20585,78 @@ async function _handleCoachPlanCommand(pc, intake, msgs) {
   try { await sb.from('coach_messages').insert({ user_id: state.user.id, role: 'coach', content: reply, context_type: 'general_chat' }); } catch (_) {}
   if (msgs) { msgs.innerHTML += renderMsg('coach', reply); msgs.scrollTop = msgs.scrollHeight; }
 
-  // ADJUST = keep the SAME goal but bake a specific free-form preference
-  // ("more swimming", "more rest days", "fewer bike sessions") into the plan.
-  // We PERSIST the preference on the intake and rebuild in place, so the new plan
-  // actually reflects the ask (and so does every future auto-extended week). No
-  // modal — the goal isn't changing, just the shape of the training.
+  // ADJUST = keep the SAME goal but change something specific. Two shapes:
+  //  - availability ("more training days", "I can train 5 days now", "summer break"):
+  //    re-collect the real days via the picker (that IS the clarify step), then rebuild.
+  //  - everything else ("more swimming", "more rest", "easier"): persist as a free-form
+  //    preference and rebuild in place. No goal modal either way, the goal isn't changing.
   if (pc.intent === 'adjust') {
-    await _applyAdjustAndRebuild(pc.preferences || '', intake, msgs);
+    if (_looksLikeAvailabilityChange(pc.preferences || '')) {
+      await _adjustTrainingDaysAndRebuild(pc.preferences || '', intake, msgs);
+    } else {
+      await _applyAdjustAndRebuild(pc.preferences || '', intake, msgs);
+    }
     return;
   }
 
-  const goal = (intake && intake.goal_event) || '';
-  // Small delay so the reply renders before the modal opens.
+  // REGENERATE = rebuild around the SAME goal with no specific change. Rebuild in place,
+  // never open the goal modal (we don't ask the user to re-pick a goal they're keeping).
+  if (pc.intent === 'regenerate') {
+    await _applyAdjustAndRebuild('', intake, msgs);
+    return;
+  }
+
+  // Small delay so the reply renders before a modal opens. Only NEW goal / import / reset
+  // open a modal now. Anything unexpected falls back to a safe in-place rebuild.
   setTimeout(() => {
     try {
       if (pc.intent === 'import') { if (typeof openImportModal === 'function') openImportModal(); }
       else if (pc.intent === 'reset') { if (typeof openResetModal === 'function') openResetModal('full'); }
       else if (pc.intent === 'new_goal') { if (typeof openNextGoalModal === 'function') openNextGoalModal(); }
-      else { if (typeof openNextGoalModal === 'function') openNextGoalModal(goal); } // regenerate -> rebuild around current goal
+      else { _applyAdjustAndRebuild('', intake, msgs); }
     } catch (_) {}
   }, 450);
+}
+
+// True when an adjust request is really about HOW MANY / WHICH days the athlete can
+// train (vs a content tweak like "more swimming"). These must change available_days,
+// so we route them through the day picker rather than storing a cosmetic note.
+function _looksLikeAvailabilityChange(text) {
+  return /\b(\d+\s*days?|days?\s*(a|per)\s*week|more\s+(training\s+)?days|extra\s+(training\s+)?days|fewer\s+(training\s+)?days|less\s+(training\s+)?days|add\s+(a\s+|another\s+)?(training\s+)?day|drop\s+(a\s+)?day|every\s?day|everyday|train\s+(more|every|all|daily)|availab\w+|which\s+days|summer\s+break|days?\s+i\s+can\s+train)\b/i.test(String(text || ''));
+}
+
+// Availability-change adjust: open the day picker prefilled with the current days (this
+// doubles as "ask the user to confirm"), persist the chosen days, merge any free-form
+// note, then rebuild around the SAME goal. Cancelling keeps the current days.
+async function _adjustTrainingDaysAndRebuild(prefText, intake, msgs) {
+  const post = async (content) => {
+    if (msgs) { msgs.innerHTML += renderMsg('coach', content); msgs.scrollTop = msgs.scrollHeight; }
+    try { await sb.from('coach_messages').insert({ user_id: state.user.id, role: 'coach', content, context_type: 'general_chat' }); } catch (_) {}
+  };
+  await post("Let's set your training days. Pick the days you can train now and I'll rebuild your plan around them.");
+  openTrainingDaysModal(intake?.available_days, intake?.preferred_long_day, async (selDays, longDay) => {
+    if (!selDays || !selDays.length) { await post("No problem, I kept your current training days. Tell me when you want to change them."); return; }
+    if (window._adjustRebuildInFlight) { await post("I'm still applying your last change, give me a moment then try again."); return; }
+    window._adjustRebuildInFlight = true;
+    try {
+      const mergedPrefs = prefText ? _mergeTrainingPreference(intake?.training_preferences, prefText) : (intake?.training_preferences || '');
+      await sb.from('athlete_intake').update({ available_days: selDays, preferred_long_day: longDay, training_preferences: mergedPrefs }).eq('user_id', state.user.id);
+      const { data: fresh } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).single();
+      const intakeForBuild = fresh || { ...(intake || {}), available_days: selDays, preferred_long_day: longDay, training_preferences: mergedPrefs };
+      await _rebuildPlanInPlace(intakeForBuild, {
+        heroSub: `Rebuilding around your ${selDays.length} training days a week.`,
+        skipIntro: true,
+        doneMsg: `✓ Done. I've rebuilt your plan around your ${selDays.length} training days a week. Head to the Plan tab to see it.`,
+        toast: 'Plan updated!',
+      });
+    } catch (err) {
+      console.error('[Stryxs] training-days adjust rebuild failed:', err);
+      await post("I couldn't rebuild just now, give it another go in a moment.");
+      try { renderCoach(); } catch (_) {}
+    } finally {
+      window._adjustRebuildInFlight = false;
+    }
+  });
 }
 
 // Merge a new free-form training preference into the stored newest-first list.
