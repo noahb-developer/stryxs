@@ -27764,6 +27764,11 @@ async function _clientSaveRaces(races) {
   const { error } = await sb.from('athlete_intake').update(patch).eq('user_id', state.user.id);
   if (error) throw error;
 }
+// Stable signature of the race set, used to tell whether the plan is already built
+// around the current races (so we don't offer a token-spending rebuild for nothing).
+function _racesSig(races) {
+  return JSON.stringify((Array.isArray(races) ? races : []).map(r => [r.date, String(r.event || '').toLowerCase(), String(r.priority || 'A').toUpperCase(), r.goal_time || '']).sort());
+}
 function renderRacesCard(intake) {
   const races = _racesForDisplay(intake);
   window._lastRaces = races;
@@ -27787,9 +27792,19 @@ function renderRacesCard(intake) {
   const list = races.length
     ? races.map(rowHtml).join('')
     : `<div style="font-size:13px;color:var(--text-mute);padding:12px 0;border-top:1px solid var(--border);">No races yet. Add the race you're training for, plus any tune-up races along the way.</div>`;
-  const rebuildBtn = races.length
-    ? `<button class="btn" style="width:100%;margin-top:12px;" onclick="_rebuildPlanForRaces(this)">Rebuild plan around my races</button>`
-    : '';
+  // Only offer the (token-spending) rebuild when the race set has actually changed
+  // since the last build. Otherwise show a quiet "up to date" note. First view of an
+  // existing plan is treated as already built (no needless rebuild offered).
+  let rebuildBtn = '';
+  if (races.length) {
+    const key = 'stryxs_races_built_' + (state.user?.id || '');
+    const sig = _racesSig(races);
+    let builtSig = null;
+    try { builtSig = localStorage.getItem(key); if (builtSig === null) { localStorage.setItem(key, sig); builtSig = sig; } } catch (_) {}
+    rebuildBtn = (sig !== builtSig)
+      ? `<button class="btn" style="width:100%;margin-top:12px;" onclick="_rebuildPlanForRaces(this)">Rebuild plan around my races</button>`
+      : `<div style="margin-top:12px;font-size:12.5px;color:var(--text-mute);text-align:center;">✓ Your plan is up to date with these races</div>`;
+  }
   return `<div style="background:var(--bg-2);border:1px solid var(--border);border-radius:16px;padding:16px 16px 14px;margin:14px 0;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
       <div style="font-size:15px;font-weight:800;">Your races</div>
@@ -27812,7 +27827,8 @@ function openAddRaceModal() {
   m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:99999;display:flex;align-items:center;justify-content:center;padding:18px;';
   m.innerHTML = `<div style="background:var(--bg-2);border:1px solid var(--border);border-radius:16px;padding:22px 20px;max-width:420px;width:100%;max-height:88vh;overflow-y:auto;">
     <div style="font-size:18px;font-weight:800;margin-bottom:14px;">Add a race</div>
-    <div class="field"><label>Race</label><select id="ar_event" style="${selStyle}">${opts.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select></div>
+    <div class="field"><label>Race</label><select id="ar_event" style="${selStyle}" onchange="document.getElementById('ar_other_wrap').style.display = this.value === 'other' ? 'block' : 'none';">${opts.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select></div>
+    <div class="field" id="ar_other_wrap" style="display:none;"><label>Describe the race</label><input type="text" id="ar_event_other" maxlength="60" placeholder="e.g. 200m open water swim, 50k trail ultra" /></div>
     <div class="field"><label>Race date</label><input type="date" id="ar_date" min="${todayStr}" style="color-scheme:dark;" /></div>
     <div class="field"><label>Priority</label><select id="ar_priority" style="${selStyle}">${[['A', 'A — main goal'], ['B', 'B — tune-up'], ['C', 'C — tune-up']].map(([v, l]) => `<option value="${v}"${v === defPri ? ' selected' : ''}>${l}</option>`).join('')}</select></div>
     <div class="field"><label>Goal time <span style="color:var(--text-mute);font-weight:400;font-size:11px;">optional</span></label><input type="text" id="ar_time" placeholder="e.g. sub-45, finish strong" /></div>
@@ -27825,11 +27841,19 @@ function openAddRaceModal() {
   m.addEventListener('click', e => { if (e.target === m) m.remove(); });
 }
 async function _addRaceFromUI(btn) {
-  const ev = document.getElementById('ar_event')?.value || '';
+  let ev = document.getElementById('ar_event')?.value || '';
   const date = document.getElementById('ar_date')?.value || '';
   let priority = (document.getElementById('ar_priority')?.value || 'A').toUpperCase();
   const goalTime = (document.getElementById('ar_time')?.value || '').trim();
   if (!date) { toast('Pick a race date'); return; }
+  // "Other" -> store the typed description as the event, so the coach and plan
+  // generator know exactly what the race is (an easy 10k is coached very differently
+  // from a full Ironman or a 200m open-water swim).
+  if (ev === 'other') {
+    const otherTxt = (document.getElementById('ar_event_other')?.value || '').trim();
+    if (!otherTxt) { toast('Describe the race so the coach knows what it is'); return; }
+    ev = otherTxt.slice(0, 60);
+  }
   if (btn) { btn.disabled = true; btn.textContent = 'Adding…'; }
   try {
     const { data: row } = await sb.from('athlete_intake').select('races, goal_event, race_date, goal_time').eq('user_id', state.user.id).single();
@@ -27874,7 +27898,8 @@ async function _rebuildPlanForRaces(btn) {
   try {
     const { data: intake } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).single();
     if (!intake) { toast('No profile found'); if (btn) { btn.disabled = false; btn.textContent = 'Rebuild plan around my races'; } return; }
-    await _rebuildPlanInPlace(intake, { skipIntro: true, heroSub: 'Rebuilding your plan around your races.', doneMsg: '✓ Your plan is rebuilt around your races. Head to the Plan tab to see it.', toast: 'Plan rebuilt!' });
+    const ok = await _rebuildPlanInPlace(intake, { skipIntro: true, heroSub: 'Rebuilding your plan around your races.', doneMsg: '✓ Your plan is rebuilt around your races. Head to the Plan tab to see it.', toast: 'Plan rebuilt!' });
+    if (ok) { try { localStorage.setItem('stryxs_races_built_' + state.user.id, _racesSig(_racesForDisplay(intake))); } catch (_) {} }
   } catch (e) {
     console.error('[Stryxs] race rebuild failed:', e);
     toast('Rebuild failed, try again.');
