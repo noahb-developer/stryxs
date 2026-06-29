@@ -19692,8 +19692,7 @@ async function renderCoachChat(el, intakeMaybe) {
   const msgsToHTML = (msgs) => msgs.map(m => renderMsg(m.role, m.content, m.context_type, m.id, m.image_url)).join('');
   const fallbackHTML = (goal) => renderMsg('coach', (() => {
     const firstName = (state.user?.name || 'there').split(' ')[0];
-    const m = getMethodologyForGoal(goal);
-    return `Hey ${firstName}, ${m.name} in spirit. I built your plan based on what you told me, check the Plan tab to see this week's calendar. Upload your workouts as you do them and I'll give you specific feedback. Ask me anything here.`;
+    return `Hey ${firstName}, welcome to Stryxs. I've built your training plan from what you told me, head to the Plan tab to see this week's calendar. Log your workouts as you do them and I'll give you specific feedback, and ask me anything here.`;
   })());
   const shell = (innerHTML, gate) => `
     <div class="coach-chat">
