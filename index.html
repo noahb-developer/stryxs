@@ -9264,6 +9264,12 @@ function navigate(page, viaBack) {
   updateAppChrome(page);
   window.scrollTo({ top: 0, behavior: 'instant' });
 
+  // Silently pull new Strava workouts in the background (rate-limited to once every
+  // few minutes) so uploads appear on their own, without the user tapping "Sync now".
+  if (state.user && ['dashboard', 'plan', 'upload', 'history', 'trends'].includes(page)) {
+    try { _autoSyncStrava(); } catch (_) {}
+  }
+
   // Add body class so we know which page is active (for full-width landing styling)
   document.body.classList.toggle('on-landing', page === 'landing');
   document.body.classList.toggle('on-auth', page === 'login' || page === 'signup');
@@ -14298,7 +14304,7 @@ async function renderDashTodayCard(intake) {
       const icon = typeof _sportIconHTML === 'function' ? _sportIconHTML(w.sport, 34)
         : `<div style="font-size:24px;flex-shrink:0;">${({run:'🏃',bike:'🚴',swim:'🏊',strength:'💪',gym:'💪',mobility:'🧘',rest:'🛌'}[w.sport]||'⚡')}</div>`;
       return `
-        <div style="display:flex; align-items:center; gap:12px;">
+        <div onclick="event.stopPropagation(); openPlanWorkout('${today}', '${w.id}')" style="display:flex; align-items:center; gap:12px; cursor:pointer;">
           ${icon}
           <div style="flex:1; min-width:0;">
             <div style="font-size:14px; font-weight:700; ${done ? 'opacity:0.5; text-decoration:line-through;' : ''}">${escapeHtml(rowTitle)}</div>
@@ -20349,8 +20355,35 @@ async function _rebuildPlanInPlace(intake, opts = {}) {
   // Collect them first if missing; abort if the user cancels the picker.
   intake = await _ensureTrainingDays(intake);
   if (!intake) { toast('Set your training days first, then I can rebuild your plan.', 4000); return false; }
-  await sb.from('planned_workouts').delete().eq('user_id', state.user.id);
-  await sb.from('training_plans').delete().eq('user_id', state.user.id);
+  // preserveAnchor: SAME-goal rebuilds (change days, tweak prefs, races) keep the
+  // athlete at their CURRENT week instead of restarting at Week 1. Mirrors the proven
+  // Settings "Regenerate" logic: keep the original plan_start_date as the week-index
+  // anchor, generate the CURRENT week, schedule from this week, and clear only FUTURE
+  // sessions (past/completed stay). A NEW goal omits this and rebuilds fresh from Week 1.
+  let _storedStartDate = null, _regenStartDate = null, _weekNumber = 1, _keepAnchor = !!opts.preserveAnchor;
+  if (_keepAnchor) {
+    try {
+      const { data: _ep } = await sb.from('training_plans').select('plan_data').eq('user_id', state.user.id).eq('active', true).order('created_at', { ascending: false }).limit(1).maybeSingle();
+      _storedStartDate = _ep?.plan_data?.plan_start_date || null;
+    } catch (_) {}
+    if (!_storedStartDate) _keepAnchor = false; // nothing to preserve -> fresh build
+  }
+  if (_keepAnchor) {
+    const _t = new Date(); _t.setHours(12, 0, 0, 0);
+    const _ss = new Date(_storedStartDate + 'T12:00:00');
+    if (_ss >= _t) _regenStartDate = _storedStartDate; // plan hasn't started yet
+    if (!_regenStartDate) {
+      const _dow = _t.getDay(); const _off = _dow === 0 ? -6 : 1 - _dow; // this week's Monday
+      const _mon = new Date(_t); _mon.setDate(_t.getDate() + _off);
+      _regenStartDate = _mon.toISOString().split('T')[0];
+    }
+    const _weeksDiff = Math.floor((new Date(_regenStartDate + 'T12:00:00').getTime() - _ss.getTime()) / (7 * 24 * 60 * 60 * 1000));
+    _weekNumber = Math.max(1, _weeksDiff + 1);
+    try { await sb.from('planned_workouts').delete().eq('user_id', state.user.id).gte('scheduled_date', _regenStartDate); } catch (_) {}
+  } else {
+    await sb.from('planned_workouts').delete().eq('user_id', state.user.id);
+    await sb.from('training_plans').delete().eq('user_id', state.user.id);
+  }
   // Show the build live on the Coach page.
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById('page-coach')?.classList.add('active');
@@ -20360,9 +20393,10 @@ async function _rebuildPlanInPlace(intake, opts = {}) {
   if (el) el.innerHTML = `<div style="padding-top: calc(var(--safe-top, 0px) + 64px);"><div class="coach-hero"><div class="coach-avatar">🧠</div><div class="coach-intro"><h2>${opts.heroTitle || 'Building your new plan…'}</h2><p>${opts.heroSub || 'Mapping out your training around your next goal.'}</p><p style="margin-top:10px;padding:10px 14px;background:rgba(255,209,102,0.06);border:1px solid rgba(255,209,102,0.2);border-radius:8px;font-size:13px;color:var(--text-dim);">Don't close this window, it'll interrupt the build.</p></div></div><div class="loading"><div class="spinner"></div>Working</div></div>`;
   let skeleton = null;
   try { skeleton = await _fetchSkeleton(intake); } catch (e) { console.warn('[Stryxs] skeleton failed:', e); }
-  const plan = await callCoach('generate_plan', { intake, weekNumber: 1, skeleton });
+  const plan = await callCoach('generate_plan', { intake, weekNumber: _weekNumber, skeleton });
   if (skeleton) plan.skeleton = skeleton;
-  await savePlanToDb(plan, state.user.id);
+  if (_keepAnchor) plan.plan_start_date = _storedStartDate || _regenStartDate; // keep the original week anchor
+  await savePlanToDb(plan, state.user.id, _keepAnchor ? _regenStartDate : undefined);
   _lastAutoExtendCheck = 0; _autoExtendInFlight = false;
   // opts.skipAutoExtend (used by the chat "adjust" flow) avoids eagerly building a
   // whole month here — that's up to 5 extra plan-gen calls PER tweak, which burns a
@@ -20644,8 +20678,11 @@ async function _adjustTrainingDaysAndRebuild(prefText, intake, msgs) {
       const intakeForBuild = fresh || { ...(intake || {}), available_days: selDays, preferred_long_day: longDay, training_preferences: mergedPrefs };
       await _rebuildPlanInPlace(intakeForBuild, {
         heroSub: `Rebuilding around your ${selDays.length} training days a week.`,
-        skipIntro: true,
-        doneMsg: `✓ Done. I've rebuilt your plan around your ${selDays.length} training days a week. Head to the Plan tab to see it.`,
+        // Generate the plan-intro so the coach EXPLAINS the rebuilt plan (phases,
+        // how volume ramps) instead of silently rebuilding, then a short confirm.
+        skipIntro: false,
+        preserveAnchor: true,
+        doneMsg: `✓ Rebuilt around your ${selDays.length} training days a week. See the Plan tab, and the note above explains how it progresses.`,
         toast: 'Plan updated!',
       });
     } catch (err) {
@@ -20700,6 +20737,7 @@ async function _applyAdjustAndRebuild(preferenceText, intake, msgs) {
     await _rebuildPlanInPlace(intakeForBuild, {
       heroSub: pref ? `Working your request in: ${pref}.` : 'Reshaping your training around your request.',
       skipIntro: true,
+      preserveAnchor: true,
       // Build the upcoming weeks now (not lazily) so the plan is fully populated the
       // moment the build screen finishes — no "only one week, then it fills in a few
       // minutes later" surprise. Burn is bounded by the monthly cap + in-flight guard.
@@ -27004,33 +27042,34 @@ function renderCalendarGrid(plannedWorkouts) {
 // Open the Plan tab AND pop the workout-detail panel for a given date (used by
 // the dashboard "today" card so a tap goes straight to the session, not just the
 // calendar). Sets the calendar to that month, then waits for the grid to populate.
-function openPlanWorkout(dateStr) {
+function openPlanWorkout(dateStr, workoutId) {
   // The Plan page is the day-by-day FEED now (renderPlanDayList), not the old
-  // calendar grid + modal panel. So instead of opening the legacy workout panel,
-  // navigate to the feed, scroll to today's card, and expand its inline dropdown.
+  // calendar grid + modal panel. Navigate to the feed and expand the SPECIFIC
+  // session card (id-based, so clicking the 2nd session opens the 2nd, not the
+  // first). Falls back to today's first card when no id is given.
   navigate('plan');
   let tries = 0;
-  // Expand today's first collapsed card (planned or completed). Returns true once
-  // today's group exists in the DOM.
-  const expandTodayIfCollapsed = () => {
-    const todayDay = document.getElementById('pf-today');
-    if (!todayDay) return false;
-    const crow = todayDay.querySelector('.pf-crow');
-    const exp = todayDay.querySelector('.pf-exp');
-    if (crow && exp && exp.style.display === 'none') {
-      try { togglePlanCard(exp.id, crow); } catch (_) {}
+  const expandTarget = () => {
+    let exp = (workoutId != null) ? document.getElementById('pfexp-' + workoutId) : null;
+    if (!exp) {
+      const todayDay = document.getElementById('pf-today');
+      if (!todayDay) return false; // feed not rendered yet
+      exp = todayDay.querySelector('.pf-exp');
     }
+    if (!exp) return false;
+    const crow = exp.parentElement ? exp.parentElement.querySelector('.pf-crow') : null;
+    if (crow && exp.style.display === 'none') { try { togglePlanCard(exp.id, crow); } catch (_) {} }
     return true;
   };
   const tryOpen = () => {
-    if (expandTodayIfCollapsed()) {
+    if (expandTarget()) {
       try { scrollToTodayWorkout(); } catch (_) {}
       // A late re-render (after workouts finish loading) can rebuild the feed and
       // collapse the card we just opened. Hold it open for a short window by
       // re-expanding it if a re-render leaves it collapsed again.
       let holds = 0;
       const holder = setInterval(() => {
-        try { expandTodayIfCollapsed(); } catch (_) {}
+        try { expandTarget(); } catch (_) {}
         if (++holds >= 9) clearInterval(holder); // ~1.8s
       }, 200);
       return;
@@ -27913,7 +27952,7 @@ async function _rebuildPlanForRaces(btn) {
   try {
     const { data: intake } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).single();
     if (!intake) { toast('No profile found'); if (btn) { btn.disabled = false; btn.textContent = 'Rebuild plan around my races'; } return; }
-    const ok = await _rebuildPlanInPlace(intake, { skipIntro: true, heroSub: 'Rebuilding your plan around your races.', doneMsg: '✓ Your plan is rebuilt around your races. Head to the Plan tab to see it.', toast: 'Plan rebuilt!' });
+    const ok = await _rebuildPlanInPlace(intake, { skipIntro: true, preserveAnchor: true, heroSub: 'Rebuilding your plan around your races.', doneMsg: '✓ Your plan is rebuilt around your races. Head to the Plan tab to see it.', toast: 'Plan rebuilt!' });
     if (ok) { try { localStorage.setItem('stryxs_races_built_' + state.user.id, _racesSig(_racesForDisplay(intake))); } catch (_) {} }
   } catch (e) {
     console.error('[Stryxs] race rebuild failed:', e);
@@ -29005,6 +29044,32 @@ async function syncStravaNow(btn) {
       btn.textContent = originalLabel || '↻ Sync now';
     }
   }
+}
+
+// Silent, rate-limited background Strava sync so uploads appear without the user
+// tapping "Sync now". At most once every 5 minutes per user; caches connection status
+// for the session so it doesn't hammer get_status. Never shows a spinner or toast.
+let _stravaConnCache = null; // null = unknown this session, true/false once checked
+async function _autoSyncStrava() {
+  if (!state.user) return;
+  const key = 'stryxs_last_autosync_' + state.user.id;
+  try { const last = parseInt(localStorage.getItem(key) || '0', 10); if (Date.now() - last < 5 * 60 * 1000) return; } catch (_) {}
+  try {
+    if (_stravaConnCache === null) {
+      const st = await callStrava('get_status').catch(() => null);
+      _stravaConnCache = !!(st && st.connected);
+    }
+    if (!_stravaConnCache) return; // not connected -> nothing to pull
+    try { localStorage.setItem(key, String(Date.now())); } catch (_) {}
+    const syncDays = (typeof isUserPro === 'function' && isUserPro()) ? 30 : 7;
+    const result = await callStrava('sync_recent', { days: syncDays });
+    if (result && result.imported > 0) {
+      await loadWorkouts();
+      const active = document.querySelector('.page.active')?.id || '';
+      if (active === 'page-plan' && typeof renderPlan === 'function') { try { renderPlan(); } catch (_) {} }
+      else if (active === 'page-dashboard' && typeof renderDashboard === 'function') { try { renderDashboard(); } catch (_) {} }
+    }
+  } catch (e) { console.warn('[Stryxs] auto-sync failed (non-fatal):', e); }
 }
 
 // Open a specific Settings section reliably from anywhere in the app.
