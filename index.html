@@ -25904,6 +25904,15 @@ async function renderPlan() {
     ? new Date(planStartDateStr + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
     : null;
 
+  // ACTUAL planned volume for the current calendar week (Mon-Sun) — summed from the
+  // real scheduled sessions — so the "You are here" card shows a number that matches
+  // the week, not a skeleton target that can be way off from the generated sessions.
+  const _wkMon = (() => { const d = new Date(); d.setHours(12, 0, 0, 0); const dow = d.getDay(); d.setDate(d.getDate() + (dow === 0 ? -6 : 1 - dow)); return d.toISOString().split('T')[0]; })();
+  const _wkSun = (() => { const d = new Date(_wkMon + 'T12:00:00'); d.setDate(d.getDate() + 6); return d.toISOString().split('T')[0]; })();
+  const _wkPlannedMin = (planned || []).filter(p => p.scheduled_date >= _wkMon && p.scheduled_date <= _wkSun && p.sport !== 'rest').reduce((s, p) => s + (Number(p.duration_minutes) || 0), 0);
+  const _wkPlannedHrs = _wkPlannedMin / 60;
+  const _wkHrsLabel = _wkPlannedHrs >= 10 ? String(Math.round(_wkPlannedHrs)) : String(Math.round(_wkPlannedHrs * 10) / 10);
+
   el.innerHTML = `
     <div class="section-title">${t('plan.title')}</div>
     <p class="section-sub">${t('plan.subtitle')}</p>
@@ -25951,9 +25960,9 @@ async function renderPlan() {
           }
           return '';
         })() : ''}
-        ${currentWeekInfo.target_volume_hours ? `
+        ${_wkPlannedHrs > 0 ? `
           <div style="display: flex; align-items: center; gap: 8px; margin-top: 12px; padding: 9px 12px; background: rgba(0,0,0,0.18); border-radius: 10px; font-size: 13px; color: var(--text-dim);">
-            <span>🎯</span><span>This week's target: <b style="color: var(--text); font-family: 'JetBrains Mono', monospace;">${Math.round(currentWeekInfo.target_volume_hours)}h</b></span>
+            <span>🎯</span><span>This week: <b style="color: var(--text); font-family: 'JetBrains Mono', monospace;">${_wkHrsLabel}h</b> of training planned</span>
           </div>
         ` : ''}
       </div>
