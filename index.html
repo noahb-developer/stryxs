@@ -28386,6 +28386,45 @@ async function renderSettings() {
       </div>
     </div>
 
+    <!-- Heart-rate zones (RESTORED — the LTHR/zone editor was orphaned when the
+         round-58 declutter removed the Benchmarks section from Settings and it was
+         never re-added to the Profile page, leaving users with NO UI to view or edit
+         their LTHR. All the plumbing (settingsRunLthr/settingsBikeLthr inputs,
+         updateZonePreview, saveAllSettings' has() guards, the stub→periodized
+         auto-build) survived; only the DOM was gone. This puts it back. Run LTHR
+         shows for everyone; bike LTHR + FTP only for tri/cycling goals. -->
+    <div class="settings-section" id="section-hrzones">
+      <div class="settings-section-header" onclick="toggleSettingsSection('hrzones')">
+        <div class="settings-section-header-left">
+          <div class="settings-section-icon">❤️</div>
+          <div class="settings-section-text">
+            <div class="settings-section-title">Heart-rate zones</div>
+            <div class="settings-section-sub">Your LTHR sets every training zone</div>
+          </div>
+        </div>
+        <div class="settings-section-chevron">›</div>
+      </div>
+      <div class="settings-section-body">
+        <div class="settings-section-inner">
+          <div style="font-size:12px;color:var(--text-dim);line-height:1.55;margin-bottom:14px;">Your <strong style="color:var(--text);">LTHR</strong> (lactate-threshold heart rate) is the anchor Coach uses for every zone. To measure it: 10&nbsp;min easy warm-up &rarr; 30&nbsp;min all-out sustained effort &rarr; use your <strong style="color:var(--text);">average HR over the last 20&nbsp;min</strong> as your LTHR. Not sure yet? Just ask Coach and it can set this for you.</div>
+          <div class="field">
+            <label>Run LTHR (bpm)</label>
+            <input type="number" id="settingsRunLthr" value="${intake?.run_lthr || ''}" onchange="saveAllSettings()" placeholder="e.g. 168" min="100" max="220" inputmode="numeric" />
+          </div>
+          ${['ironman','70_3','olympic_tri','sprint_tri','cycling'].includes(intake?.goal_event || '') ? `
+          <div class="field">
+            <label>Bike LTHR (bpm)</label>
+            <input type="number" id="settingsBikeLthr" value="${intake?.bike_lthr || ''}" onchange="saveAllSettings()" placeholder="e.g. 158" min="100" max="220" inputmode="numeric" />
+          </div>
+          <div class="field">
+            <label>Bike FTP (watts) <span style="color:var(--text-mute);font-weight:400;">&middot; optional</span></label>
+            <input type="number" id="settingsBikeFtp" value="${state.profile?.bikeFtp || ''}" onchange="saveAllSettings()" placeholder="e.g. 240" min="50" max="600" inputmode="numeric" />
+          </div>` : ''}
+          <div id="zonePreview" style="margin-top:4px;"></div>
+        </div>
+      </div>
+    </div>
+
     <!-- Training Goals Section -->
     <div class="settings-section" id="section-goals">
       <div class="settings-section-header" onclick="toggleSettingsSection('goals')">
