@@ -20753,6 +20753,52 @@ async function _applyAdjustAndRebuild(preferenceText, intake, msgs) {
   }
 }
 
+// ═══ UNDO the coach's last plan change ═══
+// Restores the pre-change snapshot captured in sendChatMsg. Handles a small edit
+// (planned_workouts restore) AND a full rebuild (also reactivates the prior plan
+// row). Snapshot lives in localStorage, so only the LAST change is undoable, and
+// only within 24h. This is the user's escape hatch when the coach does something
+// they didn't want and don't know how to reverse.
+async function undoLastCoachChange(btnEl) {
+  if (!state.user) return;
+  let snap = null;
+  try { snap = JSON.parse(localStorage.getItem('stryxs_coach_undo') || 'null'); } catch (_) {}
+  if (!snap || !snap.fromDate) { toast('Nothing to undo right now.'); return; }
+  if (snap.at && Date.now() - snap.at > 24 * 3600 * 1000) {
+    localStorage.removeItem('stryxs_coach_undo');
+    document.getElementById('coachUndoChip')?.remove();
+    toast('That change is too old to undo automatically.'); return;
+  }
+  if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Reverting…'; }
+  const uid = state.user.id;
+  try {
+    // 1. Clear the current planned workouts in the snapshot's date range…
+    await sb.from('planned_workouts').delete().eq('user_id', uid).gte('scheduled_date', snap.fromDate);
+    // 2. …and put the pre-change ones back exactly.
+    if (Array.isArray(snap.rows) && snap.rows.length) {
+      await sb.from('planned_workouts').insert(snap.rows.map(r => ({ ...r, user_id: uid })));
+    }
+    // 3. A full rebuild replaced the whole plan row; reactivate the previous one.
+    if (snap.kind === 'rebuild' && snap.planId) {
+      await sb.from('training_plans').update({ active: false }).eq('user_id', uid).eq('active', true);
+      await sb.from('training_plans').update({ active: true }).eq('id', snap.planId);
+    }
+    localStorage.removeItem('stryxs_coach_undo');
+    document.getElementById('coachUndoChip')?.remove();
+    try { if (typeof loadWorkouts === 'function') await loadWorkouts(); } catch (_) {}
+    try { if (typeof renderPlan === 'function' && document.getElementById('page-plan')?.classList.contains('active')) renderPlan(); } catch (_) {}
+    const confirmMsg = '↶ Done. I put your plan back exactly how it was before that change.';
+    try { await sb.from('coach_messages').insert({ user_id: uid, role: 'coach', content: confirmMsg, context_type: 'general_chat' }); } catch (_) {}
+    const msgs = document.getElementById('chatMessages');
+    if (msgs && typeof renderMsg === 'function') { msgs.innerHTML += renderMsg('coach', confirmMsg); msgs.scrollTop = msgs.scrollHeight; }
+    toast('Reverted ✓');
+  } catch (e) {
+    console.error('[Stryxs] undo failed:', e);
+    if (btnEl) { btnEl.disabled = false; btnEl.textContent = '↶ Undo this change'; }
+    toast('Could not undo just now. Try again.');
+  }
+}
+
 async function sendChatMsg() {
   // Defense in depth, free users get FREE_COACH_TRIAL_LIMIT messages, then Pro wall.
   const gate = await canSendCoachMsg();
@@ -20782,6 +20828,24 @@ async function sendChatMsg() {
   // Reset textarea height after clearing so it shrinks back
   input.style.height = 'auto';
   updateCoachSendState();
+
+  // ═══ UNDO / RESTORE command intercept ═══
+  // If the user types "undo" / "revert" / "restore my previous plan" and a fresh
+  // undo snapshot exists, run the restore locally instead of the LLM turn. This is
+  // the reliable path after a reload (when the inline Undo chip is gone).
+  if (text && !photoForApi && !docForApi &&
+      /^\s*(undo(\s+(that|it|this|change|the (last|change)[\w\s]*|my last[\w\s]*))?|revert(\s+(that|it|this))?|restore\s+(my\s+)?(previous\s+|last\s+)?plan)\s*[.!]?\s*$/i.test(text)) {
+    let hasSnap = false;
+    try { hasSnap = !!JSON.parse(localStorage.getItem('stryxs_coach_undo') || 'null'); } catch (_) {}
+    if (hasSnap) {
+      msgs.innerHTML += renderMsg('user', text);
+      msgs.scrollTop = msgs.scrollHeight;
+      try { await sb.from('coach_messages').insert({ user_id: state.user.id, role: 'user', content: text, context_type: 'general_chat' }); } catch (_) {}
+      await undoLastCoachChange(null);
+      return;
+    }
+  }
+
   input.disabled = true;
 
   // Append user msg immediately (with the photo thumbnail if present, or a small
@@ -20838,7 +20902,7 @@ async function sendChatMsg() {
     // ═══ Pull imported plan profile (if user imported their plan) ═══
     // This lets Coach answer questions about the plan structure and accept corrections.
     const { data: activePlan } = await sb.from('training_plans')
-      .select('plan_data')
+      .select('id, plan_data')
       .eq('user_id', state.user.id)
       .eq('active', true)
       .order('created_at', { ascending: false })
@@ -20959,6 +21023,25 @@ async function sendChatMsg() {
       console.warn('[Stryxs] Could not fetch recent workout feedback for chat context:', fbErr);
     }
 
+    // ═══ UNDO SAFETY NET: snapshot the plan BEFORE the coach may change it ═══
+    // The agentic coach mutates planned_workouts / training_plans server-side
+    // DURING this call, so the pre-change state must be captured now. We only
+    // persist it + show an Undo if the reply signals a real change (below). This
+    // is the "coach did something I didn't want and can't reverse" safety net.
+    let _undoSnap = null;
+    try {
+      const _snapFrom = new Date(Date.now() - 14 * 86400000).toISOString().split('T')[0];
+      const { data: _snapRows } = await sb.from('planned_workouts')
+        .select('*').eq('user_id', state.user.id).gte('scheduled_date', _snapFrom);
+      _undoSnap = {
+        at: Date.now(),
+        fromDate: _snapFrom,
+        planId: activePlan?.id || null,
+        // strip id/created_at so re-insert gets fresh rows; keep everything else
+        rows: (_snapRows || []).map(({ id, created_at, ...rest }) => rest),
+      };
+    } catch (_) { _undoSnap = null; }
+
     const reply = await callCoach('chat', {
       messages,
       intake,
@@ -21024,6 +21107,17 @@ async function sendChatMsg() {
     await sb.from('coach_messages').insert({
       user_id: state.user.id, role: 'coach', content: reply2, context_type: 'general_chat',
     });
+
+    // ═══ UNDO: if the coach changed the plan, stash the pre-change snapshot and
+    // surface a one-tap Undo. Only the LAST change is undoable (snapshot is
+    // overwritten each time). Also reachable after a reload by typing "undo". ═══
+    if ((planChanged || rebuildPlan) && _undoSnap) {
+      _undoSnap.kind = rebuildPlan ? 'rebuild' : 'edit';
+      try { localStorage.setItem('stryxs_coach_undo', JSON.stringify(_undoSnap)); } catch (_) {}
+      document.getElementById('coachUndoChip')?.remove();
+      msgs.innerHTML += `<div class="chat-msg" id="coachUndoChip"><div class="msg-bubble" style="background:rgba(255,209,102,0.06);border:1px solid rgba(255,209,102,0.28);border-radius:12px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;"><span style="font-size:12px;color:var(--text-dim);line-height:1.45;">Not what you wanted? Put your plan back exactly how it was.</span><button class="btn ghost" style="font-size:12px;padding:6px 12px;white-space:nowrap;" onclick="undoLastCoachChange(this)">↶ Undo this change</button></div></div>`;
+      msgs.scrollTop = msgs.scrollHeight;
+    }
 
     // If the coach edited the plan via a write tool, refresh so the change shows.
     if (planChanged) {
