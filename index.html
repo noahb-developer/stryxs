@@ -17802,9 +17802,43 @@ function renderChatOnboarding(el, existingIntake) {
     _obdCoachSay(`Hey 👋 I'm your coach. I'll get you set up in about a minute.<br><br>Are you starting fresh, or do you already follow a plan you'd like to bring in?`, _obdAskStart);
   }
 }
+// If the user arrived from the public /free-plan generator, it stashed their
+// chosen race in localStorage. Return a mapped goal (dated running events only)
+// so onboarding can skip the sport + goal questions. Fail-safe: any missing /
+// stale / unmapped value returns null and the normal flow runs. Running-only by
+// design (the free tool is running-only). See free-plan.html.
+function _getFreePlanPrefill() {
+  try {
+    const raw = localStorage.getItem('stryxs_freeplan_prefill'); if (!raw) return null;
+    const p = JSON.parse(raw);
+    if (!p || !p.goal) return null;
+    if (p.at && (Date.now() - p.at) > 7 * 24 * 3600 * 1000) { localStorage.removeItem('stryxs_freeplan_prefill'); return null; }
+    const MAP = {
+      '5k':       { event: '5k',            label: '5K' },
+      '10k':      { event: '10k',           label: '10K' },
+      'half':     { event: 'half_marathon', label: 'Half Marathon' },
+      'marathon': { event: 'marathon',      label: 'Marathon' },
+    };
+    const m = MAP[p.goal];
+    if (!m) return null; // "general"/unknown → let onboarding ask normally
+    return { goal_event: m.event, goalLabel: m.label };
+  } catch (_) { return null; }
+}
 function _obdAskStart() {
   _obdChips([
-    { label: 'Build me a plan', onPick: () => { _obdUserSay('Build me a plan'); _obdA.planPath = 'build_new'; _obdClearDock(); _obdCoachSay(`Let's do it. What's your main sport?`, _obdAskSport); } },
+    { label: 'Build me a plan', onPick: () => {
+        _obdUserSay('Build me a plan'); _obdA.planPath = 'build_new'; _obdClearDock();
+        // Carried over from the free plan generator? Skip sport + goal (we know both).
+        const pf = _getFreePlanPrefill();
+        if (pf) {
+          try { localStorage.removeItem('stryxs_freeplan_prefill'); } catch (_) {}
+          _obdA.sport = 'Running';
+          _obdA.goal_event = pf.goal_event;
+          _obdCoachSay(`Perfect, I've got your <b>${pf.goalLabel}</b> plan from the generator ready to personalize just for you. When's your race?`, _obdAskDate);
+          return;
+        }
+        _obdCoachSay(`Let's do it. What's your main sport?`, _obdAskSport);
+      } },
     { label: 'I already have a plan', ghost: true, onPick: () => { _obdUserSay('I already have a plan'); _obdA.planPath = 'import_adapt'; _obdClearDock(); _obdCoachSay(`Love it, I'll load it and adapt it with you. First a few quick things so I can tailor it right — what's your main sport?`, _obdAskSport); } },
   ]);
 }
