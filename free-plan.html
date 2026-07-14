@@ -93,8 +93,9 @@
   .chip.q { background: var(--accent-soft); color: var(--accent); }
   .chip.long { background: rgba(0,196,255,0.12); color: var(--accent-2); }
   .chip.rest { background: transparent; border: 1px dashed var(--border-light); color: var(--text-mute); }
-  .wk-long { flex-shrink: 0; font-size: 11px; color: var(--text-mute); text-align: right; min-width: 66px; }
-  .wk-long b { color: var(--text-dim); font-weight: 700; }
+  .wk-long { flex-shrink: 0; text-align: right; min-width: 78px; display: flex; flex-direction: column; align-items: flex-end; gap: 1px; }
+  .wk-long span { font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-mute); }
+  .wk-long b { color: var(--text-dim); font-weight: 700; font-size: 13px; }
 
   /* sample week detail */
   .detail { margin-top: 26px; }
@@ -107,6 +108,9 @@
   .day-title { font-size: 14px; font-weight: 700; }
   .day-title .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 8px; vertical-align: middle; }
   .day-desc { font-size: 12.5px; color: var(--text-dim); margin-top: 2px; }
+  .day-dur { font-size: 12px; font-weight: 600; color: var(--text-mute); margin-left: 7px; }
+  .day.rest-day { padding: 9px 0; }
+  .day.rest-day .day-title { font-weight: 600; color: var(--text-mute); }
 
   /* ── conversion CTA ── */
   .convert { margin-top: 34px; background: linear-gradient(160deg, var(--bg-3), var(--bg-2)); border: 1px solid var(--accent-border); border-radius: 20px; padding: 28px 24px; text-align: center; }
@@ -429,21 +433,37 @@
       return `<div class="weekrow${w.isDeload ? ' deload' : ''}">
         <div class="wk-n"><b>${w.week}</b><span>${w.isDeload ? 'Deload' : names[w.phase]}</span></div>
         <div class="wk-chips">${chips}${restChip}</div>
-        <div class="wk-long"><b>~${w.longMin}m</b><br>long run</div>
+        <div class="wk-long"><span>Long run</span><b>~${w.longMin} min</b></div>
       </div>`;
     }).join('');
 
-    // week 1 detail
+    // week 1 detail — with real per-session durations + compact rest days
     const w1 = plan[0];
+    const durEasy = ({ beginner: 35, intermediate: 45, advanced: 55 })[level] || 45;
+    const detailFor = (key, longMin) => {
+      switch (key) {
+        case 'long':      return { t: 'Long run',            min: longMin,     dot: '#00c4ff', d: 'Easy, steady time on your feet — the most important run of your week. Build endurance and stay relaxed the whole way.' };
+        case 'easy':      return { t: 'Easy run',            min: durEasy,     dot: '#8892a8', d: 'Conversational effort (Zone 2), easy enough to chat the whole time. This makes up most of your running.' };
+        case 'strides':   return { t: 'Easy run + strides',  min: durEasy,     dot: '#8892a8', d: `Run ${durEasy} min easy, then finish with 4–6 × 20-second smooth, fast-but-relaxed pickups to keep your legs snappy.` };
+        case 'tempo':     return { t: 'Tempo run',           min: durEasy + 5, dot: '#00e5a0', d: 'Warm up easy, then ~20 min comfortably hard (around your one-hour race effort) held steady, then cool down.' };
+        case 'intervals': return { t: 'Intervals',           min: durEasy + 5, dot: '#00e5a0', d: 'Warm up, then hard reps with easy recovery (e.g. 5 × 3 min), then cool down. Lifts your top-end speed.' };
+        case 'racepace':  return { t: 'Race-pace reps',      min: durEasy + 5, dot: '#00e5a0', d: 'Warm up, then segments at your goal race pace so it starts to feel automatic. Sharpening, not grinding.' };
+        default:          return { t: 'Rest day',            min: null,        dot: '#5a6478', d: '' };
+      }
+    };
     document.getElementById('detailDays').innerHTML = w1.days.map(d => {
-      const s = SESSION[d.key];
-      let desc = s.desc;
-      if (d.key === 'long') desc = `~${w1.longMin} minutes. ` + s.desc;
+      const info = detailFor(d.key, w1.longMin);
+      if (d.key === 'rest') {
+        return `<div class="day rest-day">
+          <div class="day-name">${d.day}</div>
+          <div class="day-body"><div class="day-title"><span class="dot" style="background:${info.dot}"></span>Rest day</div></div>
+        </div>`;
+      }
       return `<div class="day">
         <div class="day-name">${d.day}</div>
         <div class="day-body">
-          <div class="day-title"><span class="dot" style="background:${s.dot}"></span>${s.name}</div>
-          <div class="day-desc">${desc}</div>
+          <div class="day-title"><span class="dot" style="background:${info.dot}"></span>${info.t}<span class="day-dur">~${info.min} min</span></div>
+          <div class="day-desc">${info.d}</div>
         </div>
       </div>`;
     }).join('');
