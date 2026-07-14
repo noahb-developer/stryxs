@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Free Running Training Plan Generator | Stryxs AI Running Coach</title>
+<meta name="description" content="Build a free, personalized running training plan in 30 seconds — 5K, 10K, half marathon or marathon. Periodized week-by-week. Then get your own AI running coach to run it, adapt it, and guide you daily. No download, works in your browser." />
+<link rel="canonical" href="https://stryxs.com/free-plan" />
+<meta property="og:type" content="website" />
+<meta property="og:title" content="Free Running Training Plan Generator — Stryxs" />
+<meta property="og:description" content="Pick your race and level, get a real periodized training plan in 30 seconds. Free. Then get your AI running coach to run it for you." />
+<meta property="og:url" content="https://stryxs.com/free-plan" />
+<meta property="og:image" content="https://stryxs.com/apple-touch-icon.png" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Free Running Training Plan Generator — Stryxs" />
+<meta name="twitter:description" content="Pick your race and level, get a real periodized plan in 30 seconds. Free." />
+<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #0a0e1a; --bg-2: #0f1528; --bg-3: #161e36; --bg-4: #1e2844;
+    --accent: #00e5a0; --accent-2: #00c4ff; --accent-dim: #00b880;
+    --accent-soft: rgba(0, 229, 160, 0.1); --accent-border: rgba(0, 229, 160, 0.3);
+    --text: #ecf0f8; --text-dim: #8892a8; --text-mute: #5a6478;
+    --border: #1e2844; --border-light: #2a3556; --danger: #ef4444;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: 'Inter', -apple-system, system-ui, sans-serif;
+    line-height: 1.55; -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  a { color: inherit; }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 0 20px; }
+
+  /* ── top bar ── */
+  .topbar { display: flex; align-items: center; justify-content: space-between; padding: 18px 20px; max-width: 900px; margin: 0 auto; }
+  .brand { font-family: 'Instrument Serif', serif; font-size: 26px; letter-spacing: 0.2px; color: var(--text); text-decoration: none; }
+  .brand em { font-style: italic; color: var(--accent); }
+  .topbar-cta { font-size: 13px; font-weight: 600; color: var(--text-dim); text-decoration: none; padding: 8px 14px; border: 1px solid var(--border-light); border-radius: 999px; transition: border-color .15s, color .15s; }
+  .topbar-cta:hover { color: var(--text); border-color: var(--accent-border); }
+
+  /* ── hero ── */
+  .hero { text-align: center; padding: 34px 0 8px; }
+  .hero-glow { position: absolute; top: -120px; left: 50%; transform: translateX(-50%); width: 640px; height: 400px; background: radial-gradient(ellipse, rgba(0,229,160,0.14), transparent 65%); pointer-events: none; filter: blur(20px); z-index: -1; }
+  .eyebrow { display: inline-block; font-size: 12px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent-border); padding: 5px 12px; border-radius: 999px; margin-bottom: 18px; }
+  h1 { font-size: clamp(30px, 6.5vw, 52px); line-height: 1.08; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 16px; }
+  h1 em { font-family: 'Instrument Serif', serif; font-style: italic; font-weight: 400; color: var(--accent); }
+  .sub { font-size: clamp(15px, 2.6vw, 18px); color: var(--text-dim); max-width: 560px; margin: 0 auto 8px; }
+
+  /* ── form card ── */
+  .card { background: var(--bg-2); border: 1px solid var(--border); border-radius: 18px; padding: 22px; margin-top: 26px; }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 620px) { .form-grid { grid-template-columns: 1fr; } }
+  .field { display: flex; flex-direction: column; gap: 8px; }
+  .field.full { grid-column: 1 / -1; }
+  label { font-size: 13px; font-weight: 600; color: var(--text-dim); }
+  .opts { display: flex; flex-wrap: wrap; gap: 8px; }
+  .opt { flex: 1 1 auto; min-width: 64px; text-align: center; padding: 11px 12px; background: var(--bg-3); border: 1px solid var(--border-light); border-radius: 11px; font-size: 14px; font-weight: 600; color: var(--text-dim); cursor: pointer; transition: all .12s; user-select: none; }
+  .opt:hover { border-color: var(--accent-border); color: var(--text); }
+  .opt.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+  input[type="date"] { padding: 12px 14px; background: var(--bg-3); border: 1px solid var(--border-light); border-radius: 11px; color: var(--text); font-size: 14px; font-family: inherit; color-scheme: dark; width: 100%; }
+  .gen-btn { width: 100%; margin-top: 20px; padding: 16px; background: linear-gradient(135deg, var(--accent), var(--accent-dim)); color: #04231a; border: 0; border-radius: 13px; font-size: 16px; font-weight: 800; font-family: inherit; cursor: pointer; transition: transform .1s, box-shadow .15s; box-shadow: 0 8px 30px rgba(0,229,160,0.22); }
+  .gen-btn:hover { transform: translateY(-1px); box-shadow: 0 12px 36px rgba(0,229,160,0.3); }
+  .gen-btn:active { transform: translateY(0); }
+  .form-note { text-align: center; font-size: 12px; color: var(--text-mute); margin-top: 12px; }
+
+  /* ── result ── */
+  #result { margin-top: 30px; display: none; }
+  .result-head { text-align: center; margin-bottom: 20px; }
+  .result-head h2 { font-size: 24px; font-weight: 800; letter-spacing: -0.01em; }
+  .result-head h2 em { font-family: 'Instrument Serif', serif; font-style: italic; font-weight: 400; color: var(--accent); }
+  .result-head p { color: var(--text-dim); font-size: 14px; margin-top: 6px; }
+
+  .phasebar { display: flex; gap: 4px; margin: 18px 0 24px; }
+  .phaseseg { flex-grow: 1; text-align: center; padding: 8px 4px; border-radius: 8px; font-size: 11px; font-weight: 700; letter-spacing: 0.3px; text-transform: uppercase; }
+  .ph-base { background: rgba(0,196,255,0.14); color: var(--accent-2); }
+  .ph-build { background: rgba(0,229,160,0.14); color: var(--accent); }
+  .ph-peak { background: rgba(255,209,102,0.16); color: #ffd166; }
+  .ph-taper { background: rgba(138,146,168,0.14); color: var(--text-dim); }
+
+  .weekrow { display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 8px; }
+  .weekrow.deload { border-color: rgba(255,209,102,0.28); }
+  .wk-n { flex-shrink: 0; width: 46px; }
+  .wk-n b { font-size: 15px; font-weight: 800; display: block; }
+  .wk-n span { font-size: 10px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.4px; }
+  .wk-chips { display: flex; flex-wrap: wrap; gap: 5px; flex: 1; }
+  .chip { font-size: 11px; font-weight: 600; padding: 4px 9px; border-radius: 999px; background: var(--bg-3); color: var(--text-dim); white-space: nowrap; }
+  .chip.q { background: var(--accent-soft); color: var(--accent); }
+  .chip.long { background: rgba(0,196,255,0.12); color: var(--accent-2); }
+  .chip.rest { background: transparent; border: 1px dashed var(--border-light); color: var(--text-mute); }
+  .wk-long { flex-shrink: 0; font-size: 11px; color: var(--text-mute); text-align: right; min-width: 66px; }
+  .wk-long b { color: var(--text-dim); font-weight: 700; }
+
+  /* sample week detail */
+  .detail { margin-top: 26px; }
+  .detail h3 { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+  .detail .dsub { font-size: 12.5px; color: var(--text-dim); margin-bottom: 14px; }
+  .day { display: flex; gap: 12px; padding: 12px 0; border-top: 1px solid var(--border); }
+  .day:first-of-type { border-top: 0; }
+  .day-name { flex-shrink: 0; width: 42px; font-size: 12px; font-weight: 700; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.4px; padding-top: 2px; }
+  .day-body { flex: 1; }
+  .day-title { font-size: 14px; font-weight: 700; }
+  .day-title .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 8px; vertical-align: middle; }
+  .day-desc { font-size: 12.5px; color: var(--text-dim); margin-top: 2px; }
+
+  /* ── conversion CTA ── */
+  .convert { margin-top: 34px; background: linear-gradient(160deg, var(--bg-3), var(--bg-2)); border: 1px solid var(--accent-border); border-radius: 20px; padding: 28px 24px; text-align: center; }
+  .convert h3 { font-size: clamp(21px, 4vw, 27px); font-weight: 800; letter-spacing: -0.01em; line-height: 1.18; margin-bottom: 12px; }
+  .convert h3 em { font-family: 'Instrument Serif', serif; font-style: italic; font-weight: 400; color: var(--accent); }
+  .convert p { color: var(--text-dim); font-size: 14.5px; max-width: 480px; margin: 0 auto 22px; }
+  .feat { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 18px; max-width: 560px; margin: 0 auto 24px; }
+  .feat div { font-size: 13px; color: var(--text-dim); display: flex; align-items: center; gap: 7px; }
+  .feat .tick { color: var(--accent); font-weight: 800; }
+  .cta-btn { display: inline-block; padding: 16px 34px; background: linear-gradient(135deg, var(--accent), var(--accent-dim)); color: #04231a; border-radius: 13px; font-size: 16px; font-weight: 800; text-decoration: none; box-shadow: 0 10px 34px rgba(0,229,160,0.26); transition: transform .1s; }
+  .cta-btn:hover { transform: translateY(-1px); }
+  .cta-fine { font-size: 12px; color: var(--text-mute); margin-top: 14px; }
+
+  /* ── how it differs / trust ── */
+  .trust { margin-top: 40px; text-align: center; }
+  .trust h4 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text-mute); font-weight: 700; margin-bottom: 20px; }
+  .trust-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; text-align: left; }
+  @media (max-width: 620px) { .trust-grid { grid-template-columns: 1fr; } }
+  .trust-card { background: var(--bg-2); border: 1px solid var(--border); border-radius: 14px; padding: 18px; }
+  .trust-card .ic { font-size: 22px; margin-bottom: 8px; }
+  .trust-card b { font-size: 14px; display: block; margin-bottom: 4px; }
+  .trust-card p { font-size: 12.5px; color: var(--text-dim); }
+
+  footer { margin-top: 56px; padding: 30px 20px 44px; border-top: 1px solid var(--border); text-align: center; }
+  footer .brand { font-size: 20px; }
+  footer p { font-size: 12px; color: var(--text-mute); margin-top: 10px; }
+  footer a { color: var(--text-dim); text-decoration: none; margin: 0 8px; font-size: 12px; }
+  footer a:hover { color: var(--text); }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+  <div class="hero-glow"></div>
+
+  <div class="topbar">
+    <a class="brand" href="/">Stryx<em>s</em></a>
+    <a class="topbar-cta" href="/?from=free-plan">Open the app →</a>
+  </div>
+
+  <div class="wrap">
+    <section class="hero">
+      <span class="eyebrow">Free · No signup to try · No download</span>
+      <h1>Your free running plan,<br /><em>built in 30 seconds</em></h1>
+      <p class="sub">Pick your race and your level. Get a real, periodized week-by-week training plan — the same framework a coach would build. Then let your AI coach run it for you.</p>
+    </section>
+
+    <div class="card" id="formCard">
+      <div class="form-grid">
+        <div class="field full">
+          <label>What are you training for?</label>
+          <div class="opts" id="raceOpts">
+            <div class="opt" data-race="5k">5K</div>
+            <div class="opt" data-race="10k">10K</div>
+            <div class="opt on" data-race="half">Half Marathon</div>
+            <div class="opt" data-race="marathon">Marathon</div>
+            <div class="opt" data-race="general">Just get fitter</div>
+          </div>
+        </div>
+        <div class="field">
+          <label>Your level</label>
+          <div class="opts" id="levelOpts">
+            <div class="opt" data-level="beginner">Beginner</div>
+            <div class="opt on" data-level="intermediate">Intermediate</div>
+            <div class="opt" data-level="advanced">Advanced</div>
+          </div>
+        </div>
+        <div class="field">
+          <label>Days per week you can run</label>
+          <div class="opts" id="daysOpts">
+            <div class="opt" data-days="3">3</div>
+            <div class="opt on" data-days="4">4</div>
+            <div class="opt" data-days="5">5</div>
+            <div class="opt" data-days="6">6</div>
+          </div>
+        </div>
+        <div class="field full">
+          <label>Race date <span style="color:var(--text-mute);font-weight:400;">· optional (we'll pick a sensible length if blank)</span></label>
+          <input type="date" id="raceDate" />
+        </div>
+      </div>
+      <button class="gen-btn" id="genBtn" onclick="generate()">⚡ Build my free plan</button>
+      <p class="form-note">100% free · nothing to install · your plan appears right below</p>
+    </div>
+
+    <section id="result">
+      <div class="result-head">
+        <h2 id="resTitle">Your <em>plan</em></h2>
+        <p id="resSub"></p>
+      </div>
+      <div class="phasebar" id="phaseBar"></div>
+      <div id="weekList"></div>
+
+      <div class="detail card">
+        <h3 id="detailTitle">Week 1 in detail</h3>
+        <div class="dsub" id="detailSub">A taste of exactly what your week looks like.</div>
+        <div id="detailDays"></div>
+      </div>
+
+      <div class="convert">
+        <h3>This is the skeleton. Your <em>AI coach</em> brings it to life.</h3>
+        <p>The plan above is the framework. Sign up free and Stryxs personalizes every pace and heart-rate zone to <em>you</em>, adapts the plan each week around how your runs actually go, and coaches you by chat whenever you need it.</p>
+        <div class="feat">
+          <div><span class="tick">✓</span> Paces &amp; HR zones set to your fitness</div>
+          <div><span class="tick">✓</span> Adapts to every run automatically</div>
+          <div><span class="tick">✓</span> Chat coach, 24/7</div>
+          <div><span class="tick">✓</span> Syncs with Strava</div>
+          <div><span class="tick">✓</span> 14-day free trial</div>
+          <div><span class="tick">✓</span> Works in your browser</div>
+        </div>
+        <a class="cta-btn" id="ctaBtn" href="/?from=free-plan">Get my AI coach → Start free</a>
+        <div class="cta-fine">14-day free trial · no download · cancel anytime</div>
+      </div>
+    </section>
+
+    <section class="trust">
+      <h4>Why runners are switching</h4>
+      <div class="trust-grid">
+        <div class="trust-card">
+          <div class="ic">🧠</div>
+          <b>A coach, not a template</b>
+          <p>Most apps hand you a static PDF. Stryxs adapts your plan every week around your real training, like a human coach would.</p>
+        </div>
+        <div class="trust-card">
+          <div class="ic">🌐</div>
+          <b>No download, no App Store</b>
+          <p>It's a website you can install like an app. Try it in your browser in seconds. Nothing to download, no 30% Apple tax passed to you.</p>
+        </div>
+        <div class="trust-card">
+          <div class="ic">💬</div>
+          <b>Ask it anything</b>
+          <p>"Move my long run to Sunday." "My knee hurts." Your coach understands and reworks your plan on the spot.</p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <footer>
+    <a class="brand" href="/">Stryx<em>s</em></a>
+    <p>Your independent AI running coach.</p>
+    <p style="margin-top:14px;">
+      <a href="/">Open the app</a> ·
+      <a href="/privacy">Privacy</a> ·
+      <a href="/terms">Terms</a>
+    </p>
+  </footer>
+
+<script>
+  // ─────────────────────────────────────────────────────────────
+  //  Free plan generator — 100% client-side. Uses deterministic
+  //  periodization + effort-based session templates. NO API / no
+  //  Claude call, so it costs nothing and scales to any traffic.
+  //  Mirrors the Stryxs methodology (Base → Build → Peak → Taper,
+  //  80/20 easy/hard, one long run, deload every 4th week).
+  // ─────────────────────────────────────────────────────────────
+  const sel = { race: 'half', level: 'intermediate', days: 4 };
+
+  function wireOpts(id, key, cast) {
+    document.getElementById(id).addEventListener('click', (e) => {
+      const o = e.target.closest('.opt'); if (!o) return;
+      [...e.currentTarget.children].forEach(c => c.classList.remove('on'));
+      o.classList.add('on');
+      sel[key] = cast ? cast(o.dataset[key]) : o.dataset[key];
+    });
+  }
+  wireOpts('raceOpts', 'race');
+  wireOpts('levelOpts', 'level');
+  wireOpts('daysOpts', 'days', v => parseInt(v));
+
+  const RACE = {
+    '5k':       { label: '5K',            weeks: 8,  peakLong: { beginner: 45, intermediate: 60, advanced: 75 } },
+    '10k':      { label: '10K',           weeks: 10, peakLong: { beginner: 55, intermediate: 75, advanced: 90 } },
+    'half':     { label: 'Half Marathon', weeks: 12, peakLong: { beginner: 90, intermediate: 110, advanced: 130 } },
+    'marathon': { label: 'Marathon',      weeks: 16, peakLong: { beginner: 120, intermediate: 150, advanced: 180 } },
+    'general':  { label: 'General Fitness',weeks: 12, peakLong: { beginner: 45, intermediate: 60, advanced: 75 } },
+  };
+
+  // Mon..Sun session-role patterns by days/week. long=long run, q=quality, e=easy, r=rest.
+  const PATTERN = {
+    3: ['r', 'q', 'r', 'e', 'r', 'long', 'r'],
+    4: ['r', 'q', 'e', 'e', 'r', 'long', 'r'],
+    5: ['r', 'q', 'e', 'q', 'e', 'long', 'r'],
+    6: ['e', 'q', 'e', 'q', 'r', 'long', 'e'],
+  };
+  const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+  // Effort-based session templates (no pace math needed — the coach personalizes that).
+  const SESSION = {
+    easy:      { name: 'Easy run',        cls: '',     dot: '#8892a8', desc: 'Conversational effort (Zone 2). Easy enough to chat the whole way. This is most of your running.' },
+    strides:   { name: 'Easy + strides',  cls: '',     dot: '#8892a8', desc: 'Easy run, then 4–6 × 20s smooth, fast-but-relaxed pickups to keep your legs snappy.' },
+    long:      { name: 'Long run',        cls: 'long', dot: '#00c4ff', desc: 'Easy, steady time on your feet. The single most important run of your week — build endurance, stay relaxed.' },
+    tempo:     { name: 'Tempo run',       cls: 'q',    dot: '#00e5a0', desc: 'Comfortably hard — around your one-hour race effort — held steady. Builds your sustainable pace.' },
+    intervals: { name: 'Intervals',       cls: 'q',    dot: '#00e5a0', desc: 'Hard reps with easy recovery (e.g. 5 × 3 min). Lifts your top-end speed and running economy.' },
+    racepace:  { name: 'Race-pace reps',  cls: 'q',    dot: '#00e5a0', desc: 'Segments at your goal race pace so it starts to feel automatic. Sharpening, not grinding.' },
+    rest:      { name: 'Rest',            cls: 'rest', dot: '#5a6478', desc: 'Full rest. This is when the training actually turns into fitness. Don\'t skip it.' },
+  };
+
+  function qualityFor(phase, slot) {
+    if (phase === 'base')  return 'strides';
+    if (phase === 'build') return slot === 0 ? 'tempo' : 'intervals';
+    if (phase === 'peak')  return slot === 0 ? 'racepace' : 'intervals';
+    if (phase === 'taper') return 'racepace';
+    return 'easy';
+  }
+
+  const PHASE_FOCUS = {
+    base:  'Build your aerobic engine. Mostly easy running, volume grows gently.',
+    build: 'Add the hard stuff — tempo and intervals — on top of your base.',
+    peak:  'Sharpen with race-pace work. Highest quality, volume eases back.',
+    taper: 'Cut volume, keep a little sharpness. Arrive fresh and ready.',
+  };
+
+  function computeWeeks(race, raceDate) {
+    let weeks = RACE[race].weeks;
+    if (raceDate) {
+      const d = new Date(raceDate + 'T00:00:00');
+      const now = new Date(); now.setHours(0, 0, 0, 0);
+      const w = Math.round((d - now) / (7 * 86400000));
+      if (w >= 4 && w <= 40) weeks = w;
+    }
+    return Math.max(6, weeks);
+  }
+
+  // Split total weeks into Base / Build / Peak / Taper.
+  function phasePlan(weeks) {
+    const taper = weeks >= 12 ? 2 : 1;
+    const peak = weeks >= 10 ? 2 : 1;
+    let remaining = weeks - taper - peak;
+    const base = Math.max(1, Math.round(remaining * 0.6));
+    const build = Math.max(1, remaining - base);
+    // phase for each week index
+    const arr = [];
+    for (let i = 0; i < base; i++) arr.push('base');
+    for (let i = 0; i < build; i++) arr.push('build');
+    for (let i = 0; i < peak; i++) arr.push('peak');
+    for (let i = 0; i < taper; i++) arr.push('taper');
+    // trim/pad to exact length
+    while (arr.length > weeks) arr.pop();
+    while (arr.length < weeks) arr.splice(base, 0, 'build');
+    return arr;
+  }
+
+  function longRunFor(race, level, phase, buildupProgress, isDeload, isTaper, taperProgress) {
+    const peak = RACE[race].peakLong[level];
+    let mins;
+    if (phase === 'base' || phase === 'build') {
+      // ramp from ~55% to 100% of peak across base+build
+      mins = peak * (0.55 + 0.45 * buildupProgress);
+    } else if (phase === 'peak') {
+      mins = peak;
+    } else { // taper
+      mins = peak * (0.75 - 0.35 * taperProgress);
+    }
+    if (isDeload) mins *= 0.72;
+    return Math.round(mins / 5) * 5;
+  }
+
+  function buildPlan(race, level, days, weeks) {
+    const phases = phasePlan(weeks);
+    const buildupTotal = phases.filter(p => p === 'base' || p === 'build').length;
+    let buildupIdx = 0;
+    const taperTotal = phases.filter(p => p === 'taper').length;
+    let taperIdx = 0;
+    const pattern = PATTERN[days] || PATTERN[4];
+
+    return phases.map((phase, wi) => {
+      const isBuildup = phase === 'base' || phase === 'build';
+      // deload every 4th buildup week (not the last buildup week)
+      const isDeload = isBuildup && ((buildupIdx + 1) % 4 === 0) && buildupIdx < buildupTotal - 1;
+      const buildupProgress = buildupTotal > 1 ? buildupIdx / (buildupTotal - 1) : 1;
+      const taperProgress = phase === 'taper' ? (taperTotal > 1 ? taperIdx / (taperTotal - 1) : 0) : 0;
+
+      let qSlot = 0;
+      const dayList = pattern.map((role, di) => {
+        let key;
+        if (role === 'long') key = 'long';
+        else if (role === 'q') { key = qualityFor(isDeload ? 'base' : phase, qSlot); qSlot++; }
+        else if (role === 'e') key = 'easy';
+        else key = 'rest';
+        // race week (very last) — long run becomes the race / shakeout style
+        if (wi === weeks - 1 && role === 'long') key = 'racepace';
+        return { day: DAY_NAMES[di], key };
+      });
+
+      const longMin = longRunFor(race, level, phase, buildupProgress, isDeload, phase === 'taper', taperProgress);
+      if (isBuildup) buildupIdx++;
+      if (phase === 'taper') taperIdx++;
+
+      return { week: wi + 1, phase, isDeload, days: dayList, longMin, focus: PHASE_FOCUS[phase] };
+    });
+  }
+
+  function chipFor(key) {
+    const s = SESSION[key];
+    if (key === 'rest') return '';
+    const cls = s.cls ? ' ' + s.cls : '';
+    return `<span class="chip${cls}">${s.name.replace('Easy + strides', 'Strides').replace(' run', '').replace(' reps', '')}</span>`;
+  }
+
+  function render(plan, race, level, days) {
+    const raceLabel = RACE[race].label;
+    const phaseCounts = plan.reduce((a, w) => { a[w.phase] = (a[w.phase] || 0) + 1; return a; }, {});
+
+    document.getElementById('resTitle').innerHTML = `Your ${plan.length}-week <em>${raceLabel}</em> plan`;
+    document.getElementById('resSub').textContent =
+      `${days} days/week · ${level.charAt(0).toUpperCase() + level.slice(1)} · Base → Build → Peak → Taper`;
+
+    // phase bar
+    const order = ['base', 'build', 'peak', 'taper'];
+    const names = { base: 'Base', build: 'Build', peak: 'Peak', taper: 'Taper' };
+    document.getElementById('phaseBar').innerHTML = order.filter(p => phaseCounts[p]).map(p =>
+      `<div class="phaseseg ph-${p}" style="flex-grow:${phaseCounts[p]}">${names[p]} · ${phaseCounts[p]}w</div>`
+    ).join('');
+
+    // week rows
+    document.getElementById('weekList').innerHTML = plan.map(w => {
+      const chips = w.days.filter(d => d.key !== 'rest').map(d => chipFor(d.key)).join('');
+      const restCount = w.days.filter(d => d.key === 'rest').length;
+      const restChip = restCount ? `<span class="chip rest">${restCount} rest</span>` : '';
+      return `<div class="weekrow${w.isDeload ? ' deload' : ''}">
+        <div class="wk-n"><b>${w.week}</b><span>${w.isDeload ? 'Deload' : names[w.phase]}</span></div>
+        <div class="wk-chips">${chips}${restChip}</div>
+        <div class="wk-long"><b>~${w.longMin}m</b><br>long run</div>
+      </div>`;
+    }).join('');
+
+    // week 1 detail
+    const w1 = plan[0];
+    document.getElementById('detailDays').innerHTML = w1.days.map(d => {
+      const s = SESSION[d.key];
+      let desc = s.desc;
+      if (d.key === 'long') desc = `~${w1.longMin} minutes. ` + s.desc;
+      return `<div class="day">
+        <div class="day-name">${d.day}</div>
+        <div class="day-body">
+          <div class="day-title"><span class="dot" style="background:${s.dot}"></span>${s.name}</div>
+          <div class="day-desc">${desc}</div>
+        </div>
+      </div>`;
+    }).join('');
+
+    // carry selections into the app signup
+    const q = `?from=free-plan&goal=${encodeURIComponent(race)}&level=${encodeURIComponent(level)}&days=${days}`;
+    document.getElementById('ctaBtn').href = '/' + q;
+    try {
+      localStorage.setItem('stryxs_freeplan_prefill', JSON.stringify({ goal: race, level, days, at: Date.now() }));
+    } catch (_) {}
+  }
+
+  function generate() {
+    const btn = document.getElementById('genBtn');
+    btn.textContent = 'Building…';
+    // tiny delay so it feels like it "worked", then render (all local, instant)
+    setTimeout(() => {
+      const raceDate = document.getElementById('raceDate').value || null;
+      const weeks = computeWeeks(sel.race, raceDate);
+      const plan = buildPlan(sel.race, sel.level, sel.days, weeks);
+      render(plan, sel.race, sel.level, sel.days);
+      document.getElementById('result').style.display = 'block';
+      btn.textContent = '↻ Rebuild plan';
+      document.getElementById('result').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 260);
+  }
+</script>
+</body>
+</html>

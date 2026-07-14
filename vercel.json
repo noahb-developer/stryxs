@@ -9,6 +9,10 @@
       "destination": "/terms.html"
     },
     {
+      "source": "/free-plan",
+      "destination": "/free-plan.html"
+    },
+    {
       "source": "/share/:token",
       "destination": "/index.html"
     },
