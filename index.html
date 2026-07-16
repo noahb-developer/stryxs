@@ -3465,6 +3465,11 @@ body.coach-chat-active .chat-msg.user .msg-bubble strong { color: var(--text); }
   --lv2-text-mute: #5a6378;
   --lv2-acc: #00ffa3;
   --lv2-acc-deep: #00cc82;
+  /* The shared .page fade animates translateY, which makes #page-landing a
+     containing block and prevents the fixed nav from pinning to the viewport
+     (the nav got scrolled off / "cut" after using "See how it works"). The
+     landing doesn't need the slide — drop the animation so the nav stays put. */
+  animation: none !important;
 }
 
 .landing-v2 {
@@ -3624,18 +3629,22 @@ body.coach-chat-active .chat-msg.user .msg-bubble strong { color: var(--text); }
    including iPad where the parent rule's z-index: 5 was previously letting the
    nav get visually buried behind background layers. */
 .landing-v2 > nav.lv2-nav {
-  position: absolute;
+  position: fixed;
   z-index: 100;
 }
 
 /* Landing-specific top nav */
 .lv2-nav {
-  position: absolute; top: 0; left: 0; right: 0;
-  z-index: 50;
-  padding: calc(20px + var(--safe-top)) max(20px, env(safe-area-inset-left)) 20px max(20px, env(safe-area-inset-right));
+  position: fixed; top: 0; left: 0; right: 0;
+  z-index: 100;
+  padding: calc(16px + var(--safe-top)) max(20px, env(safe-area-inset-left)) 16px max(20px, env(safe-area-inset-right));
   display: flex;
   align-items: center;
   justify-content: space-between;
+  background: rgba(7, 11, 20, 0.72);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  backdrop-filter: blur(20px) saturate(160%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 .lv2-nav.scrolled {
   position: fixed;
@@ -3922,6 +3931,28 @@ body.coach-chat-active .chat-msg.user .msg-bubble strong { color: var(--text); }
 .lv2-dot { width: 4px; height: 4px; border-radius: 50%; background: var(--lv2-acc); display: inline-block; }
 
 /* LIVE WORKOUT CARD */
+/* Free plan generator entry band (above the live-coaching card) */
+.lv2-freeplan-band { max-width: 720px; margin: 40px auto 0; padding: 0 20px; position: relative; z-index: 2; }
+.lv2-freeplan-band-inner {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px;
+  padding: 18px 22px; border: 1px solid rgba(0, 255, 163, 0.25); border-radius: 18px;
+  background: linear-gradient(135deg, rgba(0, 255, 163, 0.08), rgba(0, 196, 255, 0.04));
+}
+.lv2-freeplan-band-text { text-align: left; flex: 1 1 240px; min-width: 0; }
+.lv2-freeplan-band-title { font-size: 16px; font-weight: 700; color: var(--lv2-text); }
+.lv2-freeplan-band-sub { font-size: 13px; color: var(--lv2-text-dim); margin-top: 3px; line-height: 1.45; }
+.lv2-freeplan-band-btn {
+  flex-shrink: 0; padding: 12px 22px; background: var(--lv2-acc); color: #04231a; border-radius: 12px;
+  font-size: 14px; font-weight: 700; text-decoration: none; white-space: nowrap;
+  transition: transform .12s, box-shadow .15s; box-shadow: 0 6px 20px rgba(0, 255, 163, 0.18);
+}
+.lv2-freeplan-band-btn:hover { transform: translateY(-1px); box-shadow: 0 10px 26px rgba(0, 255, 163, 0.26); }
+@media (max-width: 560px) {
+  .lv2-freeplan-band-inner { justify-content: center; text-align: center; }
+  .lv2-freeplan-band-text { text-align: center; flex-basis: 100%; }
+  .lv2-freeplan-band-btn { width: 100%; text-align: center; }
+}
+
 .lv2-live-card {
   margin: 60px auto 0;
   max-width: 920px;
@@ -5227,17 +5258,23 @@ body.on-auth .container {
         <button class="lv2-btn-ghost" onclick="document.getElementById('lv2-how').scrollIntoView({behavior:'smooth'})" data-i18n="landing.hero.cta_secondary">See how it works</button>
       </div>
 
-      <a href="/free-plan" class="lv2-freeplan-link" style="display:inline-flex;align-items:center;gap:9px;margin-top:16px;padding:11px 18px;border:1px solid var(--accent-border);border-radius:999px;background:var(--accent-soft);color:var(--accent);font-size:14px;font-weight:600;text-decoration:none;transition:border-color .15s,transform .1s;">
-        ⚡ Preview a free plan in 30 seconds
-        <span style="color:var(--text-mute);font-weight:500;font-size:12.5px;white-space:nowrap;">no signup needed</span>
-      </a>
-
       <div class="lv2-meta">
         <span><span class="lv2-dot"></span><span data-i18n="landing.meta.trial">14-day Pro trial, no card</span></span>
         <span><span class="lv2-dot"></span><span data-i18n="landing.meta.works_with">Works with Strava + CSV from any watch</span></span>
         <span><span class="lv2-dot"></span><span data-i18n="landing.meta.cancel">Cancel anytime</span></span>
       </div>
     </section>
+
+    <!-- FREE PLAN GENERATOR entry point — sits above the live-coaching card -->
+    <div class="lv2-freeplan-band">
+      <div class="lv2-freeplan-band-inner">
+        <div class="lv2-freeplan-band-text">
+          <div class="lv2-freeplan-band-title">⚡ See a real plan before you sign up</div>
+          <div class="lv2-freeplan-band-sub">Build one in 30 seconds. No account, no email — just your race and level.</div>
+        </div>
+        <a href="/free-plan" class="lv2-freeplan-band-btn">Try the free generator →</a>
+      </div>
+    </div>
 
     <!-- LIVE WORKOUT CARD -->
     <div class="lv2-live-card">
@@ -17833,13 +17870,25 @@ function _obdAskStart() {
   _obdChips([
     { label: 'Build me a plan', onPick: () => {
         _obdUserSay('Build me a plan'); _obdA.planPath = 'build_new'; _obdClearDock();
-        // Carried over from the free plan generator? Skip sport + goal (we know both).
+        // Carried over from the free plan generator? OFFER that goal (they confirm —
+        // never forced). "Something else" drops straight into the normal sport flow.
         const pf = _getFreePlanPrefill();
         if (pf) {
           try { localStorage.removeItem('stryxs_freeplan_prefill'); } catch (_) {}
-          _obdA.sport = 'Running';
-          _obdA.goal_event = pf.goal_event;
-          _obdCoachSay(`Perfect, I've got your <b>${pf.goalLabel}</b> plan from the generator ready to personalize just for you. When's your race?`, _obdAskDate);
+          _obdCoachSay(`Looks like you were checking out a <b>${pf.goalLabel}</b> plan. Want me to build that one, or something else?`, () => {
+            _obdChips([
+              { label: `Yes, ${pf.goalLabel}`, onPick: () => {
+                  _obdUserSay(`Yes, ${pf.goalLabel}`);
+                  _obdA.sport = 'Running'; _obdA.goal_event = pf.goal_event;
+                  _obdClearDock();
+                  _obdCoachSay(`Perfect, I'll personalize it just for you. When's your race?`, _obdAskDate);
+                } },
+              { label: 'Something else', ghost: true, onPick: () => {
+                  _obdUserSay('Something else'); _obdClearDock();
+                  _obdCoachSay(`No problem. What's your main sport?`, _obdAskSport);
+                } },
+            ]);
+          });
           return;
         }
         _obdCoachSay(`Let's do it. What's your main sport?`, _obdAskSport);
