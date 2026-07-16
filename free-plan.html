@@ -124,9 +124,15 @@
   .day-pace { font-size: 12px; font-weight: 700; color: var(--accent); margin-left: 8px; white-space: nowrap; }
   .day-pace .zt { color: var(--text-mute); font-weight: 600; }
 
-  /* goal-time input */
-  #goalTime { padding: 12px 14px; background: var(--bg-3); border: 1px solid var(--border-light); border-radius: 11px; color: var(--text); font-size: 16px; font-family: inherit; width: 100%; box-sizing: border-box; -webkit-appearance: none; appearance: none; }
-  #goalTime::placeholder { color: var(--text-mute); }
+  /* goal-time input — separate hr : min : sec boxes (phone-friendly) */
+  .time-input { display: flex; align-items: flex-start; gap: 8px; }
+  .ti-cell { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+  .ti-cell input { width: 62px; text-align: center; padding: 13px 4px; background: var(--bg-3); border: 1px solid var(--border-light); border-radius: 11px; color: var(--text); font-size: 20px; font-weight: 700; font-family: inherit; box-sizing: border-box; -webkit-appearance: none; appearance: none; }
+  .ti-hcell input { width: 48px; }
+  .ti-cell input:focus { border-color: var(--accent); outline: none; }
+  .ti-cell input::placeholder { color: var(--text-mute); font-weight: 600; }
+  .ti-cell small { font-size: 10px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.6px; }
+  .ti-sep { font-size: 22px; font-weight: 800; color: var(--text-mute); padding-top: 10px; }
 
   /* training-paces summary card */
   .pace-card { background: linear-gradient(160deg, rgba(0,229,160,0.07), var(--bg-2)); border: 1px solid var(--accent-border); border-radius: 16px; padding: 16px 18px; margin: 0 0 22px; }
@@ -224,8 +230,14 @@
           <input type="date" id="raceDate" />
         </div>
         <div class="field full" id="goalTimeField">
-          <label>Goal or recent time for your race <span style="color:var(--text-mute);font-weight:400;">· optional — unlocks your exact paces</span></label>
-          <input type="text" id="goalTime" inputmode="numeric" autocomplete="off" placeholder="e.g. 1:45:00" />
+          <label>Goal or recent time <span style="color:var(--text-mute);font-weight:400;">· optional — unlocks your exact paces</span></label>
+          <div class="time-input" id="timeInput">
+            <div class="ti-cell ti-hcell"><input class="ti-f" data-ti="h" type="text" inputmode="numeric" maxlength="1" placeholder="0" aria-label="hours" /><small>hr</small></div>
+            <span class="ti-sep">:</span>
+            <div class="ti-cell"><input class="ti-f" data-ti="m" type="text" inputmode="numeric" maxlength="2" placeholder="00" aria-label="minutes" /><small>min</small></div>
+            <span class="ti-sep">:</span>
+            <div class="ti-cell"><input class="ti-f" data-ti="s" type="text" inputmode="numeric" maxlength="2" placeholder="00" aria-label="seconds" /><small>sec</small></div>
+          </div>
         </div>
       </div>
       <button class="gen-btn" id="genBtn" onclick="generate()">⚡ Build my free plan</button>
@@ -380,27 +392,40 @@
   }
   function rerender() { if (_last) render(_last.plan, _last.race, _last.level, _last.days, _last.paces); }
   function syncGoalTimeField() {
-    const f = document.getElementById('goalTimeField'); const inp = document.getElementById('goalTime');
-    if (!f) return;
-    if (sel.race === 'general') { f.style.display = 'none'; }
-    else { f.style.display = ''; if (inp) inp.placeholder = RACE_PH[sel.race] || 'e.g. 50:00'; }
+    const f = document.getElementById('goalTimeField'); if (!f) return;
+    if (sel.race === 'general') { f.style.display = 'none'; return; }
+    f.style.display = '';
+    // 5K/10K don't need an hours box — hide it (and the first colon).
+    const showHr = (sel.race === 'half' || sel.race === 'marathon');
+    const hcell = f.querySelector('.ti-hcell'); const firstSep = f.querySelector('.ti-sep');
+    if (hcell) {
+      hcell.style.display = showHr ? '' : 'none';
+      if (!showHr) { const hi = hcell.querySelector('input'); if (hi) hi.value = ''; } // don't count a hidden hr box
+    }
+    if (firstSep) firstSep.style.display = showHr ? '' : 'none';
   }
   document.getElementById('raceOpts').addEventListener('click', syncGoalTimeField);
   syncGoalTimeField();
 
-  // Auto-insert the colons as the user types digits (phone numeric keypads have
-  // no ':'), building the time from the right: 30000 -> 3:00:00, 2230 -> 22:30.
+  // Separate hr/min/sec boxes that auto-advance as you type — no ':' needed on
+  // a phone numeric keypad, and the format is always unambiguous.
   (function () {
-    const gt = document.getElementById('goalTime');
-    if (!gt) return;
-    gt.addEventListener('input', () => {
-      const d = gt.value.replace(/\D/g, '').slice(0, 6);
-      if (!d) { gt.value = ''; return; }
-      if (d.length <= 2) gt.value = d;
-      else if (d.length <= 4) gt.value = d.slice(0, -2) + ':' + d.slice(-2);
-      else gt.value = d.slice(0, -4) + ':' + d.slice(-4, -2) + ':' + d.slice(-2);
+    const fields = [...document.querySelectorAll('#timeInput .ti-f')];
+    fields.forEach((inp, i) => {
+      inp.addEventListener('input', () => {
+        inp.value = inp.value.replace(/\D/g, '').slice(0, inp.maxLength);
+        if (inp.value.length >= inp.maxLength && i < fields.length - 1) fields[i + 1].focus();
+      });
+      inp.addEventListener('keydown', (e) => {
+        if (e.key === 'Backspace' && !inp.value && i > 0) { fields[i - 1].focus(); }
+      });
     });
   })();
+  function getGoalSeconds() {
+    const g = (a) => parseInt((document.querySelector('#timeInput [data-ti="' + a + '"]') || {}).value) || 0;
+    const total = g('h') * 3600 + g('m') * 60 + g('s');
+    return total > 0 ? total : null;
+  }
 
   // Mon..Sun session-role patterns by days/week. long=long run, q=quality, e=easy, r=rest.
   const PATTERN = {
@@ -633,7 +658,7 @@
     // tiny delay so it feels like it "worked", then render (all local, instant)
     setTimeout(() => {
       const raceDate = document.getElementById('raceDate').value || null;
-      const sec = parseTime(document.getElementById('goalTime').value);
+      const sec = getGoalSeconds();
       const paces = (sel.race !== 'general' && sec) ? computePaces(sel.race, sel.level, sec) : null;
       const weeks = computeWeeks(sel.race, raceDate);
       const plan = buildPlan(sel.race, sel.level, sel.days, weeks);

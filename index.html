@@ -1000,12 +1000,17 @@ html.prof-modal-open, html.prof-modal-open body { overflow: hidden; }
 .container:has(#page-landing.active) {
   max-width: none;
   padding: 0;
+  overflow-x: clip;
 }
 /* Fallback for browsers without :has() support */
 body.on-landing .container {
   max-width: none;
   padding: 0;
+  overflow-x: clip;
 }
+/* Keep the whole landing wrapper chain off the nested-scroller problem: clip
+   instead of the hidden that silently makes each element a vertical scroller. */
+body.on-landing .app { overflow-x: clip; }
 
 .page { display: none; animation: fadeIn 0.25s ease-out; width: 100%; max-width: 100%; position: relative; overflow-x: hidden; }
 .page.active { display: block; }
@@ -3470,6 +3475,8 @@ body.coach-chat-active .chat-msg.user .msg-bubble strong { color: var(--text); }
      (the nav got scrolled off / "cut" after using "See how it works"). The
      landing doesn't need the slide — drop the animation so the nav stays put. */
   animation: none !important;
+  /* clip, not hidden — see .landing-v2 note; keeps this off the nested-scroller chain */
+  overflow-x: clip;
 }
 
 .landing-v2 {
@@ -3479,7 +3486,11 @@ body.coach-chat-active .chat-msg.user .msg-bubble strong { color: var(--text); }
   width: 100%;
   min-height: 100vh;
   background: var(--lv2-bg);
+  /* clip (not hidden): still clips the decorative blobs, but does NOT become a
+     vertical scroll container the way overflow-x/y:hidden does — that nested
+     scroller was trapping the page and blocking the return to the top. */
   overflow: hidden;
+  overflow: clip;
 }
 
 /* Layer 1: Animated mesh blobs */
