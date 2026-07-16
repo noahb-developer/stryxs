@@ -150,6 +150,15 @@
   .pace-note { font-size: 12px; color: var(--text-dim); line-height: 1.5; margin-top: 12px; }
   .pace-note b { color: var(--accent); font-weight: 600; }
 
+  /* collapse controls (keep the result short on mobile) */
+  .show-all-btn { display: block; width: 100%; margin-top: 2px; padding: 12px; background: var(--bg-2); border: 1px solid var(--border-light); border-radius: 12px; color: var(--accent); font-size: 13px; font-weight: 700; font-family: inherit; cursor: pointer; transition: border-color .15s; }
+  .show-all-btn:hover { border-color: var(--accent-border); }
+  .detail-toggle { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; background: transparent; border: 0; padding: 0; cursor: pointer; font-family: inherit; text-align: left; color: var(--text); }
+  .detail-h { font-size: 15px; font-weight: 700; display: block; }
+  .detail-toggle .dsub { margin-bottom: 0; margin-top: 3px; }
+  .detail-chev { font-size: 15px; color: var(--text-dim); transition: transform .2s; flex-shrink: 0; }
+  #detailDays { margin-top: 12px; }
+
   /* ── conversion CTA ── */
   .convert { margin-top: 34px; background: linear-gradient(160deg, var(--bg-3), var(--bg-2)); border: 1px solid var(--accent-border); border-radius: 20px; padding: 28px 24px; text-align: center; }
   .convert h3 { font-size: clamp(21px, 4vw, 27px); font-weight: 800; letter-spacing: -0.01em; line-height: 1.18; margin-bottom: 12px; }
@@ -260,8 +269,13 @@
       <div id="weekList"></div>
 
       <div class="detail card">
-        <h3 id="detailTitle">Week 1 in detail</h3>
-        <div class="dsub" id="detailSub">A taste of exactly what your week looks like.</div>
+        <button class="detail-toggle" id="detailToggle" onclick="toggleDetail()" aria-expanded="true">
+          <span class="detail-toggle-txt">
+            <span class="detail-h">Week 1 in detail</span>
+            <span class="dsub">A taste of exactly what your first week looks like.</span>
+          </span>
+          <span class="detail-chev" id="detailChev">▾</span>
+        </button>
         <div id="detailDays"></div>
       </div>
 
@@ -349,6 +363,24 @@
   const RACE_PH = { '5k': 'e.g. 22:30', '10k': 'e.g. 47:00', half: 'e.g. 1:45:00', marathon: 'e.g. 3:45:00', general: '' };
   let _paceUnit = 'km';
   let _last = null;
+  let _weeksTotal = 0;
+
+  // Collapse controls so the result isn't a huge scroll on phones.
+  function toggleWeeks() {
+    const m = document.getElementById('moreWeeks'), b = document.getElementById('showAllWeeks');
+    if (!m || !b) return;
+    const open = m.style.display !== 'none';
+    m.style.display = open ? 'none' : 'block';
+    b.innerHTML = open ? `Show all ${_weeksTotal} weeks ↓` : 'Show fewer weeks ↑';
+  }
+  function toggleDetail() {
+    const d = document.getElementById('detailDays'), c = document.getElementById('detailChev'), t = document.getElementById('detailToggle');
+    if (!d) return;
+    const open = d.style.display !== 'none';
+    d.style.display = open ? 'none' : '';
+    if (c) c.style.transform = open ? 'rotate(-90deg)' : '';
+    if (t) t.setAttribute('aria-expanded', String(!open));
+  }
 
   function parseTime(s) {
     if (!s) return null;
@@ -468,7 +500,9 @@
       const d = new Date(raceDate + 'T00:00:00');
       const now = new Date(); now.setHours(0, 0, 0, 0);
       const w = Math.round((d - now) / (7 * 86400000));
-      if (w >= 4 && w <= 40) weeks = w;
+      // Accept any date at least 4 weeks out; cap the plan at 52 weeks so a
+      // date a year away still works (it used to silently fall back to the default).
+      if (w >= 4) weeks = Math.min(w, 52);
     }
     return Math.max(6, weeks);
   }
@@ -601,8 +635,9 @@
       `<div class="phaseseg ph-${p}" style="flex-grow:${phaseCounts[p]}">${names[p]} · ${phaseCounts[p]}w</div>`
     ).join('');
 
-    // week rows
-    document.getElementById('weekList').innerHTML = plan.map(w => {
+    // week rows — show the first few, collapse the rest so a long plan (e.g. a
+    // race a year out) isn't an endless scroll on mobile.
+    const rowHtml = (w) => {
       const chips = w.days.filter(d => d.key !== 'rest').map(d => chipFor(d.key)).join('');
       const restCount = w.days.filter(d => d.key === 'rest').length;
       const restChip = restCount ? `<span class="chip rest">${restCount} rest</span>` : '';
@@ -611,7 +646,15 @@
         <div class="wk-chips">${chips}${restChip}</div>
         <div class="wk-long"><span>Long run</span><b>~${w.longMin} min</b></div>
       </div>`;
-    }).join('');
+    };
+    const SHOWN = 6;
+    _weeksTotal = plan.length;
+    document.getElementById('weekList').innerHTML =
+      plan.slice(0, SHOWN).map(rowHtml).join('') +
+      (plan.length > SHOWN
+        ? `<div id="moreWeeks" style="display:none;">${plan.slice(SHOWN).map(rowHtml).join('')}</div>
+           <button class="show-all-btn" id="showAllWeeks" onclick="toggleWeeks()">Show all ${plan.length} weeks ↓</button>`
+        : '');
 
     // week 1 detail — with real per-session durations + compact rest days
     const w1 = plan[0];
