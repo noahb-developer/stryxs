@@ -3511,9 +3511,13 @@ body.coach-chat-active .chat-msg.user .msg-bubble strong { color: var(--text); }
   z-index: 0;
 }
 
-/* Third blob via separate child for the orange/red one */
+/* Third blob via separate child for the orange/red one.
+   position: FIXED (not absolute): as an absolute child it extended ~238px below
+   the footer, and .landing-v2's overflow:hidden turned that into an irreversible
+   scroll trap — after 'See how it works' the page couldn't scroll back to the top.
+   Fixed = ambient viewport background, contributes zero scroll overflow. */
 .lv2-blob-3 {
-  position: absolute;
+  position: fixed;
   width: 500px; height: 500px;
   bottom: -100px; left: 30%;
   border-radius: 50%;

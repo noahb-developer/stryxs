@@ -388,6 +388,20 @@
   document.getElementById('raceOpts').addEventListener('click', syncGoalTimeField);
   syncGoalTimeField();
 
+  // Auto-insert the colons as the user types digits (phone numeric keypads have
+  // no ':'), building the time from the right: 30000 -> 3:00:00, 2230 -> 22:30.
+  (function () {
+    const gt = document.getElementById('goalTime');
+    if (!gt) return;
+    gt.addEventListener('input', () => {
+      const d = gt.value.replace(/\D/g, '').slice(0, 6);
+      if (!d) { gt.value = ''; return; }
+      if (d.length <= 2) gt.value = d;
+      else if (d.length <= 4) gt.value = d.slice(0, -2) + ':' + d.slice(-2);
+      else gt.value = d.slice(0, -4) + ':' + d.slice(-4, -2) + ':' + d.slice(-2);
+    });
+  })();
+
   // Mon..Sun session-role patterns by days/week. long=long run, q=quality, e=easy, r=rest.
   const PATTERN = {
     3: ['r', 'q', 'r', 'e', 'r', 'long', 'r'],
