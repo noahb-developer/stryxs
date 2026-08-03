@@ -591,6 +591,12 @@ body.on-landing #landingNav { display: none !important; }
 @media (min-width: 721px) {
   .tab-bar { bottom: 24px; }
 }
+/* Leaflet's internal panes/controls default to z-index up to 1000, which would
+   paint OVER the floating tab bar (z-index 200) on the workout-analysis route
+   map (the nav appeared to slide UNDER the map). Isolating the map into its own
+   stacking context keeps those z-indexes contained so the whole map sits below
+   the floating nav. */
+.leaflet-container { isolation: isolate; }
 .tab-item {
   position: relative; flex: 1;
   display: flex; flex-direction: column; align-items: center; gap: 3px;
