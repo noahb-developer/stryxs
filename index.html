@@ -10813,7 +10813,7 @@ function parseCSV(text) {
       i++;
       continue;
     }
-    if (ch === ', ') {
+    if (ch === ',') {
       row.push(cell);
       cell = '';
       i++;
@@ -10848,7 +10848,7 @@ function parseCSVLine(line) {
   for (let i = 0; i < line.length; i++) {
     const ch = line[i];
     if (ch === '"') q = !q;
-    else if (ch === ', ' && !q) { r.push(c); c = ''; }
+    else if (ch === ',' && !q) { r.push(c); c = ''; }
     else c += ch;
   }
   r.push(c);
@@ -10862,6 +10862,66 @@ function detectActivity(text, filename = '') {
   if (lower.includes('swim stroke') || lower.includes('swolf') || lower.includes('lengths') || fn.includes('swim')) return 'swim';
   if ((lower.includes('avg speed') && !lower.includes('avg pace')) || fn.includes('bike') || fn.includes('cycl') || fn.includes('ride')) return 'bike';
   return 'run';
+}
+
+// Bulk importer for a watch "activities list" export (one ROW per activity),
+// e.g. Garmin Connect's "Export CSV" of all activities. This is different from
+// the single-activity lap CSV parseRunCSV expects. Each row becomes its own
+// dated workout, so the whole file imports in one drop. Returns an array of
+// workout objects (with created_at for correct day-bucketing), or null if the
+// file isn't an activity list. Assumes a METRIC export (km for run/bike, metres
+// for swim); swim distances are converted to km for storage.
+function parseGarminActivityList(text) {
+  const rows = parseCSV(text);
+  if (!rows || rows.length < 2) return null;
+  const h = rows[0].map(x => (x || '').toLowerCase());
+  const col = (...names) => {
+    for (const n of names) { const i = h.indexOf(n); if (i !== -1) return i; }
+    for (let i = 0; i < h.length; i++) for (const n of names) if (h[i].includes(n)) return i;
+    return -1;
+  };
+  const cType = col('activity type'), cDate = col('date');
+  if (cType === -1 || cDate === -1) return null; // not an activity-list export
+  const cDist = col('distance'), cTime = col('time'),
+        cAvgHr = col('avg hr', 'average heart rate'), cMaxHr = col('max hr', 'maximum heart rate'),
+        cTitle = col('title');
+  const mapSport = (t) => {
+    t = (t || '').toLowerCase();
+    if (t.includes('swim')) return 'swim';
+    if (t.includes('cycl') || t.includes('bike') || t.includes('ride')) return 'bike';
+    if (t.includes('strength') || t.includes('gym') || t.includes('weight')) return 'strength';
+    if (t.includes('run') || t.includes('treadmill')) return 'run';
+    if (t.includes('multisport') || t.includes('triathlon') || t.includes('brick')) return 'bike';
+    return 'other';
+  };
+  const intOf = (v) => { const n = parseInt(String(v == null ? '' : v).replace(/,/g, ''), 10); return Number.isFinite(n) ? n : null; };
+  const pad = (n) => String(n).padStart(2, '0');
+  const out = [];
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i];
+    const sport = mapSport(r[cType]);
+    const d = new Date((r[cDate] || '').replace(' ', 'T'));
+    if (isNaN(d.getTime())) continue;
+    const durMin = cTime >= 0 ? Math.round(parseTimeToSeconds(r[cTime]) / 60) : 0;
+    if (!durMin || durMin <= 0) continue; // need a real duration
+    let distKm = null;
+    if (cDist >= 0) {
+      const dv = parseFloat(String(r[cDist]).replace(/,/g, ''));
+      if (Number.isFinite(dv) && dv > 0) distKm = sport === 'swim' ? Math.round((dv / 1000) * 100) / 100 : Math.round(dv * 100) / 100;
+    }
+    out.push({
+      sport,
+      date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
+      duration: durMin,
+      distance: distKm,
+      avgHr: cAvgHr >= 0 ? intOf(r[cAvgHr]) : null,
+      maxHr: cMaxHr >= 0 ? intOf(r[cMaxHr]) : null,
+      description: (cTitle >= 0 && r[cTitle]) ? r[cTitle] : null,
+      source: 'csv_upload',
+      created_at: d.toISOString(),
+    });
+  }
+  return out.length ? out : null;
 }
 
 function paceToMin(p) {
@@ -30785,6 +30845,21 @@ function initUpload() {
       let analysis = null;
       if (ext === 'csv') {
         const text = await file.text();
+        // First: a full "activities list" export (one row per activity, e.g.
+        // Garmin Connect "Export CSV"). Bulk-import each row as its own dated
+        // workout. Falls through to single-activity parsing if it's not a list.
+        const bulk = parseGarminActivityList(text);
+        if (bulk && bulk.length) {
+          let imported = 0;
+          for (const w of bulk) { try { await saveWorkout(w); imported++; } catch (e) { console.error('[Stryxs] bulk import row failed', e); } }
+          try { await loadWorkouts(); } catch (_) {}
+          const bySport = bulk.reduce((m, w) => { m[w.sport] = (m[w.sport] || 0) + 1; return m; }, {});
+          const summary = Object.entries(bySport).map(([s, n]) => `${n} ${s}`).join(' · ');
+          output.innerHTML = `<div class="analysis-card" style="padding: 20px;"><p style="color: var(--accent); font-weight: 600; margin-bottom: 6px;">Imported ${imported} ${imported === 1 ? 'activity' : 'activities'}</p><p style="color: var(--text-dim); font-size: 13px;">${summary}</p><p style="color: var(--text-mute); font-size: 11px; margin-top: 8px;">Only drop a given export once, re-importing will create duplicates.</p></div>`;
+          toast(`Imported ${imported} workout${imported === 1 ? '' : 's'}`);
+          try { if (typeof renderDashboard === 'function') renderDashboard(); } catch (_) {}
+          return;
+        }
         const atype = detectActivity(text, file.name);
         let data;
         if (atype === 'swim') { data = parseSwimCSV(text); if (data) analysis = analyzeSwim(data); }
