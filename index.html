@@ -11961,20 +11961,22 @@ function renderGpsMapPreview(polyline) {
 // persisted in localStorage so it sticks across workouts and reloads.
 const STRYXS_TILE_PROVIDERS = {
   dark: {
-    url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-    subdomains: 'abcd',
-    maxZoom: 19,
+    // Esri "World Dark Gray Base" — a dark canvas that matches the app's vibe and
+    // needs NO API key. We moved off CARTO basemaps (Oct 2026): CARTO now gates
+    // basemap tiles by domain and stamps "API KEY REQUIRED" on unregistered sites.
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+    attribution: 'Tiles &copy; <a href="https://www.esri.com/">Esri</a>',
+    maxZoom: 18,
+    maxNativeZoom: 16,
   },
   light: {
-    // CARTO Voyager — the colourful but MUTED Strava/Komoot-style basemap: soft
-    // green parks, blue water, readable roads and labels. Far richer than the
-    // near-white Positron, while staying muted enough that the green route (with
-    // its dark casing) still reads clearly against it.
-    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-    subdomains: 'abcd',
-    maxZoom: 20,
+    // OpenStreetMap standard raster — colourful street map (soft parks, blue
+    // water, readable roads/labels), also NO API key. The green route keeps its
+    // dark casing so it still reads clearly against it.
+    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    subdomains: 'abc',
+    maxZoom: 19,
   },
 };
 function getStryxsMapStyle() {
@@ -14177,7 +14179,10 @@ async function renderDashGreeting() {
     const sportLabel = I18N[state.locale]?.[sportKey] || t('dash.sport.workout');
     subEl.textContent = t('dash.greeting.nice_work', { sport: sportLabel });
   } else {
-    const count = state.workouts.length;
+    // Count real workouts only, excluding daily activities (commutes, walks,
+    // casual rides) so this matches the profile's "activities" total — which
+    // also excludes daily_activity. Keeps the two screens consistent.
+    const count = (state.workouts || []).filter(w => w.activity_classification !== 'daily_activity').length;
     subEl.textContent = count === 0
       ? t('dash.greeting.no_workouts')
       : t('dash.greeting.workouts_logged', { count, plural: count > 1 ? 's' : '' });
@@ -29188,6 +29193,9 @@ async function renderConnections() {
           <button class="btn ghost" style="font-size: 13px; padding: 8px 14px;" onclick="syncStravaNow(this)">
             🔄 Sync now
           </button>
+          <button class="btn ghost" style="font-size: 13px; padding: 8px 14px;" onclick="fullResyncStrava(this)" title="Pulls every activity from the last 6 months. Use this to catch up after a break — the normal sync only looks back 7-30 days.">
+            ⤵️ Catch up (6 months)
+          </button>
           <button class="btn ghost" style="font-size: 13px; padding: 8px 14px;" onclick="backfillStravaDetails(this)" title="Re-fetches older activities to add map, splits, RPE, gear, and power data that wasn't captured on initial sync.">
             ✨ Refresh older workouts
           </button>
@@ -29294,6 +29302,35 @@ async function syncStravaNow(btn) {
       btn.disabled = false;
       btn.textContent = originalLabel || '↻ Sync now';
     }
+  }
+}
+
+// One-tap "catch up": pulls a wide 180-day window so activities missed after a
+// break get backfilled. The normal auto-sync / "Sync now" only looks back 7-30
+// days, so returning after a couple months leaves a gap this fills. (If the
+// Strava edge function caps the window server-side, it'll pull as far as it can.)
+async function fullResyncStrava(btn) {
+  const originalLabel = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '⏳ Catching up...';
+  try {
+    const result = await callStrava('sync_recent', { days: 180 });
+    if (result && result.imported > 0) {
+      toast(`Synced ${result.imported} workout${result.imported === 1 ? '' : 's'}`);
+      await loadWorkouts();
+      setTimeout(() => {
+        if (typeof renderDashboard === 'function' && document.getElementById('page-dashboard')?.classList.contains('active')) renderDashboard().catch(() => {});
+        if (typeof renderTodaysAnalyses === 'function' && document.getElementById('page-upload')?.classList.contains('active')) renderTodaysAnalyses().catch(() => {});
+      }, 1500);
+    } else {
+      toast('All caught up, no new workouts');
+    }
+    renderConnections();
+  } catch (err) {
+    console.error('Full resync failed:', err);
+    toast('Catch-up failed: ' + err.message);
+  } finally {
+    if (btn && btn.parentElement) { btn.disabled = false; btn.textContent = originalLabel || '⤵️ Catch up (6 months)'; }
   }
 }
 
